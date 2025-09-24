@@ -1,0 +1,192 @@
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { Crown, TrendingDown } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { getLatestPredictions } from "@/api/functions";
+
+// Loading skeleton for signals table
+const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
+  <div className="bg-slate-900 border border-slate-800 rounded-md">
+    <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+      <h3 className="flex items-center space-x-2 font-semibold text-sm">
+        <Icon className={`w-4 h-4 ${iconColor}`} />
+        <span>{title}</span>
+      </h3>
+      <div className="h-7 w-20 bg-slate-800 rounded animate-pulse" />
+    </div>
+    <div className="p-4">
+      <div className="space-y-3">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center p-3 rounded-md bg-slate-800/60">
+            <div className="flex items-center space-x-3 min-w-[160px]">
+              <div className="w-12 h-12 bg-slate-700 rounded-sm animate-pulse" />
+              <div className="flex-1 text-center">
+                <div className="h-4 w-10 bg-slate-700 rounded mx-auto animate-pulse" />
+              </div>
+            </div>
+            <div className="h-8 w-px bg-slate-700 mx-4" />
+            <div className="flex-1 grid grid-cols-2 divide-x divide-slate-700">
+              <div className="px-3 text-center">
+                <div className="h-4 w-16 bg-slate-700 rounded mx-auto mb-2 animate-pulse" />
+                <div className="h-3 w-10 bg-slate-800 rounded mx-auto animate-pulse" />
+              </div>
+              <div className="px-3 text-center">
+                <div className="h-4 w-16 bg-slate-700 rounded mx-auto mb-2 animate-pulse" />
+                <div className="h-3 w-12 bg-slate-800 rounded mx-auto animate-pulse" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+export default function TopSignals({ subscription, modelHorizon = "7d", loading = false, onLoadingChange = () => {} }) {
+  const [topSignals, setTopSignals] = React.useState([]);
+  const [bottomSignals, setBottomSignals] = React.useState([]);
+  const [internalLoading, setInternalLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const load = async () => {
+      setInternalLoading(true);
+      onLoadingChange(true);
+
+      const { data } = await getLatestPredictions({});
+      const lastDate = data?.date;
+      const rows = data?.rows || [];
+
+      if (!lastDate || !rows.length) {
+        setTopSignals([]);
+        setBottomSignals([]);
+        setInternalLoading(false);
+        onLoadingChange(false);
+        return;
+      }
+
+      // Choose prediction field based on model horizon
+      const predField = modelHorizon === "1d" ? "y_pred_1d" : "y_pred_7d";
+      const scored = rows
+        .filter(r => typeof r[predField] === "number" && !Number.isNaN(r[predField]))
+        .map(r => ({ symbol: String(r.symbol_id).split('_')[0], score: r[predField] }));
+
+      if (!scored.length) {
+        setTopSignals([]);
+        setBottomSignals([]);
+        setInternalLoading(false);
+        onLoadingChange(false);
+        return;
+      }
+
+      const sortedDesc = [...scored].sort((a, b) => b.score - a.score);
+      const n = sortedDesc.length;
+      const withStats = sortedDesc.map((r, idx) => ({
+        symbol: r.symbol,
+        pred_return: r.score,
+        percentile: n > 1 ? (1 - idx / (n - 1)) * 100 : 100,
+        rank: idx + 1
+      }));
+
+      setTopSignals(withStats.slice(0, 5));
+      const bottom = [...withStats].slice(-5).map((r, i) => ({
+        ...r,
+        rank: n - 5 + i + 1
+      }));
+      setBottomSignals(bottom);
+      setInternalLoading(false);
+      onLoadingChange(false);
+    };
+    load();
+  }, [modelHorizon, onLoadingChange]);
+
+  const getPercentileColor = (percentile) => {
+    if (percentile >= 95) return "text-emerald-400";
+    if (percentile >= 90) return "text-blue-400";
+    if (percentile >= 80) return "text-amber-400";
+    if (percentile <= 10) return "text-red-400";
+    return "text-slate-400";
+  };
+  const getReturnColor = (ret) => (ret >= 0 ? "text-emerald-400" : "text-red-400");
+  const pct = (n, d = 1) => `${(n * 100).toFixed(d)}%`;
+
+  const isLoggedIn = Boolean(subscription);
+  const ctaTarget = isLoggedIn ? "HistoricalHub" : "GetStarted";
+
+  const isLoading = loading || internalLoading;
+
+  const SignalTable = ({ signals, title, icon: Icon, iconColor }) => {
+    if (isLoading) {
+      return <SignalTableSkeleton title={title} icon={Icon} iconColor={iconColor} />;
+    }
+
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-md">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          <h3 className="flex items-center space-x-2 font-semibold text-sm">
+            <Icon className={`w-4 h-4 ${iconColor}`} />
+            <span>{title}</span>
+          </h3>
+          <Link to={createPageUrl(ctaTarget)}>
+            <Button variant="outline" size="sm" className="rounded-md bg-white text-slate-900 border-slate-300 hover:bg-slate-100 text-xs h-7">
+              View All
+            </Button>
+          </Link>
+        </div>
+        <div className="p-4">
+          <div className="space-y-3">
+            {signals.map((signal) => (
+              <div key={signal.symbol} className="flex items-center p-3 rounded-md bg-slate-800/60">
+                {/* Left: rank + symbol (CENTERED SYMBOL) */}
+                <div className="flex items-center space-x-3 min-w-[160px]">
+                  <div className="w-12 h-12 bg-slate-700 rounded-sm flex items-center justify-center text-sm font-bold">
+                    {signal.rank}
+                  </div>
+                  <div className="flex-1 text-center">
+                    <div className="font-semibold text-sm">{signal.symbol}</div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-8 w-px bg-slate-700 mx-4" />
+
+                {/* Metrics */}
+                <div className="flex-1 grid grid-cols-2 divide-x divide-slate-700">
+                  <div className="px-3 text-center">
+                    <div className={`font-semibold text-sm ${getReturnColor(signal.pred_return)}`}>
+                      {pct(signal.pred_return, 1)}
+                    </div>
+                    <div className="text-xs text-slate-400">{modelHorizon} Pred</div>
+                  </div>
+                  <div className="px-3 text-center">
+                    <div className={`font-semibold text-sm ${getPercentileColor(signal.percentile)}`}>
+                      {signal.percentile.toFixed(1)}%
+                    </div>
+                    <div className="text-xs text-slate-400">Percentile</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <SignalTable
+        signals={topSignals}
+        title="Top 5 Signals Today"
+        icon={Crown}
+        iconColor="text-amber-400"
+      />
+      <SignalTable
+        signals={bottomSignals}
+        title="Bottom 5 Signals Today"
+        icon={TrendingDown}
+        iconColor="text-red-400"
+      />
+    </div>
+  );
+}
