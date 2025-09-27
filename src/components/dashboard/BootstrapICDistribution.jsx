@@ -3,6 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Info } from "lucide-react";
 import { bootstrapIcDistributionPlot } from "@/api/functions";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
+import { toast } from "sonner";
 
 const InfoTooltip = ({ title, description }) => {
   const [open, setOpen] = React.useState(false);
@@ -25,25 +26,62 @@ export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, ci_lower: 0, ci_upper: 0 });
+  const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
-    if (!dateRange || !dateRange.start || !dateRange.end) return;
+    if (!dateRange || !dateRange.start || !dateRange.end) {
+      setHtml(null);
+      setSummary({ mean: 0, ci_lower: 0, ci_upper: 0 });
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
     const run = async () => {
       setLoading(true);
-      const { data } = await bootstrapIcDistributionPlot({ 
-          horizon, 
-          start: dateRange.start, 
-          end: dateRange.end, 
-          samples: 10000, 
-          bins: 20, 
-          width: 980, 
-          height: 360 
-      });
-      setHtml(data?.html || null);
-      if (data?.summary) setSummary(data.summary);
-      setLoading(false);
+      setError(null);
+      try {
+        const { data } = await bootstrapIcDistributionPlot(
+          {
+            horizon,
+            start: dateRange.start,
+            end: dateRange.end,
+            samples: 10000,
+            bins: 20,
+            width: 980,
+            height: 360,
+          },
+          { signal: controller.signal }
+        );
+        if (cancelled || controller.signal.aborted) return;
+        setHtml(data?.html || null);
+        if (data?.summary) {
+          setSummary(data.summary);
+        } else {
+          setSummary({ mean: 0, ci_lower: 0, ci_upper: 0 });
+        }
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        console.error("Failed to load bootstrap IC distribution", err);
+        const message = err?.message || "Unable to load bootstrap IC distribution.";
+        setError(message);
+        setHtml(null);
+        setSummary({ mean: 0, ci_lower: 0, ci_upper: 0 });
+        toast.error("Bootstrap IC distribution unavailable", {
+          id: "bootstrap-ic-distribution-error",
+          description: message,
+        });
+      } finally {
+        if (cancelled || controller.signal.aborted) return;
+        setLoading(false);
+      }
     };
     run();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [horizon, dateRange]);
 
   return (
@@ -69,6 +107,10 @@ export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
 
       {loading ? (
         <ChartCardSkeleton height={360} />
+      ) : error ? (
+        <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+          {error}
+        </div>
       ) : html ? (
         <iframe
           srcDoc={html}

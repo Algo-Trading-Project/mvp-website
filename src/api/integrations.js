@@ -1,4 +1,4 @@
-import { base44 } from "./base44Client";
+import { base44 } from "./base44Client.js";
 
 export const Core = base44.integrations.Core;
 export const InvokeLLM = base44.integrations.Core.InvokeLLM;

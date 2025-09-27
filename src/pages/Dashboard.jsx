@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { fetchMetrics } from "@/api/functions";
+import { toast } from "sonner";
 
 import SignalHealthDisplay from "../components/dashboard/SignalHealthDisplay";
 import TopSignals from "../components/dashboard/TopSignals";
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [metricsRows, setMetricsRows] = useState([]);
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [signalsLoading, setSignalsLoading] = useState(true);
+  const [metricsError, setMetricsError] = useState(null);
   const { search } = useLocation();
 
   // Check for URL parameter to set active tab
@@ -55,6 +57,7 @@ export default function Dashboard() {
   useEffect(() => {
     const loadMetrics = async () => {
       setMetricsLoading(true);
+      setMetricsError(null);
       try {
         const { data } = await fetchMetrics({});
         const rows = data?.cross || [];
@@ -72,6 +75,12 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Failed to fetch metrics:", error);
         setMetricsRows([]); // Clear data on error
+        const message = error?.message || "Unable to load dashboard metrics.";
+        setMetricsError(message);
+        toast.error("Metrics data could not be loaded", {
+          id: "dashboard-metrics-error",
+          description: message,
+        });
       } finally {
         setMetricsLoading(false);
       }
@@ -153,6 +162,11 @@ export default function Dashboard() {
       case "overview":
         return (
           <>
+            {metricsError ? (
+              <div className="mb-6 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {metricsError}
+              </div>
+            ) : null}
             <div className="flex justify-end mb-6">
               <div className="flex items-center gap-2">
                 <button

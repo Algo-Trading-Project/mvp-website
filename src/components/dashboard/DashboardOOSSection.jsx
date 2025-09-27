@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import Section from "@/components/dashboard/Section";
-import { Calendar, ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -59,6 +59,13 @@ const generateNiceTicks = (min, max, targetCount = 6) => {
   return ticks;
 };
 
+const HORIZON_OPTIONS = [
+  { id: "1d", label: "1-Day" },
+  { id: "7d", label: "7-Day" },
+];
+
+const DIRECTION_OPTIONS = [{ id: "combined", label: "Combined" }];
+
 export default function DashboardOOSSection() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,18 +85,13 @@ export default function DashboardOOSSection() {
 
   React.useEffect(() => {
     const load = async () => {
-      // Load rolling series from cross_sectional_metrics_1d
       const rows = await cross_sectional_metrics_1d.filter({}, "date", 10000);
       setAllRows(rows);
-      
-      // Set default date range to 2025-01-01 through latest
-      const latestDate = rows.length > 0 ? rows[rows.length - 1].date : "";
-      setDateRange({
-        start: "2025-01-01",
-        end: latestDate
-      });
 
-      // Load monthly IC rows from monthly_performance_metrics
+      const latestDate = rows.length ? rows[rows.length - 1].date : "";
+      const earliestDate = rows.length ? rows[0].date : "";
+      setDateRange({ start: earliestDate, end: latestDate });
+
       const mRows = await monthly_performance_metrics.filter({}, "year", 10000);
       setMonthlyRows(mRows);
 
@@ -108,9 +110,10 @@ export default function DashboardOOSSection() {
         setIcSvgLoading(false);
         return;
       }
+      const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
       const { data } = await rollingIcPlot({
         horizon,
-        start: dateRange.start || "2025-01-01",
+        start: fallbackStart,
         end: endDate
       });
       // Now using HTML (interactive Plotly) from backend
@@ -132,9 +135,10 @@ export default function DashboardOOSSection() {
         setSpreadLoading(false);
         return;
       }
+      const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
       const { data } = await rollingSpreadPlot({
         horizon,
-        start: dateRange.start || "2025-01-01",
+        start: fallbackStart,
         end: endDate
       });
       setSpreadHtml(data?.html || null);
@@ -190,6 +194,8 @@ export default function DashboardOOSSection() {
 
   const icDeltas = getDeltas(series, "ic");
   const spreadDeltas = getDeltas(series, "spread");
+
+  const horizonLabel = horizon === "1d" ? "1-Day" : "7-Day";
 
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
@@ -256,46 +262,62 @@ export default function DashboardOOSSection() {
 
   // NEW: top control bar (model dropdown + date pickers) - no background
   const controlBar = (
-    <div className="flex flex-wrap items-center gap-4 mb-8">
+    <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-900 border border-slate-800 rounded-md p-4">
       <div className="flex items-center gap-2">
-        <span className="text-slate-400 text-sm">Model</span>
+        <span className="text-sm text-slate-400">Model</span>
         <Select value={horizon} onValueChange={setHorizon}>
           <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700 h-9 text-white">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent className="bg-slate-900 border-slate-700 text-white">
-            <SelectItem value="1d" className="text-white hover:bg-slate-800">1‑Day</SelectItem>
-            <SelectItem value="7d" className="text-white hover:bg-slate-800">7‑Day</SelectItem>
+            {HORIZON_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.id} className="text-white hover:bg-slate-800">
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-2 opacity-75">
+        <span className="text-sm text-slate-400">Direction</span>
+        <Select value="combined" disabled>
+          <SelectTrigger className="w-[160px] bg-slate-800 border-slate-700 h-9 text-white">
+            <SelectValue placeholder="Direction" />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700 text-white">
+            {DIRECTION_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.id} className="text-white">
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
       <div className="flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-slate-400" />
-        <span className="text-slate-400 text-sm">From</span>
+        <span className="text-sm text-slate-400">From</span>
         <input
           type="date"
-          name="start"
-          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
           value={dateRange.start}
           min={allRows[0]?.date}
           max={allRows[allRows.length - 1]?.date}
           onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
           disabled={loading}
+          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
         />
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-slate-400 text-sm">To</span>
+        <span className="text-sm text-slate-400">To</span>
         <input
           type="date"
-          name="end"
-          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
           value={dateRange.end}
           min={allRows[0]?.date}
           max={allRows[allRows.length - 1]?.date}
           onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
           disabled={loading}
+          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
         />
       </div>
     </div>
@@ -331,74 +353,65 @@ export default function DashboardOOSSection() {
 
   // Individual monthly badges: separate evenly-sized badges for Mean, Std, Positive %, ICIR
   const monthlyBadges = (
-    <div className="space-y-4">
-      <h4 className="text-lg font-semibold text-white text-center">
-        Monthly IC ({horizon === "1d" ? "1d" : "7d"})
-      </h4>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-        <div className="text-center">
-          <h5 className="text-sm font-medium text-slate-300 mb-2 flex items-center justify-center gap-1.5">
-            <InfoTooltip
-              title="Mean IC"
-              description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation." />
-            <span>Mean</span>
-          </h5>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-            <div className="text-xl font-bold text-white">
-              {(() => {
-                const val = horizon === "1d" ? globalStats.mean1d : globalStats.mean7d;
-                return val != null ? val.toFixed(3) : "—";
-              })()}
-            </div>
-          </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+      <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+          Mean
+          <InfoTooltip
+            title="Mean IC"
+            description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
+          />
         </div>
-        <div className="text-center">
-          <h5 className="text-sm font-medium text-slate-300 mb-2 flex items-center justify-center gap-1.5">
-            <InfoTooltip
-              title="Standard Deviation of IC"
-              description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency." />
-            <span>Std</span>
-          </h5>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-            <div className="text-xl font-bold text-white">
-              {(() => {
-                const val = horizon === "1d" ? globalStats.std1d : globalStats.std7d;
-                return val != null ? val.toFixed(3) : "—";
-              })()}
-            </div>
-          </div>
+        <div className="text-xl font-bold text-white mt-1">
+          {(() => {
+            const val = horizon === "1d" ? globalStats.mean1d : globalStats.mean7d;
+            return val != null ? val.toFixed(3) : "—";
+          })()}
         </div>
-        <div className="text-center">
-          <h5 className="text-sm font-medium text-slate-300 mb-2 flex items-center justify-center gap-1.5">
-            <InfoTooltip
-              title="Positive Months"
-              description="Proportion of months with a positive average Information Coefficient." />
-            <span>Positive %</span>
-          </h5>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-            <div className="text-xl font-bold text-white">
-              {(() => {
-                const val = horizon === "1d" ? globalStats.positiveProp1d : globalStats.positiveProp7d;
-                return val != null ? `${(val * 100).toFixed(1)}%` : "—";
-              })()}
-            </div>
-          </div>
+      </div>
+      <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+          Std Dev
+          <InfoTooltip
+            title="Standard Deviation of IC"
+            description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
+          />
         </div>
-        <div className="text-center">
-          <h5 className="text-sm font-medium text-slate-300 mb-2 flex items-center justify-center gap-1.5">
-            <InfoTooltip
-              title="Annualized ICIR"
-              description="Mean monthly IC ÷ std of monthly IC, annualized by √12. Measures risk-adjusted skill." />
-            <span>ICIR</span>
-          </h5>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-            <div className="text-xl font-bold text-white">
-              {(() => {
-                const val = horizon === "1d" ? globalStats.icir1d : globalStats.icir7d;
-                return val != null ? val.toFixed(3) : "—";
-              })()}
-            </div>
-          </div>
+        <div className="text-xl font-bold text-white mt-1">
+          {(() => {
+            const val = horizon === "1d" ? globalStats.std1d : globalStats.std7d;
+            return val != null ? val.toFixed(3) : "—";
+          })()}
+        </div>
+      </div>
+      <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+          Positive Months %
+          <InfoTooltip
+            title="Positive Months"
+            description="Proportion of months with a positive average Information Coefficient."
+          />
+        </div>
+        <div className="text-xl font-bold text-white mt-1">
+          {(() => {
+            const val = horizon === "1d" ? globalStats.positiveProp1d : globalStats.positiveProp7d;
+            return val != null ? `${(val * 100).toFixed(1)}%` : "—";
+          })()}
+        </div>
+      </div>
+      <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+          ICIR
+          <InfoTooltip
+            title="Annualized ICIR"
+            description="Mean monthly IC ÷ std of monthly IC, annualized by √12. Measures risk-adjusted skill."
+          />
+        </div>
+        <div className="text-xl font-bold text-white mt-1">
+          {(() => {
+            const val = horizon === "1d" ? globalStats.icir1d : globalStats.icir7d;
+            return val != null ? val.toFixed(3) : "—";
+          })()}
         </div>
       </div>
     </div>
@@ -514,9 +527,12 @@ export default function DashboardOOSSection() {
         {/* Control bar above everything */}
         {controlBar}
 
-        {/* Metrics: monthly first (individual badges), then rolling; extra space before charts */}
-        <div className="mt-20 mb-8 space-y-8">
-          {monthlyBadges}
+        {/* Metrics: monthly first, then rolling */}
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-200 mb-2">Monthly IC ({horizonLabel})</h3>
+            {monthlyBadges}
+          </div>
           {rollingBadges}
         </div>
 

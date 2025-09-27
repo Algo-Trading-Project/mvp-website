@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Method not allowed' }, { status: 405 });
     }
 
-    let { horizon = '1d', direction = 'long', windowDays = 30 } = await req.json();
+    let { horizon = '1d', direction = 'long', windowDays = 30, start, end } = await req.json();
 
     const retKey = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
     const predKey = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
@@ -24,19 +24,21 @@ Deno.serve(async (req) => {
       return Response.json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data.</body></html>', n: 0 });
     }
 
-    const end = maxDate;
-    const start = shiftDays(end, -(windowDays - 1));
+    const resolvedEnd = end || maxDate;
+    const resolvedStart = start || shiftDays(resolvedEnd, -(windowDays - 1));
+
+    const orderDirection = direction === 'short' ? 'ASC' : 'DESC';
 
     const rows = await query(
       `SELECT decile, AVG(ret) AS avg_return, COUNT(*) AS n FROM (
          SELECT 
            ${retKey} AS ret, 
-           NTILE(10) OVER (PARTITION BY date ORDER BY ${predKey} ${direction === 'long' ? 'DESC' : 'ASC'}) AS decile
+           NTILE(10) OVER (PARTITION BY date ORDER BY ${predKey} ${orderDirection}) AS decile
          FROM predictions
          WHERE date BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE) AND ${predKey} IS NOT NULL AND ${retKey} IS NOT NULL
        ) AS sub
        GROUP BY decile ORDER BY decile ASC`,
-      { start, end }
+      { start: resolvedStart, end: resolvedEnd }
     );
 
     const x = rows.map(r => `Decile ${r.decile}`);
@@ -47,7 +49,12 @@ const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{co
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:20,b:40},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155'},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',zeroline:true,zerolinecolor:'#475569'}};
 Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false});</script></body></html>`;
 
-    return Response.json({ html, n: rows.reduce((acc, r) => acc + r.n, 0) });
+    return Response.json({
+      html,
+      n: rows.reduce((acc, r) => acc + r.n, 0),
+      range_start: resolvedStart,
+      range_end: resolvedEnd
+    });
   } catch (e) {
     return Response.json({ error: e.message || String(e) }, { status: 500 });
   }

@@ -11,7 +11,7 @@ const client = new RDSDataClient({
 const BASE = {
   resourceArn: Deno.env.get('AURORA_CLUSTER_ARN'),
   secretArn: Deno.env.get('AURORA_SECRET_ARN'),
-  database: Deno.env.get('AURORA_DB_NAME') || Deno.env.get('AURORA_DB'),
+  database: Deno.env.get('AURORA_DB_NAME'),
 };
 
 function toParam(name, value) {

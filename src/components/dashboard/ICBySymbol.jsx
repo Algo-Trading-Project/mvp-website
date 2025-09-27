@@ -4,6 +4,7 @@ import { icBySymbolPlot } from "@/api/functions";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
+import { toast } from "sonner";
 
 const InfoTooltip = ({ title, description }) => {
   const [open, setOpen] = React.useState(false);
@@ -34,27 +35,58 @@ export default function ICBySymbol({ horizon = "1d", dateRange }) {
   const [htmlTop, setHtmlTop] = React.useState(null);
   const [htmlBottom, setHtmlBottom] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
     if (!dateRange || !dateRange.start || !dateRange.end) {
+      setHtmlTop(null);
+      setHtmlBottom(null);
+      setError(null);
+      setLoading(false);
       return;
     }
+    const controller = new AbortController();
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
-      const { data } = await icBySymbolPlot({ 
-          horizon, 
-          start: dateRange.start, 
-          end: dateRange.end, 
-          minPoints: 10, 
-          topN: 20, 
-          width: 980, 
-          height: 420 
-      });
-      setHtmlTop(data?.html_top || null);
-      setHtmlBottom(data?.html_bottom || null);
-      setLoading(false);
+      setError(null);
+      try {
+        const { data } = await icBySymbolPlot(
+          {
+            horizon,
+            start: dateRange.start,
+            end: dateRange.end,
+            minPoints: 10,
+            topN: 20,
+            width: 980,
+            height: 420,
+          },
+          { signal: controller.signal }
+        );
+        if (cancelled || controller.signal.aborted) return;
+        setHtmlTop(data?.html_top || null);
+        setHtmlBottom(data?.html_bottom || null);
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        console.error("Failed to load IC by symbol", err);
+        const message = err?.message || "Unable to load IC by token.";
+        setError(message);
+        setHtmlTop(null);
+        setHtmlBottom(null);
+        toast.error("IC by token unavailable", {
+          id: "ic-by-symbol-error",
+          description: message,
+        });
+      } finally {
+        if (cancelled || controller.signal.aborted) return;
+        setLoading(false);
+      }
     };
     load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [horizon, dateRange]);
 
   const Plot = ({ html, title }) => {
@@ -81,10 +113,16 @@ export default function ICBySymbol({ horizon = "1d", dateRange }) {
           description="Spearman rank correlation between model predictions and forward returns for each token over the selected date range. Calculated from the 'predictions' table."
         />
       </div>
-      <div className="grid md:grid-cols-2 gap-4">
-        <Plot html={htmlTop} title="Top 20 Tokens by IC" />
-        <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
-      </div>
+      {error ? (
+        <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+          {error}
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-4">
+          <Plot html={htmlTop} title="Top 20 Tokens by IC" />
+          <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
+        </div>
+      )}
     </div>
   );
 }

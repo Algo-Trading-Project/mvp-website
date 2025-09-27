@@ -65,10 +65,11 @@ Deno.serve(async (req) => {
       });
     }
     
-    const makePlot = (rows, title) => {
+    const horizonLabel = horizon === '1d' ? '1-Day' : '7-Day';
+    const makePlot = (rows, title, color) => {
         const x = rows.map(r => r.symbol);
         const y = rows.map(r => r.spearman_ic);
-        const colors = y.map(val => val >= 0 ? '#10b981' : '#ef4444');
+        const colors = y.map(() => color);
         return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
@@ -79,7 +80,7 @@ const y = ${JSON.stringify(y)};
 const colors = ${JSON.stringify(colors)};
 const data = [{ type: 'bar', x, y, marker: { color: colors }, hovertemplate: 'IC: %{y:.3f}<br>Symbol: %{x}<extra></extra>' }];
 const layout = { 
-  title: { text: '${title}', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
+  title: { text: '${title} (${horizonLabel})', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
   paper_bgcolor: '#0b1220', 
   plot_bgcolor: '#0b1220', 
   margin: { l: 48, r: 20, t: 40, b: 80 },
@@ -93,8 +94,8 @@ Plotly.newPlot(el, data, layout, config);
     }
 
     return Response.json({ 
-      html_top: makePlot(topRows, 'Top 20 Tokens by IC'), 
-      html_bottom: makePlot(bottomRows, 'Bottom 20 Tokens by IC'),
+      html_top: makePlot(topRows, 'Top 20 Tokens by IC', '#10b981'), 
+      html_bottom: makePlot(bottomRows, 'Bottom 20 Tokens by IC', '#ef4444'),
     });
   } catch (e) {
     return Response.json({ error: e.message || String(e) }, { status: 500 });

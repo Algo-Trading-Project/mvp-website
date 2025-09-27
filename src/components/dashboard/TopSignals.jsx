@@ -1,9 +1,10 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Crown, TrendingDown } from "lucide-react";
+import { Crown, TrendingDown, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { getLatestPredictions } from "@/api/functions";
+import { toast } from "sonner";
 
 // Loading skeleton for signals table
 const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
@@ -47,58 +48,82 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
   const [topSignals, setTopSignals] = React.useState([]);
   const [bottomSignals, setBottomSignals] = React.useState([]);
   const [internalLoading, setInternalLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
 
-  React.useEffect(() => {
-    const load = async () => {
+  const loadSignals = React.useCallback(
+    async (abortSignal) => {
       setInternalLoading(true);
+      setError(null);
       onLoadingChange(true);
 
-      const { data } = await getLatestPredictions({});
-      const lastDate = data?.date;
-      const rows = data?.rows || [];
+      try {
+        const { data } = await getLatestPredictions({}, { signal: abortSignal });
+        if (abortSignal?.aborted) return;
 
-      if (!lastDate || !rows.length) {
+        const lastDate = data?.date;
+        const rows = data?.rows || [];
+
+        if (!lastDate || !rows.length) {
+          setTopSignals([]);
+          setBottomSignals([]);
+          setInternalLoading(false);
+          onLoadingChange(false);
+          return;
+        }
+
+        const predField = modelHorizon === "1d" ? "y_pred_1d" : "y_pred_7d";
+        const scored = rows
+          .filter((r) => typeof r[predField] === "number" && !Number.isNaN(r[predField]))
+          .map((r) => ({ symbol: String(r.symbol_id).split("_")[0], score: r[predField] }));
+
+        if (!scored.length) {
+          setTopSignals([]);
+          setBottomSignals([]);
+          setInternalLoading(false);
+          onLoadingChange(false);
+          return;
+        }
+
+        const sortedDesc = [...scored].sort((a, b) => b.score - a.score);
+        const n = sortedDesc.length;
+        const withStats = sortedDesc.map((r, idx) => ({
+          symbol: r.symbol,
+          pred_return: r.score,
+          percentile: n > 1 ? (1 - idx / (n - 1)) * 100 : 100,
+          rank: idx + 1,
+        }));
+
+        setTopSignals(withStats.slice(0, 5));
+        const bottom = [...withStats].slice(-5).map((r, i) => ({
+          ...r,
+          rank: n - 5 + i + 1,
+        }));
+        setBottomSignals(bottom);
+      } catch (err) {
+        if (abortSignal?.aborted) return;
+        console.error("Failed to load latest predictions", err);
+        const message = err?.message || "Unable to load signals.";
+        setError(message);
         setTopSignals([]);
         setBottomSignals([]);
+        toast.error("Unable to load today’s signals", {
+          id: "top-signals-error",
+          description: message,
+        });
+      } finally {
+        if (abortSignal?.aborted) return;
         setInternalLoading(false);
         onLoadingChange(false);
-        return;
       }
+    },
+    [modelHorizon, onLoadingChange]
+  );
 
-      // Choose prediction field based on model horizon
-      const predField = modelHorizon === "1d" ? "y_pred_1d" : "y_pred_7d";
-      const scored = rows
-        .filter(r => typeof r[predField] === "number" && !Number.isNaN(r[predField]))
-        .map(r => ({ symbol: String(r.symbol_id).split('_')[0], score: r[predField] }));
-
-      if (!scored.length) {
-        setTopSignals([]);
-        setBottomSignals([]);
-        setInternalLoading(false);
-        onLoadingChange(false);
-        return;
-      }
-
-      const sortedDesc = [...scored].sort((a, b) => b.score - a.score);
-      const n = sortedDesc.length;
-      const withStats = sortedDesc.map((r, idx) => ({
-        symbol: r.symbol,
-        pred_return: r.score,
-        percentile: n > 1 ? (1 - idx / (n - 1)) * 100 : 100,
-        rank: idx + 1
-      }));
-
-      setTopSignals(withStats.slice(0, 5));
-      const bottom = [...withStats].slice(-5).map((r, i) => ({
-        ...r,
-        rank: n - 5 + i + 1
-      }));
-      setBottomSignals(bottom);
-      setInternalLoading(false);
-      onLoadingChange(false);
-    };
-    load();
-  }, [modelHorizon, onLoadingChange]);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    loadSignals(controller.signal);
+    return () => controller.abort();
+  }, [loadSignals]);
 
   const getPercentileColor = (percentile) => {
     if (percentile >= 95) return "text-emerald-400";
@@ -115,9 +140,47 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
 
   const isLoading = loading || internalLoading;
 
+  const handleRetry = () => {
+    loadSignals();
+  };
+
   const SignalTable = ({ signals, title, icon: Icon, iconColor }) => {
     if (isLoading) {
       return <SignalTableSkeleton title={title} icon={Icon} iconColor={iconColor} />;
+    }
+
+    if (error) {
+      return (
+        <div className="bg-slate-900 border border-slate-800 rounded-md">
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+            <h3 className="flex items-center space-x-2 font-semibold text-sm">
+              <Icon className={`w-4 h-4 ${iconColor}`} />
+              <span>{title}</span>
+            </h3>
+            <Button variant="outline" size="sm" onClick={handleRetry} className="rounded-md">
+              Retry
+            </Button>
+          </div>
+          <div className="p-6 flex flex-col items-center text-center text-sm text-red-300 gap-3">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (!signals.length) {
+      return (
+        <div className="bg-slate-900 border border-slate-800 rounded-md">
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+            <h3 className="flex items-center space-x-2 font-semibold text-sm">
+              <Icon className={`w-4 h-4 ${iconColor}`} />
+              <span>{title}</span>
+            </h3>
+          </div>
+          <div className="p-6 text-center text-sm text-slate-300">No signals available for the selected horizon.</div>
+        </div>
+      );
     }
 
     return (
