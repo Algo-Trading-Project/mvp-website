@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert } from 'lucide-react';
 import { User } from '@/api/entities';
-import { Subscription } from '@/api/entities/Subscription';
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Switch } from "@/components/ui/switch";
