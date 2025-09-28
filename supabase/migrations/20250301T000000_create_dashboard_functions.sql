@@ -151,11 +151,11 @@ begin
          split_part(symbol_id, ''_'', 1) as symbol,
          date,
          rank() over (
-           partition by date, split_part(symbol_id, ''_'', 1)
+           partition by date
            order by %1$s::double precision
          ) as pred_rank,
          rank() over (
-           partition by date, split_part(symbol_id, ''_'', 1)
+           partition by date
            order by %2$s::double precision
          ) as ret_rank
        from predictions

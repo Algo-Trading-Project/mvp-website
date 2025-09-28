@@ -85,7 +85,19 @@ export default function DashboardOOSSection() {
 
   React.useEffect(() => {
     const load = async () => {
-      const rows = await cross_sectional_metrics_1d.filter({}, "date", 10000);
+      const rawRows = await cross_sectional_metrics_1d.filter({}, "date", 10000);
+      const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
+
+      const rows = rawRows
+        .map((row) => ({
+          ...row,
+          rolling_30d_ema_ic_1d: toNumber(row.rolling_30d_ema_ic_1d),
+          rolling_30d_ema_ic_7d: toNumber(row.rolling_30d_ema_ic_7d),
+          rolling_30d_ema_top_bottom_decile_spread_1d: toNumber(row.rolling_30d_ema_top_bottom_decile_spread_1d),
+          rolling_30d_ema_top_bottom_decile_spread_7d: toNumber(row.rolling_30d_ema_top_bottom_decile_spread_7d),
+        }))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
       setAllRows(rows);
 
       const latestDate = rows.length ? rows[rows.length - 1].date : "";
@@ -200,6 +212,11 @@ export default function DashboardOOSSection() {
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
     return asPct ? `${val >= 0 ? "+" : ""}${(val * 100).toFixed(decimals)}%` : `${val >= 0 ? "+" : ""}${val.toFixed(decimals)}`;
+  };
+
+  const deltaClass = (val) => {
+    if (val === null || typeof val !== "number" || Number.isNaN(val)) return "text-slate-400";
+    return val >= 0 ? "text-emerald-400" : "text-red-400";
   };
 
   // NEW: global monthly stats (mean, std, annualized ICIR) from monthly_ic_metrics
@@ -435,21 +452,21 @@ export default function DashboardOOSSection() {
               <div className="text-2xl font-bold text-white">{icDeltas.cur !== null ? icDeltas.cur.toFixed(4) : "—"}</div>
             </div>
             <div className="flex flex-col gap-1">
-              <div className={`flex items-center gap-1 text-xs ${typeof icDeltas.d1 === "number" && icDeltas.d1 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d1)}`}>
                 {icDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${icDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${icDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(icDeltas.d1, { asPct: false, decimals: 4 })}</span>
                 </>}
               </div>
-              <div className={`flex items-center gap-1 text-xs ${typeof icDeltas.d7 === "number" && icDeltas.d7 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d7)}`}>
                 {icDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${icDeltas.d7 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${icDeltas.d7 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">7d: {formatDelta(icDeltas.d7, { asPct: false, decimals: 4 })}</span>
                 </>}
               </div>
-              <div className={`flex items-center gap-1 text-xs ${typeof icDeltas.d30 === "number" && icDeltas.d30 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d30)}`}>
                 {icDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${icDeltas.d30 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${icDeltas.d30 < 0 ? "" : "hidden"}`} />
@@ -477,21 +494,21 @@ export default function DashboardOOSSection() {
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <div className={`flex items-center gap-1 text-xs ${typeof spreadDeltas.d1 === "number" && spreadDeltas.d1 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d1)}`}>
                 {spreadDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(spreadDeltas.d1, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
-              <div className={`flex items-center gap-1 text-xs ${typeof spreadDeltas.d7 === "number" && spreadDeltas.d7 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d7)}`}>
                 {spreadDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d7 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d7 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">7d: {formatDelta(spreadDeltas.d7, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
-              <div className={`flex items-center gap-1 text-xs ${typeof spreadDeltas.d30 === "number" && spreadDeltas.d30 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d30)}`}>
                 {spreadDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d30 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d30 < 0 ? "" : "hidden"}`} />
