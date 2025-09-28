@@ -96,15 +96,6 @@ export default function DashboardClassificationSection() {
           toast.error("Unable to load monthly expectancy metrics");
         }
       }
-      if (!cancelled && (!dateRange.start || !dateRange.end)) {
-        const today = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - (DEFAULT_LOOKBACK_DAYS - 1));
-        setDateRange({
-          start: start.toISOString().slice(0, 10),
-          end: today.toISOString().slice(0, 10),
-        });
-      }
     };
     boot();
     return () => {
@@ -137,10 +128,8 @@ export default function DashboardClassificationSection() {
         setTokenPerformance(data);
         if (data?.range_start) resolvedStart = data.range_start;
         if (data?.range_end) resolvedEnd = data.range_end;
-        if (!hasRange && data?.range_start && data?.range_end) {
-          setDateRange((prev) =>
-            prev.start && prev.end ? prev : { start: data.range_start, end: data.range_end }
-          );
+        if (data?.range_start && data?.range_end && (!hasRange || data.count === 0)) {
+          setDateRange({ start: data.range_start, end: data.range_end });
         }
       } catch (error) {
         const message = error?.message || "Error loading token performance charts";
@@ -162,10 +151,8 @@ export default function DashboardClassificationSection() {
           windowDays: DEFAULT_LOOKBACK_DAYS,
         });
         setDecilePerformance(data);
-        if (!hasRange && data?.range_start && data?.range_end) {
-          setDateRange((prev) =>
-            prev.start && prev.end ? prev : { start: data.range_start, end: data.range_end }
-          );
+        if (data?.range_start && data?.range_end && (!hasRange || data.n === 0)) {
+          setDateRange({ start: data.range_start, end: data.range_end });
         }
       } catch (error) {
         const message = error?.message || "Error loading decile performance";
