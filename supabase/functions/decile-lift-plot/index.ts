@@ -1,4 +1,4 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -20,46 +20,43 @@ Deno.serve(async (req) => {
 
     const { horizon = '1d', direction = 'long', windowDays = 30 } = await req.json();
 
-    const retColumn = horizon === '7d' ? 'forward_returns_7' : 'forward_returns_1';
-    const predColumn = horizon === '7d' ? 'y_pred_7d' : 'y_pred_1d';
+    const supabase = getServiceSupabaseClient();
 
-    const [{ max_date } = { max_date: null }] = await query<{ max_date: string | null }>(
-      'SELECT MAX(date)::date AS max_date FROM predictions'
-    );
+    const { data: latestRows, error: latestError } = await supabase
+      .from('predictions')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
 
-    if (!max_date) {
+    if (latestError) throw latestError;
+
+    const maxDate = latestRows?.[0]?.date ?? null;
+
+    if (!maxDate) {
       return json({ html: emptyHtml('No predictions found.'), n: 0 });
     }
 
-    const end = String(max_date);
+    const end = String(maxDate);
     const start = shiftDays(end, -(Math.max(1, Number(windowDays)) - 1));
-    const multiplier = direction === 'short' ? -1 : 1;
 
-    const rows = await query<{ decile: number; avg_return: number; n: number }>(
-      `SELECT decile, AVG(ret) AS avg_return, COUNT(*) AS n
-         FROM (
-           SELECT 
-             ${retColumn}::double precision AS ret,
-             NTILE(10) OVER (
-               ORDER BY (${predColumn}::double precision) * :multiplier
-             ) AS decile
-           FROM predictions
-           WHERE date BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE)
-             AND ${predColumn} IS NOT NULL
-             AND ${retColumn} IS NOT NULL
-         ) ranked
-       GROUP BY decile
-       ORDER BY decile`,
-      { start, end, multiplier }
-    );
+    const { data: rows, error } = await supabase.rpc('rpc_decile_lift', {
+      horizon,
+      direction,
+      start_date: start,
+      end_date: end,
+    });
 
-    if (!rows.length) {
+    if (error) throw error;
+
+    const deciles = (rows ?? []) as { decile: number; avg_return: number; n: number }[];
+
+    if (!deciles.length) {
       return json({ html: emptyHtml('No data in range.'), n: 0 });
     }
 
-    const x = rows.map((r) => Number(r.decile));
-    const y = rows.map((r) => Number(r.avg_return));
-    const total = rows.reduce((sum, r) => sum + Number(r.n ?? 0), 0);
+    const x = deciles.map((r) => Number(r.decile));
+    const y = deciles.map((r) => Number(r.avg_return));
+    const total = deciles.reduce((sum, r) => sum + Number(r.n ?? 0), 0);
 
     return json({ html: buildHtml(x, y), n: total, start, end });
   } catch (error) {

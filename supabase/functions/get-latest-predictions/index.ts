@@ -1,5 +1,5 @@
 
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -12,8 +12,17 @@ Deno.serve(async (req) => {
       return json({ error: 'Method not allowed' }, { status: 405 });
     }
 
-    const maxRows = await query('SELECT MAX(date) AS max_date FROM predictions');
-    const maxDate = Array.isArray(maxRows) && maxRows.length > 0 ? maxRows[0].max_date : null;
+    const supabase = getServiceSupabaseClient();
+
+    const { data: latestRows, error: latestError } = await supabase
+      .from('predictions')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
+
+    if (latestError) throw latestError;
+
+    const maxDate = latestRows?.[0]?.date ?? null;
 
     if (!maxDate) {
       return json({ date: null, rows: [] });
@@ -21,12 +30,12 @@ Deno.serve(async (req) => {
 
     const d = String(maxDate).slice(0, 10);
 
-    const rows = await query(
-      `SELECT symbol_id, date, y_pred_1d, y_pred_7d
-         FROM predictions
-        WHERE date = CAST(:d AS DATE)`,
-      { d }
-    );
+    const { data: rows, error: rowsError } = await supabase
+      .from('predictions')
+      .select('symbol_id, date, y_pred_1d, y_pred_7d')
+      .eq('date', d);
+
+    if (rowsError) throw rowsError;
 
     return json({ date: d, rows });
   } catch (error) {

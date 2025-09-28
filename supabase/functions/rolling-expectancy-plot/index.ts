@@ -1,4 +1,4 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -25,16 +25,23 @@ Deno.serve(async (req) => {
 
     const field = fieldMap[direction];
     
-    const rows = await query(
-      `SELECT date, ${field} AS value
-       FROM cross_sectional_metrics_1d
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE)
-       ORDER BY date ASC`,
-      { s: start, e: end }
-    );
+    const supabase = getServiceSupabaseClient();
 
-    const x = rows.map(r => r.date);
-    const y = rows.map(r => (typeof r.value === 'number' || typeof r.value === 'string') ? Number(r.value) : null);
+    const { data, error } = await supabase
+      .from('cross_sectional_metrics_1d')
+      .select(`date, ${field}`)
+      .gte('date', start)
+      .lte('date', end)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    const rows = data ?? [];
+    const x = rows.map((r: Record<string, unknown>) => r.date as string);
+    const y = rows.map((r: Record<string, unknown>) => {
+      const val = r[field];
+      return typeof val === 'number' ? val : typeof val === 'string' ? Number(val) : null;
+    });
     const colors = { combined: '#22d3ee', long: '#10b981', short: '#ef4444' };
     
     const trace = {

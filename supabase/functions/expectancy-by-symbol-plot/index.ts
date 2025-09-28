@@ -1,12 +1,7 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
-
-function shiftDays(dateStr, delta) {
-  const d = new Date(dateStr + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
+import { shiftDays } from '../_shared/dates.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,64 +12,67 @@ Deno.serve(async (req) => {
       return json({ error: 'Method not allowed' }, { status: 405 });
     }
 
-    let { horizon = '1d', direction = 'long', windowDays = 30, minObs = 5, topN = 20 } = await req.json();
+    const {
+      horizon = '1d',
+      direction = 'long',
+      windowDays = 30,
+      minObs = 5,
+      topN = 20
+    } = await req.json();
 
-    // First, let's check what columns actually exist
-    const schemaQuery = `SELECT column_name FROM information_schema.columns WHERE table_name = 'predictions'`;
-    const columns = await query(schemaQuery);
-    const columnNames = columns.map(c => c.column_name);
+    const supabase = getServiceSupabaseClient();
 
-    // For now, let's use a simple approach with the basic columns that should exist
-    // Based on the schema: symbol_id, date, forward_returns_1, forward_returns_7, y_pred_1d, y_pred_7d
-    const retKey = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
-    const predKey = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
+    const { data: latestRows, error: latestError } = await supabase
+      .from('predictions')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
 
-    const maxDateRows = await query(`SELECT MAX(date) AS max_date FROM predictions`);
-    const maxDate = maxDateRows?.[0]?.max_date ? String(maxDateRows[0].max_date).slice(0, 10) : null;
+    if (latestError) throw latestError;
+
+    const maxDate = latestRows?.[0]?.date ? String(latestRows[0].date).slice(0, 10) : null;
 
     if (!maxDate) {
       const emptyHtml = '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No predictions found.</body></html>';
-      return json({ 
-        html_top: emptyHtml, 
-        html_bottom: emptyHtml, 
+      return json({
+        html_top: emptyHtml,
+        html_bottom: emptyHtml,
         count: 0,
-        debug: { columns: columnNames, maxDate }
+        debug: { maxDate }
       });
     }
 
     const end = maxDate;
     const start = shiftDays(end, -(windowDays - 1));
 
-    // Use prediction scores for ranking instead of probability
-    const directionFilter = direction === 'short'
-      ? `${predKey} < 0`
-      : direction === 'long'
-        ? `${predKey} > 0`
-        : 'TRUE';
+    const { data, error } = await supabase.rpc('rpc_symbol_expectancy', {
+      horizon,
+      direction,
+      start_date: start,
+      end_date: end,
+      min_obs: minObs,
+    });
 
-    const baseQuery = `
-      SELECT 
-        split_part(symbol_id, '_', 1) AS symbol,
-        AVG(${retKey}::double precision) AS avg_expectancy,
-        COUNT(*) AS observation_count
-      FROM predictions
-      WHERE date BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE)
-        AND ${predKey} IS NOT NULL 
-        AND ${retKey} IS NOT NULL
-        AND ${directionFilter}
-      GROUP BY split_part(symbol_id, '_', 1)
-      HAVING COUNT(*) >= :minObs
-    `;
+    if (error) throw error;
 
-    const params = { start, end, minObs, topN };
+    const symbols = (data ?? []) as { symbol: string; avg_expectancy: number; observation_count: number }[];
+    if (!symbols.length) {
+      const emptyHtml = '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data in range.</body></html>';
+      return json({
+        html_top: emptyHtml,
+        html_bottom: emptyHtml,
+        count: 0,
+        debug: { maxDate }
+      });
+    }
 
-    const topRows = await query(`${baseQuery} ORDER BY avg_expectancy DESC LIMIT :topN`, params);
-    const bottomRowsAsc = await query(`${baseQuery} ORDER BY avg_expectancy ASC LIMIT :topN`, params);
-    const bottomRows = [...bottomRowsAsc].reverse();
+    const sorted = [...symbols].sort((a, b) => b.avg_expectancy - a.avg_expectancy);
+    const topRows = sorted.slice(0, topN);
+    const bottomRows = [...sorted.slice(-topN)].reverse();
 
-    const makePlot = (rows, title, color) => {
-      const x = rows.map(r => r.symbol);
-      const y = rows.map(r => Number(r.avg_expectancy));
+    const makePlot = (rows: typeof symbols, title: string, color: string) => {
+      const x = rows.map((r) => r.symbol);
+      const y = rows.map((r) => Number(r.avg_expectancy));
       return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id="chart"></div><script>
@@ -85,14 +83,13 @@ Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZ
     };
 
     return json({
-      html_top: makePlot(topRows, `Top 20 Tokens by ${direction.charAt(0).toUpperCase() + direction.slice(1)} Returns`, direction === 'long' ? '#10b981' : '#ef4444'),
-      html_bottom: makePlot(bottomRows, `Bottom 20 Tokens by ${direction.charAt(0).toUpperCase() + direction.slice(1)} Returns`, direction === 'long' ? '#ef4444' : '#10b981'),
-      count: (topRows?.length || 0) + (bottomRows?.length || 0),
-      debug: { columns: columnNames, usedRetKey: retKey, usedPredKey: predKey }
+      html_top: makePlot(topRows, `Top ${topRows.length} Tokens by ${direction} Returns`, direction === 'long' ? '#10b981' : '#ef4444'),
+      html_bottom: makePlot(bottomRows, `Bottom ${bottomRows.length} Tokens by ${direction} Returns`, direction === 'long' ? '#ef4444' : '#10b981'),
+      count: topRows.length + bottomRows.length,
+      debug: { maxDate }
     });
-
-  } catch (e) {
-    console.error('expectancyBySymbolPlot error:', e);
-    return json({ error: e.message || String(e) }, { status: 500 });
+  } catch (error) {
+    console.error('expectancyBySymbolPlot error:', error);
+    return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 });

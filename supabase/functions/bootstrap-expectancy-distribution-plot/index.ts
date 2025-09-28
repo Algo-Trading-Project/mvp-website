@@ -1,4 +1,4 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
     
-    const { horizon = '1d', direction = 'combined', start, end, samples = 10000, bins = 30, width = 980, height = 360 } = await req.json();
+    const { horizon = '1d', direction = 'combined', start, end, samples = 10000, bins = 30 } = await req.json();
     if (!start || !end) return json({ error: 'start and end date are required' }, { status: 400 });
 
     let field;
@@ -17,12 +17,18 @@ Deno.serve(async (req) => {
     else if (direction === 'short') field = `cs_${horizon}_short_expectancy`;
     else field = `cs_${horizon}_expectancy`;
     
-    const rows = await query(
-      `SELECT ${field} AS val FROM cross_sectional_metrics_1d 
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE) AND ${field} IS NOT NULL`,
-      { s: start, e: end }
-    );
-    const dailyVals = rows.map(r => Number(r.val)).filter(v => Number.isFinite(v));
+    const supabase = getServiceSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('cross_sectional_metrics_1d')
+      .select(`${field}`)
+      .gte('date', start)
+      .lte('date', end);
+
+    if (error) throw error;
+
+    const dailyVals = (data ?? []).map((row: Record<string, unknown>) => Number(row[field]))
+      .filter((value) => Number.isFinite(value));
     if (dailyVals.length === 0) {
         return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data in range.</body></html>' });
     }

@@ -1,5 +1,5 @@
 
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -17,38 +17,33 @@ Deno.serve(async (req) => {
     }
 
     const field = horizon === '1d' ? 'cross_sectional_ic_1d' : 'cross_sectional_ic_7d';
-    
-    const rows = await query<{ ic: number | string }>(
-      `SELECT ${field} AS ic FROM cross_sectional_metrics_1d 
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE)
-         AND ${field} IS NOT NULL`,
-      { s: start, e: end }
-    );
+
+    const supabase = getServiceSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('cross_sectional_metrics_1d')
+      .select(`${field}`)
+      .gte('date', start)
+      .lte('date', end);
+
+    if (error) throw error;
+
+    const rows = data ?? [];
 
     if (!rows.length) {
       return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No IC data in selected range.</body></html>', bins: [] });
     }
 
-    const allVals = rows.map(r => Number(r.ic)).filter(v => Number.isFinite(v));
+    const allVals = rows.map((r: Record<string, unknown>) => Number(r[field])).filter(v => Number.isFinite(v));
 
     if (!allVals.length) {
       return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No valid IC values in range.</body></html>', bins: [] });
     }
 
-    const [summary] = await query<{ mean: number; std: number; pos: number }>(
-      `SELECT 
-         AVG(${field}::double precision) AS mean,
-         COALESCE(STDDEV_POP(${field}::double precision), 0) AS std,
-         AVG(CASE WHEN ${field}::double precision > 0 THEN 1 ELSE 0 END) AS pos
-       FROM cross_sectional_metrics_1d
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE)
-         AND ${field} IS NOT NULL`,
-      { s: start, e: end }
-    );
-
-    const mean = Number(summary?.mean ?? 0);
-    const std = Number(summary?.std ?? 0);
-    const pos = Number(summary?.pos ?? 0);
+    const mean = allVals.reduce((sum, val) => sum + val, 0) / allVals.length;
+    const variance = allVals.reduce((sum, val) => sum + (val - mean) ** 2, 0) / allVals.length;
+    const std = Math.sqrt(variance);
+    const pos = allVals.filter((v) => v > 0).length / allVals.length;
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>

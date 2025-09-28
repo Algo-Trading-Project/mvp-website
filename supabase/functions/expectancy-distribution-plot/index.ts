@@ -1,4 +1,4 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -17,24 +17,31 @@ Deno.serve(async (req) => {
     else if (direction === 'short') field = `cs_${horizon}_short_expectancy`;
     else field = `cs_${horizon}_expectancy`;
     
-    const rows = await query<{ val: number | string }>(
-      `SELECT ${field} AS val FROM cross_sectional_metrics_1d 
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE) AND ${field} IS NOT NULL`,
-      { s: start, e: end }
-    );
-    const allVals = rows.map(r => Number(r.val)).filter(v => Number.isFinite(v));
+    const supabase = getServiceSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('cross_sectional_metrics_1d')
+      .select(`${field}`)
+      .gte('date', start)
+      .lte('date', end);
+
+    if (error) throw error;
+
+    const allVals = (data ?? []).map((row: Record<string, unknown>) => Number(row[field]))
+      .filter((value) => Number.isFinite(value));
     if (allVals.length === 0) return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data in range.</body></html>' });
 
-    const [summary] = await query<{ mean: number; std: number; pos: number }>(
-      `SELECT 
-         AVG(${field}::double precision) AS mean,
-         COALESCE(STDDEV_POP(${field}::double precision), 0) AS std,
-         AVG(CASE WHEN ${field}::double precision > 0 THEN 1 ELSE 0 END) AS pos
-       FROM cross_sectional_metrics_1d
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE)
-         AND ${field} IS NOT NULL`,
-      { s: start, e: end }
-    );
+    const { data: summaryData, error: summaryError } = await supabase.rpc('rpc_expectancy_distribution_summary', {
+      field_name: field,
+      start_date: start,
+      end_date: end,
+    });
+
+    if (summaryError) throw summaryError;
+
+    const summary = Array.isArray(summaryData) && summaryData.length > 0
+      ? summaryData[0] as { mean: number; std: number; pos: number }
+      : { mean: 0, std: 0, pos: 0 };
 
     const mean = Number(summary?.mean ?? 0);
     const std = Number(summary?.std ?? 0);

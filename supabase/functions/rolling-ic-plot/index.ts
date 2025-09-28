@@ -1,5 +1,4 @@
-
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -14,16 +13,23 @@ Deno.serve(async (req) => {
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
 
     const field = horizon === '7d' ? 'rolling_30d_ema_ic_7d' : 'rolling_30d_ema_ic_1d';
-    const rows = await query(
-      `SELECT date, ${field} AS ic
-       FROM cross_sectional_metrics_1d
-       WHERE date BETWEEN CAST(:s AS DATE) AND CAST(:e AS DATE)
-       ORDER BY date ASC`,
-      { s: start, e: end }
-    );
+    const supabase = getServiceSupabaseClient();
 
-    const x = rows.map(r => r.date);
-    const y = rows.map(r => (typeof r.ic === 'number' || typeof r.ic === 'string') ? Number(r.ic) : null);
+    const { data, error } = await supabase
+      .from('cross_sectional_metrics_1d')
+      .select(`date, ${field}`)
+      .gte('date', start)
+      .lte('date', end)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    const rows = data ?? [];
+    const x = rows.map((r: Record<string, unknown>) => r.date as string);
+    const y = rows.map((r: Record<string, unknown>) => {
+      const val = r[field];
+      return typeof val === 'number' ? val : typeof val === 'string' ? Number(val) : null;
+    });
 
     const html = `<!DOCTYPE html>
 <html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>

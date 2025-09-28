@@ -1,4 +1,4 @@
-import { query } from '../_shared/query.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
@@ -19,11 +19,17 @@ Deno.serve(async (req) => {
 
     let { horizon = '1d', direction = 'long', windowDays = 30, start, end } = await req.json();
 
-    const retKey = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
-    const predKey = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
+    const supabase = getServiceSupabaseClient();
 
-    const maxDateRows = await query(`SELECT MAX(date) AS max_date FROM predictions`);
-    const maxDate = maxDateRows?.[0]?.max_date ? String(maxDateRows[0].max_date).slice(0, 10) : null;
+    const { data: latestRows, error: latestError } = await supabase
+      .from('predictions')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
+
+    if (latestError) throw latestError;
+
+    const maxDate = latestRows?.[0]?.date ? String(latestRows[0].date).slice(0, 10) : null;
 
     if (!maxDate) {
       return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data.</body></html>', n: 0 });
@@ -34,20 +40,19 @@ Deno.serve(async (req) => {
 
     const orderDirection = direction === 'short' ? 'ASC' : 'DESC';
 
-    const rows = await query(
-      `SELECT decile, AVG(ret) AS avg_return, COUNT(*) AS n FROM (
-         SELECT 
-           ${retKey} AS ret, 
-           NTILE(10) OVER (PARTITION BY date ORDER BY ${predKey} ${orderDirection}) AS decile
-         FROM predictions
-         WHERE date BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE) AND ${predKey} IS NOT NULL AND ${retKey} IS NOT NULL
-       ) AS sub
-       GROUP BY decile ORDER BY decile ASC`,
-      { start: resolvedStart, end: resolvedEnd }
-    );
+    const { data: rows, error } = await supabase.rpc('rpc_decile_performance', {
+      horizon,
+      direction,
+      start_date: resolvedStart,
+      end_date: resolvedEnd,
+    });
 
-    const x = rows.map(r => `Decile ${r.decile}`);
-    const y = rows.map(r => Number(r.avg_return));
+    if (error) throw error;
+
+    const deciles = (rows ?? []) as { decile: number; avg_return: number; n: number }[];
+
+    const x = deciles.map(r => `Decile ${r.decile}`);
+    const y = deciles.map(r => Number(r.avg_return));
 
     const html = `<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head><body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'#8b5cf6'},hovertemplate:'Avg Return: %{y:.2%}<br>%{x}<extra></extra>'}];
@@ -56,7 +61,7 @@ Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false});</scr
 
     return json({
       html,
-      n: rows.reduce((acc, r) => acc + r.n, 0),
+      n: deciles.reduce((acc, r) => acc + Number(r.n ?? 0), 0),
       range_start: resolvedStart,
       range_end: resolvedEnd
     });

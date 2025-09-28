@@ -47,6 +47,10 @@ When `VITE_API_MODE` is `mock` the smoke test verifies the in-memory fixtures; w
 
 The legacy Aurora-backed lambdas have been ported to Supabase Edge Functions under `supabase/functions`. Each function returns the same JSON payloads and Plotly HTML as before, but now connects directly to your Supabase Postgres instance.
 
+### Database helpers
+
+Complex analytics now execute inside Postgres via stored procedures. The definitions live in `supabase/migrations/20250301T000000_create_dashboard_functions.sql`. Apply the migration once (SQL editor or `supabase db push`) so the RPC endpoints such as `rpc_decile_lift`, `rpc_symbol_expectancy` are available to the edge functions.
+
 ### Required Secrets
 
 Set the following secrets on your Supabase project (using the dashboard or CLI). All functions expect these environment variables:
@@ -74,6 +78,16 @@ supabase functions serve decile-lift-plot --env-file supabase/.env.dev
 ```
 
 Populate `supabase/.env.dev` with the same secrets listed above for local development.
+
+### Automated validation
+
+Once the migration is applied you can confirm the RPCs and table access with:
+
+```bash
+npm run test:supabase supabase/.env.dev
+```
+
+The script exercises each stored procedure via the service-role key so you can catch schema mismatches before deploying edge functions.
 
 ### Deploying Functions
 

@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .env
+
+# Secrets
+*.env.example
+*.env.supabase.example
+supabase/.env.*
