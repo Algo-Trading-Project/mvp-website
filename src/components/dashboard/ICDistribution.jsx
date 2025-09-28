@@ -51,7 +51,7 @@ export default function ICDistribution({ horizon = "1d", dateRange }) {
       setLoading(true);
       setError(null);
       try {
-        const { data } = await icDistributionPlot(
+        const data = await icDistributionPlot(
           {
             horizon,
             start: dateRange.start,

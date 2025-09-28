@@ -57,7 +57,7 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
       onLoadingChange(true);
 
       try {
-        const { data } = await getLatestPredictions({}, { signal: abortSignal });
+        const data = await getLatestPredictions({}, { signal: abortSignal });
         if (abortSignal?.aborted) return;
 
         const lastDate = data?.date;

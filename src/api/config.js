@@ -15,16 +15,21 @@ const readEnv = (key, fallback = "") => {
   return String(value).trim();
 };
 
-export const API_BASE_URL = readEnv("VITE_API_BASE_URL");
-export const API_TIMEOUT_MS = Number(readEnv("VITE_API_TIMEOUT_MS", "10000")) || 10000;
-export const API_RETRY_COUNT = Math.max(0, Number(readEnv("VITE_API_RETRY_COUNT", "0")) || 0);
-
-const inferMode = () => {
-  const explicit = readEnv("VITE_API_MODE", "").toLowerCase();
-  if (explicit === "network" || explicit === "mock") return explicit;
-  return API_BASE_URL ? "network" : "mock";
-};
-
-export const API_MODE = inferMode();
-
 export const API_DEBUG = readEnv("VITE_API_DEBUG", "false").toLowerCase() === "true";
+
+export const SUPABASE_URL = readEnv("VITE_SUPABASE_URL");
+export const SUPABASE_ANON_KEY = readEnv("VITE_SUPABASE_ANON_KEY");
+
+const trimTrailingSlash = (value) => value.replace(/\/$/, "");
+
+export const SUPABASE_FUNCTION_URL = (() => {
+  const explicit = readEnv("VITE_SUPABASE_FUNCTION_URL");
+  if (explicit) return trimTrailingSlash(explicit);
+  if (!SUPABASE_URL) return "";
+  return `${trimTrailingSlash(SUPABASE_URL)}/functions/v1`;
+})();
+
+export const SUPABASE_REST_URL = (() => {
+  if (!SUPABASE_URL) return "";
+  return `${trimTrailingSlash(SUPABASE_URL)}/rest/v1`;
+})();

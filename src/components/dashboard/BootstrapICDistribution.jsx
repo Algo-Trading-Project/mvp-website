@@ -42,7 +42,7 @@ export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
       setLoading(true);
       setError(null);
       try {
-        const { data } = await bootstrapIcDistributionPlot(
+        const data = await bootstrapIcDistributionPlot(
           {
             horizon,
             start: dateRange.start,

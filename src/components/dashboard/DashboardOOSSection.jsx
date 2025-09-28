@@ -111,7 +111,7 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const { data } = await rollingIcPlot({
+      const data = await rollingIcPlot({
         horizon,
         start: fallbackStart,
         end: endDate
@@ -136,7 +136,7 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const { data } = await rollingSpreadPlot({
+      const data = await rollingSpreadPlot({
         horizon,
         start: fallbackStart,
         end: endDate

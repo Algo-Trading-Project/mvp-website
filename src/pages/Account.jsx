@@ -22,7 +22,7 @@ export default function Account() {
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [weeklySummary, setWeeklySummary] = useState(true);
   const [productUpdates, setProductUpdates] = useState(true);
-  const [apiKey, setApiKey] = useState("qp_mock_********************"); // Initial mock API key
+  const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
     const checkUser = async () => {
@@ -41,7 +41,6 @@ export default function Account() {
           setSubscription(null);
         }
       } catch (e) {
-        // not authenticated
         setUser(null);
         setSubscription(null);
       }
@@ -54,7 +53,6 @@ export default function Account() {
     return <AccountPageSkeleton />;
   }
 
-  // Show logged-out CTA instead of mocking an authenticated user
   if (!user) {
     return (
       <div className="min-h-screen py-16 bg-slate-950">
@@ -123,11 +121,8 @@ export default function Account() {
                     <Label className="text-sm text-slate-400">Next Renewal</Label>
                     <p className="font-semibold">{new Date(subscription.current_period_end).toLocaleDateString()}</p>
                   </div>
-                  <p className="text-xs text-slate-400 pt-2">
-                    Clicking Manage Billing would redirect to a secure customer portal (e.g., Stripe). Demo only.
-                  </p>
-                  <Button className="bg-blue-600 hover:bg-blue-700 mt-2 rounded-md">
-                    Manage Billing (Mock)
+                  <Button className="bg-blue-600 hover:bg-blue-700 mt-2 rounded-md" onClick={() => navigate(createPageUrl('Pricing'))}>
+                    Manage Billing
                   </Button>
                 </div>
               ) : (
@@ -153,7 +148,9 @@ export default function Account() {
               </p>
 
               <div className="p-3 bg-slate-950 rounded-md flex items-center justify-between border border-slate-700">
-                <span className="font-mono text-slate-500">{apiKey}</span>
+                <span className="font-mono text-slate-500">
+                  {apiKey || "No key generated"}
+                </span>
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button
@@ -168,30 +165,9 @@ export default function Account() {
                     <DialogHeader>
                       <DialogTitle>Generate a new API key</DialogTitle>
                       <DialogDescription className="text-slate-400">
-                        This will revoke your old key and create a new one. Keep it secret and store it securely.
+                        API key generation will be available soon. Contact support if you need credentials provisioned.
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3">
-                      <div className="p-3 bg-slate-950 rounded-md border border-slate-700 flex items-center gap-2">
-                        <Input
-                          readOnly
-                          value="qp_live_mock_abcdefghijklmnop123456"
-                          className="bg-slate-900 border-slate-700 text-slate-200"
-                        />
-                        <Button
-                          variant="outline"
-                          className="border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
-                          onClick={() => navigator.clipboard.writeText("qp_live_mock_abcdefghijklmnop123456")}
-                        >
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copy
-                        </Button>
-                      </div>
-                      <div className="flex items-start gap-2 text-amber-300 text-sm">
-                        <ShieldAlert className="w-4 h-4 mt-0.5" />
-                        <p>For security, you will only see this key once. Store it in a password manager.</p>
-                      </div>
-                    </div>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -218,7 +194,6 @@ export default function Account() {
                   checked={marketingOptIn}
                   onCheckedChange={(v) => {
                     setMarketingOptIn(v);
-                    // Persist mock preference (could call User.updateMyUserData({ marketing_opt_in: v }))
                   }}
                 />
               </div>

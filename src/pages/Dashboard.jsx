@@ -59,7 +59,7 @@ export default function Dashboard() {
       setMetricsLoading(true);
       setMetricsError(null);
       try {
-        const { data } = await fetchMetrics({});
+        const data = await fetchMetrics({});
         const rows = data?.cross || [];
         rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
         const mapped = rows.map(r => ({

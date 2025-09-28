@@ -1,6 +1,6 @@
 # QuantPulse Dashboard
 
-Vite + React application that renders the QuantPulse dashboard with a pluggable data layer. The UI can run entirely against local mocks for development, or point to your AWS API Gateway + Lambda endpoints for live metrics.
+Vite + React application that renders the QuantPulse dashboard using Supabase Edge Functions for all analytics and lead-capture APIs.
 
 ## Prerequisites
 
@@ -9,18 +9,17 @@ Vite + React application that renders the QuantPulse dashboard with a pluggable 
 
 ## Environment Configuration
 
-1. Copy `.env.example` to `.env.local` (or `.env`) in the project root.
-2. Set the following variables as needed:
+1. Copy `.env.example` to `.env.local` (or `.env`).
+2. Provide the Supabase frontend credentials:
 
-   - `VITE_API_MODE`: `mock` (default) keeps everything local; set to `network` to call your API Gateway endpoints.
-   - `VITE_API_BASE_URL`: Base HTTPS URL for the deployed API (required when `VITE_API_MODE=network`).
-   - `VITE_API_TIMEOUT_MS`: Client-side request timeout in milliseconds (default `10000`).
-   - `VITE_API_RETRY_COUNT`: Number of automatic retries for 5xx responses (default `1`).
-   - `VITE_API_DEBUG`: Set to `true` to see verbose client logging in the console.
+   - `VITE_SUPABASE_URL`: Your project URL (`https://<project>.supabase.co`).
+   - `VITE_SUPABASE_ANON_KEY`: The anon/public key from **Project Settings → API**.
+   - `VITE_SUPABASE_FUNCTION_URL` *(optional)*: Override the default function base (`${VITE_SUPABASE_URL}/functions/v1`).
+   - `VITE_API_DEBUG`: Set to `true` for verbose client logging.
 
 ## Development Workflow
 
-Install dependencies and start the dev server with mock data:
+Install dependencies and start the dev server:
 
 ```bash
 npm install
@@ -33,15 +32,15 @@ Build an optimized production bundle:
 npm run build
 ```
 
-## API Smoke Test
+## Supabase Connectivity Test
 
-Run a lightweight integration check against whichever backend mode is configured via env vars:
+Use the service-role secrets file to validate that the required RPCs exist and return data:
 
 ```bash
-npm run test:api
+npm run test:supabase supabase/.env.dev
 ```
 
-When `VITE_API_MODE` is `mock` the smoke test verifies the in-memory fixtures; when pointing at your API Gateway it exercises the live Lambda endpoints.
+This invokes the database functions shown in the Supabase API docs (e.g. `rpc_decile_lift`, `rpc_precision_recall`).
 
 ## Supabase Edge Functions
 

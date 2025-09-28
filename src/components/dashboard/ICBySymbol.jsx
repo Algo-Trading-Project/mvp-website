@@ -51,7 +51,7 @@ export default function ICBySymbol({ horizon = "1d", dateRange }) {
       setLoading(true);
       setError(null);
       try {
-        const { data } = await icBySymbolPlot(
+        const data = await icBySymbolPlot(
           {
             horizon,
             start: dateRange.start,

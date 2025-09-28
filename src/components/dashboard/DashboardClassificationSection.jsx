@@ -124,7 +124,7 @@ export default function DashboardClassificationSection() {
       let resolvedEnd = requestParams.end;
 
       try {
-        const { data } = await getTokenPerformanceCharts(requestParams);
+        const data = await getTokenPerformanceCharts(requestParams);
         setTokenPerformance(data);
         if (data?.range_start) resolvedStart = data.range_start;
         if (data?.range_end) resolvedEnd = data.range_end;
@@ -143,7 +143,7 @@ export default function DashboardClassificationSection() {
 
       setDecileLoading(true);
       try {
-        const { data } = await getDecilePerformanceChart({
+        const data = await getDecilePerformanceChart({
           horizon,
           direction,
           start: resolvedStart,

@@ -61,3 +61,27 @@ export const bootstrapExpectancyDistributionPlot = wrapCall(
   "Failed to load bootstrap expectancy distribution plot",
   base44.functions.bootstrapExpectancyDistributionPlot
 );
+export const predictionsCoverage = wrapCall(
+  "Failed to load predictions coverage",
+  base44.functions.predictionsCoverage
+);
+export const expectancyDistributionPlot = wrapCall(
+  "Failed to load expectancy distribution plot",
+  base44.functions.expectancyDistributionPlot
+);
+export const expectancyBySymbolPlot = wrapCall(
+  "Failed to load expectancy by symbol plot",
+  base44.functions.expectancyBySymbolPlot
+);
+export const getSymbolExpectancyPlot = wrapCall(
+  "Failed to load symbol expectancy plot",
+  base44.functions.getSymbolExpectancyPlot
+);
+export const tokenReturnAnalysis = wrapCall(
+  "Failed to load token return analysis",
+  base44.functions.tokenReturnAnalysis
+);
+export const decileLiftPlot = wrapCall(
+  "Failed to load decile lift plot",
+  base44.functions.decileLiftPlot
+);

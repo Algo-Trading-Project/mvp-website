@@ -29,3 +29,4 @@ dist-ssr
 *.env.example
 *.env.supabase.example
 supabase/.env.*
+.env.example
