@@ -1,93 +1,6 @@
 -- Stored procedures to support edge function analytics
 set search_path = public;
 
-create or replace function rpc_decile_lift(
-  horizon text,
-  direction text,
-  start_date date,
-  end_date date
-) returns table(decile integer, avg_return double precision, n bigint)
-language plpgsql
-as $$
-declare
-  pred_column text;
-  ret_column text;
-  order_multiplier int := 1;
-begin
-  pred_column := case horizon when '7d' then 'y_pred_7d' else 'y_pred_1d' end;
-  ret_column := case horizon when '7d' then 'forward_returns_7' else 'forward_returns_1' end;
-
-  if coalesce(direction, 'long') = 'short' then
-    order_multiplier := -1;
-  end if;
-
-  return query execute format(
-    'with ranked as (
-       select
-         ntile(10) over (
-           order by (%1$s)::double precision * %2$s
-         ) as decile,
-         (%3$s)::double precision as ret
-       from predictions
-       where date::date between $1 and $2
-         and %1$s is not null
-         and %3$s is not null
-     )
-     select decile, avg(ret) as avg_return, count(*) as n
-     from ranked
-     group by decile
-     order by decile',
-    pred_column,
-    order_multiplier,
-    ret_column
-  )
-  using start_date, end_date;
-end;
-$$;
-
-create or replace function rpc_decile_performance(
-  horizon text,
-  direction text,
-  start_date date,
-  end_date date
-) returns table(decile integer, avg_return double precision, n bigint)
-language plpgsql
-as $$
-declare
-  pred_column text;
-  ret_column text;
-  order_direction text;
-begin
-  pred_column := case horizon when '7d' then 'y_pred_7d' else 'y_pred_1d' end;
-  ret_column := case horizon when '7d' then 'forward_returns_7' else 'forward_returns_1' end;
-  order_direction := case when coalesce(direction, 'long') = 'short' then 'asc' else 'desc' end;
-
-  return query execute format(
-    'with ranked as (
-       select
-         ntile(10) over (
-           partition by date
-           order by %1$s %4$s
-         ) as decile,
-         (%2$s)::double precision as ret
-       from predictions
-       where date::date between $1 and $2
-         and %1$s is not null
-         and %2$s is not null
-     )
-     select decile, avg(ret) as avg_return, count(*) as n
-     from ranked
-     group by decile
-     order by decile',
-    pred_column,
-    ret_column,
-    order_direction,
-    order_direction
-  )
-  using start_date, end_date;
-end;
-$$;
-
 create or replace function rpc_symbol_expectancy(
   horizon text,
   direction text,
@@ -98,35 +11,50 @@ create or replace function rpc_symbol_expectancy(
 language plpgsql
 as $$
 declare
-  pred_column text;
+  proba_column text;
   ret_column text;
-  filter_clause text := 'TRUE';
 begin
-  pred_column := case horizon when '7d' then 'y_pred_7d' else 'y_pred_1d' end;
-  ret_column := case horizon when '7d' then 'forward_returns_7' else 'forward_returns_1' end;
-
-  if coalesce(direction, 'combined') = 'long' then
-    filter_clause := format('(%s)::double precision > 0', pred_column);
-  elsif coalesce(direction, 'combined') = 'short' then
-    filter_clause := format('(%s)::double precision < 0', pred_column);
+  if horizon not in ('1d', '7d') then
+    raise exception 'Unsupported horizon %', horizon;
   end if;
 
+  if direction not in ('long', 'short') then
+    raise exception 'Unsupported direction %', direction;
+  end if;
+
+  proba_column := case
+    when horizon = '7d' and direction = 'short' then 'y_pred_proba_7d_short'
+    when horizon = '7d' then 'y_pred_proba_7d_long'
+    when direction = 'short' then 'y_pred_proba_1d_short'
+    else 'y_pred_proba_1d_long'
+  end;
+
+  ret_column := case horizon when '7d' then 'forward_returns_7' else 'forward_returns_1' end;
+
   return query execute format(
-    'select split_part(symbol_id, ''_'', 1) as symbol,
-            avg((%1$s)::double precision) as avg_expectancy,
-            count(*) as observation_count
+    'with scored as (
+       select
+         split_part(symbol_id, ''_'', 1) as symbol,
+         case
+           when $3 = ''long'' and (%1$s)::double precision >= 0.5 then (%2$s)::double precision
+           when $3 = ''short'' and (%1$s)::double precision >= 0.5 then -(%2$s)::double precision
+           else null
+         end as expectancy
        from predictions
-      where date::date between $1 and $2
-        and %1$s is not null
-        and %2$s is not null
-        and %3$s
-      group by split_part(symbol_id, ''_'', 1)
-      having count(*) >= $3
+       where date::date between $1 and $2
+         and %2$s is not null
+     )
+     select symbol,
+            avg(expectancy) as avg_expectancy,
+            count(*) as observation_count
+       from scored
+      where expectancy is not null
+      group by symbol
+      having count(*) >= $4
       order by avg_expectancy desc',
-    ret_column,
-    pred_column,
-    filter_clause
-  ) using start_date, end_date, min_obs;
+    proba_column,
+    ret_column
+  ) using start_date, end_date, direction, min_obs;
 end;
 $$;
 
@@ -136,59 +64,35 @@ create or replace function rpc_symbol_ic(
   end_date date,
   min_points integer default 10
 ) returns table(symbol text, spearman_ic double precision, observation_count bigint)
-language plpgsql
-as $$
-declare
-  pred_column text;
-  ret_column text;
-begin
-  pred_column := case horizon when '7d' then 'y_pred_7d' else 'y_pred_1d' end;
-  ret_column := case horizon when '7d' then 'forward_returns_7' else 'forward_returns_1' end;
-
-  return query execute format(
-    'with ranked_data as (
-       select
-         split_part(symbol_id, ''_'', 1) as symbol,
-         date,
-         rank() over (
-           partition by date
-           order by %1$s::double precision
-         ) as pred_rank,
-         rank() over (
-           partition by date
-           order by %2$s::double precision
-         ) as ret_rank
-       from predictions
-       where date::date between $1 and $2
-         and %1$s is not null
-         and %2$s is not null
-    )
-     select symbol,
-            corr(pred_rank::double precision, ret_rank::double precision) as spearman_ic,
-            count(*) as observation_count
-       from ranked_data
-      group by symbol
-     having count(*) >= $3
-     order by spearman_ic desc',
-    pred_column,
-    ret_column
-  ) using start_date, end_date, min_points;
-end;
-$$;
-
-create or replace function rpc_predictions_coverage(
-  p_start_date date,
-  p_end_date date
-) returns table(month text, day_count bigint)
 language sql
 as $$
-  select to_char(date_trunc('month', date::date), 'YYYY-MM') as month,
-         count(*)::bigint as day_count
-    from predictions
-   where date::date between coalesce(p_start_date, (select min(date::date) from predictions))
-                 and coalesce(p_end_date, (select max(date::date) from predictions))
-   group by 1
-   order by 1;
+with base as (
+  select
+    split_part(symbol_id, ''_'', 1) as symbol
+    date,
+    case when horizon = '7d' then y_pred_7d else y_pred_1d end       as pred,
+    case when horizon = '7d' then forward_returns_7 else forward_returns_1 end as ret
+  from predictions
+  where date between start_date and end_date
+    and case when horizon = '7d' then y_pred_7d else y_pred_1d end is not null
+    and case when horizon = '7d' then forward_returns_7 else forward_returns_1 end is not null
+),
+ranks as (
+  select
+    symbol,
+    date,
+    percent_rank() over (partition by symbol order by pred) as r_pred,
+    percent_rank() over (partition by symbol order by ret)  as r_ret
+  from base
+)
+select
+  symbol,
+  corr(r_pred::double precision, r_ret::double precision) as spearman_ic,
+  count(*)::bigint                                         as observation_count
+from ranks
+group by symbol
+having count(*) >= min_points
+order by spearman_ic desc;
 $$;
 
 

@@ -9,7 +9,11 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { horizon = '1d', start, end, minPoints = 10, topN = 20 } = await req.json();
+    const { horizon = '1d', start, end, minPoints = 30, topN = 20 } = await req.json();
+
+    if (!['1d', '7d'].includes(horizon)) {
+      return json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
 
     if (!start || !end) {
       return json({ error: 'start and end dates required' }, { status: 400 });
@@ -33,13 +37,14 @@ Deno.serve(async (req) => {
     }
 
     const sorted = [...symbols].sort((a, b) => b.spearman_ic - a.spearman_ic);
-    const topRows = sorted.slice(0, topN);
-    const bottomRows = [...sorted.slice(-topN)].reverse();
+    const topRows = sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(0, topN);
+    const bottomRows = [...sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(-topN)].reverse();
 
     const horizonLabel = horizon === '1d' ? '1-Day' : '7-Day';
     const makePlot = (rows: typeof symbols, title: string, color: string) => {
       const x = rows.map((r) => r.symbol);
       const y = rows.map((r) => r.spearman_ic);
+      const counts = rows.map((r) => r.observation_count);
       return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
@@ -47,7 +52,8 @@ Deno.serve(async (req) => {
 <script>
 const x = ${JSON.stringify(x)};
 const y = ${JSON.stringify(y)};
-const data = [{ type: 'bar', x, y, marker: { color: '${color}' }, hovertemplate: 'IC: %{y:.3f}<br>Symbol: %{x}<extra></extra>' }];
+const counts = ${JSON.stringify(counts)};
+const data = [{ type: 'bar', x, y, marker: { color: '${color}' }, hovertemplate: 'IC: %{y:.3f}<br>Observations: %{customdata}<br>Symbol: %{x}<extra></extra>', customdata: counts }];
 const layout = {
   title: { text: '${title} (${horizonLabel})', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
   paper_bgcolor: '#0b1220',
@@ -65,6 +71,12 @@ Plotly.newPlot(el, data, layout, config);
     return json({
       html_top: makePlot(topRows, 'Top Tokens by IC', '#10b981'),
       html_bottom: makePlot(bottomRows, 'Bottom Tokens by IC', '#ef4444'),
+      summary: {
+        horizon,
+        min_points: minPoints,
+        top: topRows,
+        bottom: bottomRows,
+      },
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
