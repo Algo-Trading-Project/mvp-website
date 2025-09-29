@@ -12,7 +12,7 @@ function getValueSelector(metric, horizon, direction) {
   // expectancy
   if (direction === "long") return horizon === "1d" ? "expectancy_1d_long" : "expectancy_7d_long";
   if (direction === "short") return horizon === "1d" ? "expectancy_1d_short" : "expectancy_7d_short";
-  return horizon === "1d" ? "combined_expectancy_1d" : "combined_expectancy_7d";
+  return horizon === "1d" ? "expectancy_1d_long" : "expectancy_7d_long";
 }
 
 // Map value to color classes; symmetric scale around 0
@@ -59,7 +59,7 @@ export default function MonthlyHeatmap({
   monthlyRows = [],
   metric = "ic", // "ic" or "expectancy"
   horizon = "1d",
-  direction = "combined"
+  direction = "long"
 }) {
   // Organize data by year -> month
   const key = getValueSelector(metric, horizon, direction);

@@ -20,8 +20,7 @@ import { cross_sectional_metrics_1d } from "@/api/entities";
 import { monthly_performance_metrics } from "@/api/entities";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
-import { rollingIcPlot } from "@/api/functions";
-import { rollingSpreadPlot } from "@/api/functions";
+import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage } from "@/api/functions";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
 
 // Helper function to generate nice y-axis ticks
@@ -64,13 +63,13 @@ const HORIZON_OPTIONS = [
   { id: "7d", label: "7-Day" },
 ];
 
-const DIRECTION_OPTIONS = [{ id: "combined", label: "Combined" }];
 
 export default function DashboardOOSSection() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [horizon, setHorizon] = useState("1d");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [availableRange, setAvailableRange] = useState({ start: "", end: "" });
 
   const [monthlyRows, setMonthlyRows] = useState([]);
 
@@ -85,7 +84,14 @@ export default function DashboardOOSSection() {
 
   React.useEffect(() => {
     const load = async () => {
-      const rawRows = await cross_sectional_metrics_1d.filter({}, "date", 10000);
+      const [rawRows, mRows, coverageInfo] = await Promise.all([
+        cross_sectional_metrics_1d.filter({}, "date", 10000),
+        monthly_performance_metrics.filter({}, "year", 10000),
+        predictionsCoverage({ monthsBack: 240 }).catch((error) => {
+          console.error("Failed to load predictions coverage", error);
+          return null;
+        }),
+      ]);
       const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
 
       const rows = rawRows
@@ -100,11 +106,26 @@ export default function DashboardOOSSection() {
 
       setAllRows(rows);
 
-      const latestDate = rows.length ? rows[rows.length - 1].date : "";
       const earliestDate = rows.length ? rows[0].date : "";
-      setDateRange({ start: earliestDate, end: latestDate });
+      const latestDate = rows.length ? rows[rows.length - 1].date : "";
 
-      const mRows = await monthly_performance_metrics.filter({}, "year", 10000);
+      const coverageStart = coverageInfo?.min_date || earliestDate || '2019-01-01';
+      const coverageEnd = coverageInfo?.max_date || latestDate || coverageStart;
+
+      const defaultEnd = coverageEnd;
+      const defaultStartTarget = defaultEnd && defaultEnd >= '2025-01-01' ? '2025-01-01' : coverageStart;
+      const clampedStart = defaultStartTarget && coverageStart
+        ? (defaultStartTarget < coverageStart ? coverageStart : defaultStartTarget)
+        : coverageStart;
+      const safeStart = clampedStart > defaultEnd ? coverageStart : clampedStart;
+
+      setAvailableRange({
+        start: coverageStart,
+        end: coverageEnd,
+      });
+
+      setDateRange({ start: safeStart, end: defaultEnd });
+
       setMonthlyRows(mRows);
 
       setLoading(false);
@@ -296,29 +317,13 @@ export default function DashboardOOSSection() {
         </Select>
       </div>
 
-      <div className="flex items-center gap-2 opacity-75">
-        <span className="text-sm text-slate-400">Direction</span>
-        <Select value="combined" disabled>
-          <SelectTrigger className="w-[160px] bg-slate-800 border-slate-700 h-9 text-white">
-            <SelectValue placeholder="Direction" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-white">
-            {DIRECTION_OPTIONS.map((option) => (
-              <SelectItem key={option.id} value={option.id} className="text-white">
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <div className="flex items-center gap-2">
         <span className="text-sm text-slate-400">From</span>
         <input
           type="date"
           value={dateRange.start}
-          min={allRows[0]?.date}
-          max={allRows[allRows.length - 1]?.date}
+          min={availableRange.start || '2019-01-01'}
+          max={availableRange.end || dateRange.end}
           onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
           disabled={loading}
           className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
@@ -330,8 +335,8 @@ export default function DashboardOOSSection() {
         <input
           type="date"
           value={dateRange.end}
-          min={allRows[0]?.date}
-          max={allRows[allRows.length - 1]?.date}
+          min={availableRange.start || '2019-01-01'}
+          max={availableRange.end}
           onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
           disabled={loading}
           className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
@@ -546,10 +551,10 @@ export default function DashboardOOSSection() {
 
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-200 mb-2">Monthly IC ({horizonLabel})</h3>
-            {monthlyBadges}
-          </div>
+        <div className="text-center mt-8">
+          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC ({horizonLabel})</h3>
+          {monthlyBadges}
+        </div>
           {rollingBadges}
         </div>
 
@@ -605,7 +610,7 @@ export default function DashboardOOSSection() {
 
           {/* New: IC by Symbol -- Now uses dateRange */}
           <ICBySymbol horizon={horizon} dateRange={dateRange} />
-          
+
           <div className="grid md:grid-cols-2 gap-6">
             <ICDistribution horizon={horizon} dateRange={dateRange} />
             <BootstrapICDistribution horizon={horizon} dateRange={dateRange} />

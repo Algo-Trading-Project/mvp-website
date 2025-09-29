@@ -14,6 +14,14 @@ Deno.serve(async (req) => {
 
     let { horizon = '1d', direction = 'long', windowDays = 30, minObs = 5, topN = 20 } = await req.json();
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
+    if (!['long', 'short'].includes(direction)) {
+      return Response.json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
     // First, let's check what columns actually exist
     const schemaQuery = `SELECT column_name FROM information_schema.columns WHERE table_name = 'predictions'`;
     const columns = await query(schemaQuery);
@@ -41,6 +49,8 @@ Deno.serve(async (req) => {
     const start = shiftDays(end, -(windowDays - 1));
 
     // Use prediction scores for ranking instead of probability
+    const predFilter = direction === 'long' ? `${predKey} > 0` : `${predKey} < 0`;
+
     const baseQuery = `
       SELECT 
         split_part(symbol_id, '_', 1) AS symbol,
@@ -50,7 +60,7 @@ Deno.serve(async (req) => {
       WHERE date BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE)
         AND ${predKey} IS NOT NULL 
         AND ${retKey} IS NOT NULL
-        AND ${predKey} > 0
+        AND ${predFilter}
       GROUP BY split_part(symbol_id, '_', 1)
       HAVING COUNT(*) >= :minObs
     `;
@@ -69,7 +79,7 @@ Deno.serve(async (req) => {
 <body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'${color}'},hovertemplate:'Expectancy: %{y:.2%}<br>Symbol: %{x}<extra></extra>'}];
 const layout={title:{text:${JSON.stringify(title)},font:{color:'#e2e8f0',size:14},x:0.5},paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:40,b:80},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155',tickangle:-45},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',zeroline:true,zerolinecolor:'#475569'}};
-Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:true,doubleClick:'reset'});
+Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:false,staticPlot:true});
 </script></body></html>`;
     };
 

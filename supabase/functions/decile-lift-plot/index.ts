@@ -20,6 +20,14 @@ Deno.serve(async (req) => {
 
     const { horizon = '1d', direction = 'long', windowDays = 30 } = await req.json();
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
+    if (!['long', 'short'].includes(direction)) {
+      return json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
     const supabase = getServiceSupabaseClient();
 
     const { data: latestRows, error: latestError } = await supabase
@@ -75,6 +83,6 @@ function buildHtml(x: number[], y: number[]) {
 <body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'#60a5fa'},hovertemplate:'Avg Return: %{y:.2%}<br>Decile: %{x}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155',title:{text:'Prediction Score Decile',font:{color:'#94a3b8'}}},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',title:{text:'Average Realized Return',font:{color:'#94a3b8'}}}};
-Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:true});
+Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:false});
 </script></body></html>`;
 }

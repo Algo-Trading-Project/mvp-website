@@ -22,6 +22,14 @@ Deno.serve(async (req) => {
       end,
     } = await req.json();
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
+    if (!['long', 'short'].includes(direction)) {
+      return Response.json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
     const retKey = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
     const predKey = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
 
@@ -59,7 +67,7 @@ Deno.serve(async (req) => {
     const bottomRows = [...bottomRowsAsc].reverse();
 
     const horizonLabel = horizon === '1d' ? '1-Day' : '7-Day';
-    const directionLabel = direction === 'combined' ? '' : ` (${direction === 'long' ? 'Long' : 'Short'} signals)`;
+    const directionLabel = ` (${direction === 'long' ? 'Long' : 'Short'} signals)`;
 
     const makePlot = (rows, title, color) => {
       const x = rows.map(r => r.symbol);
@@ -67,7 +75,7 @@ Deno.serve(async (req) => {
       return `<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head><body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'${color}'},hovertemplate:'Expectancy: %{y:.2%}<br>Symbol: %{x}<extra></extra>'}];
 const layout={title:{text:${JSON.stringify(`${title} (${horizonLabel})${directionLabel}`)},font:{color:'#e2e8f0',size:14},x:0.5},paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:40,b:80},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155',tickangle:-45},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',zeroline:true,zerolinecolor:'#475569'}};
-Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:true});</script></body></html>`;
+Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:false,staticPlot:true});</script></body></html>`;
     };
 
     return Response.json({

@@ -74,13 +74,13 @@ await capture("bootstrapIcDistributionPlot", async () => {
 });
 
 await capture("bootstrapExpectancyDistributionPlot", async () => {
-  const res = await bootstrapExpectancyDistributionPlot({ horizon: "1d", direction: "combined", start: "2025-02-01", end: "2025-02-10", samples: 500 });
+  const res = await bootstrapExpectancyDistributionPlot({ horizon: "1d", direction: "long", start: "2025-02-01", end: "2025-02-10", samples: 500 });
   if (!res?.data?.html) throw new Error("Missing HTML");
   return { mean: res.data.summary?.mean ?? null };
 });
 
 await capture("getTokenPerformanceCharts", async () => {
-  const res = await getTokenPerformanceCharts({ horizon: "1d", direction: "combined", windowDays: 14, minObs: 3, topN: 5 });
+  const res = await getTokenPerformanceCharts({ horizon: "1d", direction: "long", windowDays: 14, minObs: 3, topN: 5 });
   if (!res?.data?.html_top) throw new Error("Missing top chart");
   return { count: res.data.count };
 });

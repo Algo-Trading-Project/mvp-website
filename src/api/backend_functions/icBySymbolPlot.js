@@ -11,6 +11,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'start and end dates required' }, { status: 400 });
     }
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
     const predField = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
     const retField = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
 
@@ -87,7 +91,7 @@ const layout = {
   xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45 }, 
   yaxis: { tickformat: '.3f', tickfont: { color: '#94a3b8' }, gridcolor: '#334155', zeroline: true, zerolinecolor: '#475569' } 
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false, staticPlot: true };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

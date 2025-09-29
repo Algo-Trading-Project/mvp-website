@@ -6,19 +6,23 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Method not allowed' }, { status: 405 });
     }
 
-    const { horizon = '1d', direction = 'combined', start, end, width = 980, height = 360 } = await req.json();
+    const { horizon = '1d', direction = 'long', start, end, width = 980, height = 360 } = await req.json();
     
     if (!start || !end) {
       return Response.json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     }
 
-    const fieldMap = {
-      combined: horizon === '1d' ? 'rolling_avg_1d_expectancy' : 'rolling_avg_7d_expectancy',
-      long: horizon === '1d' ? 'rolling_avg_1d_long_expectancy' : 'rolling_avg_7d_long_expectancy',
-      short: horizon === '1d' ? 'rolling_avg_1d_short_expectancy' : 'rolling_avg_7d_short_expectancy',
-    };
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
 
-    const field = fieldMap[direction];
+    if (!['long', 'short'].includes(direction)) {
+      return Response.json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
+    const field = horizon === '1d'
+      ? (direction === 'long' ? 'rolling_avg_1d_long_expectancy' : 'rolling_avg_1d_short_expectancy')
+      : (direction === 'long' ? 'rolling_avg_7d_long_expectancy' : 'rolling_avg_7d_short_expectancy');
     
     const rows = await query(
       `SELECT date, ${field} AS value
@@ -30,7 +34,7 @@ Deno.serve(async (req) => {
 
     const x = rows.map(r => r.date);
     const y = rows.map(r => (typeof r.value === 'number' || typeof r.value === 'string') ? Number(r.value) : null);
-    const colors = { combined: '#22d3ee', long: '#10b981', short: '#ef4444' };
+    const colors = { long: '#10b981', short: '#ef4444' };
     
     const trace = {
       x,
@@ -55,7 +59,7 @@ const layout = {
   xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
   legend: { font: { color: '#94a3b8' }, bgcolor: 'rgba(0,0,0,0)' }
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false, staticPlot: true };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

@@ -73,7 +73,7 @@ const layout = {
       line: { color: '#3b82f6', width: 2, dash: 'dash' } }
   ]
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

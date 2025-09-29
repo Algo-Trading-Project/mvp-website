@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
 <script>
 const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#60a5fa', width: 2 }, hovertemplate: 'Date: %{x}<br>IC: %{y:.3f}<extra></extra>' }];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  yaxis: { tickformat: '.3f', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, zeroline: true, zerolinecolor: '#475569' },
-  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' } };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true };
+  yaxis: { fixedrange:true, tickformat: '.3f', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, zeroline: true, zerolinecolor: '#475569' },
+  xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155' } };
+    const config = { responsive: false, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

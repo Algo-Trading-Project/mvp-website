@@ -14,6 +14,14 @@ Deno.serve(async (req) => {
 
     let { horizon = '1d', direction = 'long', windowDays = 30, start, end } = await req.json();
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
+    if (!['long', 'short'].includes(direction)) {
+      return Response.json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
     const retKey = horizon === '1d' ? 'forward_returns_1' : 'forward_returns_7';
     const predKey = horizon === '1d' ? 'y_pred_1d' : 'y_pred_7d';
 
@@ -47,7 +55,7 @@ Deno.serve(async (req) => {
     const html = `<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head><body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'#8b5cf6'},hovertemplate:'Avg Return: %{y:.2%}<br>%{x}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:20,b:40},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155'},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',zeroline:true,zerolinecolor:'#475569'}};
-Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false});</script></body></html>`;
+Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:false,staticPlot:true});</script></body></html>`;
 
     return Response.json({
       html,

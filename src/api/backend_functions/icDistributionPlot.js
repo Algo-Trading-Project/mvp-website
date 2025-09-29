@@ -11,6 +11,10 @@ Deno.serve(async (req) => {
         return Response.json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">Start and end date are required.</body></html>', bins: [] });
     }
 
+    if (!['1d', '7d'].includes(horizon)) {
+      return Response.json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
     const field = horizon === '1d' ? 'cross_sectional_ic_1d' : 'cross_sectional_ic_7d';
     
     const rows = await query(
@@ -64,7 +68,7 @@ const layout = {
       line: { color: '#3b82f6', width: 2, dash: 'dash' } }
   ]
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false, staticPlot: true };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

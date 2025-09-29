@@ -53,10 +53,10 @@ const layout = {
   paper_bgcolor: '#0b1220',
   plot_bgcolor: '#0b1220',
   margin: { l: 48, r: 20, t: 40, b: 80 },
-  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45 },
-  yaxis: { tickformat: '.3f', tickfont: { color: '#94a3b8' }, gridcolor: '#334155', zeroline: true, zerolinecolor: '#475569' }
+  xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45 },
+  yaxis: { fixedrange:true, tickformat: '.3f', tickfont: { color: '#94a3b8' }, gridcolor: '#334155', zeroline: true, zerolinecolor: '#475569' }
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false};
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

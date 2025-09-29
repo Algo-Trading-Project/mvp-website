@@ -38,8 +38,6 @@ Deno.serve(async (req) => {
     const resolvedEnd = end || maxDate;
     const resolvedStart = start || shiftDays(resolvedEnd, -(windowDays - 1));
 
-    const orderDirection = direction === 'short' ? 'ASC' : 'DESC';
-
     const { data: rows, error } = await supabase.rpc('rpc_decile_performance', {
       horizon,
       direction,

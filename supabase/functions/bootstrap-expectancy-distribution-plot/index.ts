@@ -9,13 +9,20 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
     
-    const { horizon = '1d', direction = 'combined', start, end, samples = 10000, bins = 30 } = await req.json();
+    const { horizon = '1d', direction = 'long', start, end, samples = 10000, bins = 30 } = await req.json();
     if (!start || !end) return json({ error: 'start and end date are required' }, { status: 400 });
 
-    let field;
-    if (direction === 'long') field = `cs_${horizon}_long_expectancy`;
-    else if (direction === 'short') field = `cs_${horizon}_short_expectancy`;
-    else field = `cs_${horizon}_expectancy`;
+    if (!['1d', '7d'].includes(horizon)) {
+      return json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
+    }
+
+    if (!['long', 'short'].includes(direction)) {
+      return json({ error: `Unsupported direction ${direction}` }, { status: 400 });
+    }
+
+    const field = direction === 'long'
+      ? `cs_${horizon}_long_expectancy`
+      : `cs_${horizon}_short_expectancy`;
     
     const supabase = getServiceSupabaseClient();
 
@@ -59,7 +66,7 @@ const x = ${JSON.stringify(bootstrappedMeans)};
 const data = [{ type: 'histogram', x, nbinsx: ${bins}, marker: { color: '#8b5cf6', line: { color: '#000000', width: 1 } }, hovertemplate: 'Mean Expectancy: %{x:.4f}<br>Count: %{y}<extra></extra>' }];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 }, xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' }, yaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
  shapes: [{ type: 'line', x0: ${meanOfMeans}, x1: ${meanOfMeans}, y0: 0, y1: 1, yref: 'paper', line: { color: '#3b82f6', width: 2, dash: 'dash' } }] };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true };
+    const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

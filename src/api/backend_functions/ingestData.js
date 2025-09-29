@@ -138,7 +138,7 @@ const data = [{ x: ${JSON.stringify(prData.map(d => d.recall))}, y: ${JSON.strin
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   xaxis: { title: 'Recall', range: [0,1], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
   yaxis: { title: 'Precision', range: [0,1], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' } };
-const config = { responsive: true, displayModeBar: false, scrollZoom: true, doubleClick: 'reset' };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false, staticPlot: true };
 const el = document.getElementById('chart'); el.style.width='${width}px'; el.style.height='${height}px';
 Plotly.newPlot(el, data, layout, config).then(()=>{ el.style.width='100%'; el.style.height='100%'; Plotly.Plots.resize(el); window.addEventListener('resize', ()=>Plotly.Plots.resize(el)); });
 </script></body></html>`;

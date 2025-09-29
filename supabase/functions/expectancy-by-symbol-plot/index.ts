@@ -78,7 +78,8 @@ Deno.serve(async (req) => {
 <body><div id="chart"></div><script>
 const data=[{type:'bar',x:${JSON.stringify(x)},y:${JSON.stringify(y)},marker:{color:'${color}'},hovertemplate:'Expectancy: %{y:.2%}<br>Symbol: %{x}<extra></extra>'}];
 const layout={title:{text:${JSON.stringify(title)},font:{color:'#e2e8f0',size:14},x:0.5},paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:40,b:80},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155',tickangle:-45},yaxis:{tickformat:'.2%',tickfont:{color:'#94a3b8'},gridcolor:'#334155',zeroline:true,zerolinecolor:'#475569'}};
-Plotly.newPlot('chart',data,layout,{responsive:true,displayModeBar:false,scrollZoom:true,doubleClick:'reset'});
+const config={responsive:true,displayModeBar:false,scrollZoom:false};
+Plotly.newPlot('chart',data,layout,config);
 </script></body></html>`;
     };
 
