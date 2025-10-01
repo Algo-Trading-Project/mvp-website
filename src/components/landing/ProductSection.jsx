@@ -12,7 +12,7 @@ export default function ProductSection() {
       title: "Alpha API (Quant Signals)",
       audience: "For traders & funds who want a ready-made edge",
       bullets: [
-        "Daily predictions from our flagship 7‑day model",
+        "Daily predictions from our flagship 1‑day regression model",
         "Top/Bottom decile ranks and raw scores",
         "Designed for market‑neutral alpha (low beta to BTC)",
         "API access + daily files"

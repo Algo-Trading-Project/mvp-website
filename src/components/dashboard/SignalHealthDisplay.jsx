@@ -2,6 +2,11 @@ import React from "react";
 import { TrendingUp, Activity, Target } from "lucide-react";
 
 export default function SignalHealthDisplay({ title, data }) {
+  const formatNumber = (value, formatter) => {
+    if (typeof value !== "number" || Number.isNaN(value)) return "—";
+    return formatter(value);
+  };
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md h-full">
       <div className="p-6 border-b border-slate-800">
@@ -16,7 +21,9 @@ export default function SignalHealthDisplay({ title, data }) {
               <span>Rolling Information Coefficient (30‑day)</span>
             </h4>
             <div className="text-center p-3 bg-slate-800/60 rounded-md">
-              <div className="text-lg font-semibold text-blue-400">{(data.rolling_ic_30d ?? 0).toFixed(4)}</div>
+              <div className="text-lg font-semibold text-blue-400">
+                {formatNumber(data.rolling_ic_30d, (val) => val.toFixed(4))}
+              </div>
             </div>
           </div>
 
@@ -27,7 +34,9 @@ export default function SignalHealthDisplay({ title, data }) {
               <span>Rolling Hit Rate (30‑day)</span>
             </h4>
             <div className="text-center p-3 bg-slate-800/60 rounded-md">
-              <div className="text-lg font-semibold text-emerald-400">{((data.hit_rate_30d ?? 0) * 100).toFixed(2)}%</div>
+              <div className="text-lg font-semibold text-emerald-400">
+                {formatNumber(data.hit_rate_30d, (val) => `${(val * 100).toFixed(2)}%`)}
+              </div>
             </div>
           </div>
 
@@ -39,7 +48,7 @@ export default function SignalHealthDisplay({ title, data }) {
             </h4>
             <div className="text-center p-3 bg-slate-800/60 rounded-md">
               <div className="text-lg font-semibold text-amber-300">
-                {((data.top_bottom_spread_30d ?? 0) * 100).toFixed(2)}%
+                {formatNumber(data.top_bottom_spread_30d, (val) => `${(val * 100).toFixed(2)}%`)}
               </div>
             </div>
           </div>

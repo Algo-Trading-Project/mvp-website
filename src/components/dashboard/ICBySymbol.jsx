@@ -31,7 +31,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function ICBySymbol({ horizon = "1d", dateRange }) {
+export default function ICBySymbol({ dateRange }) {
   const [htmlTop, setHtmlTop] = React.useState(null);
   const [htmlBottom, setHtmlBottom] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -53,7 +53,6 @@ export default function ICBySymbol({ horizon = "1d", dateRange }) {
       try {
         const data = await icBySymbolPlot(
           {
-            horizon,
             start: dateRange.start,
             end: dateRange.end,
             minPoints: 10,
@@ -87,7 +86,7 @@ export default function ICBySymbol({ horizon = "1d", dateRange }) {
       cancelled = true;
       controller.abort();
     };
-  }, [horizon, dateRange]);
+  }, [dateRange]);
 
   const Plot = ({ html, title }) => {
     if (loading) return <ChartCardSkeleton height={420} />;

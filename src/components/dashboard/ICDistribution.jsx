@@ -31,7 +31,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function ICDistribution({ horizon = "1d", dateRange }) {
+export default function ICDistribution({ dateRange }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, std: 0, pos: 0 });
@@ -53,7 +53,6 @@ export default function ICDistribution({ horizon = "1d", dateRange }) {
       try {
         const data = await icDistributionPlot(
           {
-            horizon,
             start: dateRange.start,
             end: dateRange.end,
             bins: 20,
@@ -90,7 +89,7 @@ export default function ICDistribution({ horizon = "1d", dateRange }) {
       cancelled = true;
       controller.abort();
     };
-  }, [horizon, dateRange]);
+  }, [dateRange]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
