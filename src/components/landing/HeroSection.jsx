@@ -7,31 +7,38 @@ import { monthly_performance_metrics } from "@/api/entities";
 
 export default function HeroSection() {
   const [icir1d, setIcir1d] = React.useState(null);
-  const [icir7d, setIcir7d] = React.useState(null);
+  const [positiveShare, setPositiveShare] = React.useState(null);
 
   React.useEffect(() => {
     const loadMonthly = async () => {
       const rows = await monthly_performance_metrics.filter({}, "year", 10000); // Fetching all records up to 10000 years
-      const vals1d = rows.map(r => r.information_coefficient_1d).filter(v => typeof v === "number" && !Number.isNaN(v));
-      const vals7d = rows.map(r => r.information_coefficient_7d).filter(v => typeof v === "number" && !Number.isNaN(v));
-      
+      const toNumber = (value) => {
+        if (typeof value === "number") return Number.isNaN(value) ? null : value;
+        if (typeof value === "string" && value.trim() !== "") {
+          const num = Number(value);
+          return Number.isNaN(num) ? null : num;
+        }
+        return null;
+      };
+
+      const vals1d = rows.map(r => toNumber(r.information_coefficient_1d)).filter(v => v !== null);
+
       const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
       const std = (arr) => {
-        if (!arr.length || arr.length < 2) return 0;
+        if (arr.length < 2) return 0;
         const m = mean(arr);
         const variance = arr.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (arr.length - 1);
         return Math.sqrt(variance);
       };
-      
-      const s1 = std(vals1d);
-      const s7 = std(vals7d);
-      
-      // Annualize monthly IC by multiplying by sqrt(12)
-      const i1 = s1 > 0 ? (mean(vals1d) / s1) * Math.sqrt(12) : 0;
-      const i7 = s7 > 0 ? (mean(vals7d) / s7) * Math.sqrt(12) : 0;
-      
-      setIcir1d(i1);
-      setIcir7d(i7);
+
+      const icStd = std(vals1d);
+      const icMean = mean(vals1d);
+      const icir = icStd > 0 ? (icMean / icStd) * Math.sqrt(12) : null;
+      const positives = vals1d.filter(v => v > 0).length;
+      const share = vals1d.length ? positives / vals1d.length : null;
+
+      setIcir1d(icir);
+      setPositiveShare(share);
     };
     loadMonthly();
   }, []);
@@ -109,12 +116,12 @@ export default function HeroSection() {
           {/* ICIR Highlight Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto mb-16">
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-md">
-              <div className="text-xs text-slate-400 mb-1">Annualized ICIR (7‑day)</div>
-              <div className="text-2xl font-bold text-emerald-400">{icir7d != null ? icir7d.toFixed(3) : "—"}</div>
-            </div>
-            <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-md">
               <div className="text-xs text-slate-400 mb-1">Annualized ICIR (1‑day)</div>
               <div className="text-2xl font-bold text-emerald-400">{icir1d != null ? icir1d.toFixed(3) : "—"}</div>
+            </div>
+            <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-md">
+              <div className="text-xs text-slate-400 mb-1">Positive Months (1‑day)</div>
+              <div className="text-2xl font-bold text-blue-400">{positiveShare != null ? `${(positiveShare * 100).toFixed(1)}%` : "—"}</div>
             </div>
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-md">
               <div className="text-xs text-slate-400 mb-1">Data Moat</div>

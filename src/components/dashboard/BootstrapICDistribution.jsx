@@ -22,7 +22,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
+export default function BootstrapICDistribution({ dateRange }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, ci_lower: 0, ci_upper: 0 });
@@ -44,7 +44,6 @@ export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
       try {
         const data = await bootstrapIcDistributionPlot(
           {
-            horizon,
             start: dateRange.start,
             end: dateRange.end,
             samples: 10000,
@@ -82,7 +81,7 @@ export default function BootstrapICDistribution({ horizon = "1d", dateRange }) {
       cancelled = true;
       controller.abort();
     };
-  }, [horizon, dateRange]);
+  }, [dateRange]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">

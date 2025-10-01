@@ -13,7 +13,6 @@ import TopSignals from "../components/dashboard/TopSignals";
 
 // Import subpage components
 import DashboardOOSSection from "../components/dashboard/DashboardOOSSection";
-// Classification section removed in 1d-only refactor
 
 import DashboardOverviewSkeleton from "@/components/skeletons/DashboardOverviewSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
@@ -68,6 +67,7 @@ export default function Dashboard() {
           // New schema fields mapped to legacy keys used by overview
           rolling_30d_ic_1d: Number(r.rolling_30d_avg_ic ?? null),
           rolling_30d_avg_top_bottom_decile_spread_1d: Number(r.rolling_30d_avg_top_bottom_decile_spread ?? null),
+          rolling_30d_hit_rate_1d: Number(r.rolling_30d_hit_rate ?? null),
         }));
         setMetricsRows(mapped);
       } catch (error) {
@@ -120,8 +120,7 @@ export default function Dashboard() {
   const currentModelData = metricsRows.length
     ? {
         rolling_ic_30d: latestValue(metricsRows, "rolling_30d_ic_1d"),
-        // Hit rate not present in monthly schema
-        hit_rate_30d: null,
+        hit_rate_30d: latestValue(metricsRows, "rolling_30d_hit_rate_1d"),
         top_bottom_spread_30d: latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_1d"),
       }
     : null;
@@ -166,8 +165,6 @@ export default function Dashboard() {
         );
       case "regression":
         return <DashboardOOSSection />;
-      case "classification":
-        return null;
       default:
         return null;
     }

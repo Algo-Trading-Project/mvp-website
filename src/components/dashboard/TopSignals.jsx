@@ -44,7 +44,7 @@ const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
   </div>
 );
 
-export default function TopSignals({ subscription, modelHorizon = "1d", loading = false, onLoadingChange = () => {} }) {
+export default function TopSignals({ subscription, loading = false, onLoadingChange = () => {} }) {
   const [topSignals, setTopSignals] = React.useState([]);
   const [bottomSignals, setBottomSignals] = React.useState([]);
   const [internalLoading, setInternalLoading] = React.useState(true);
@@ -116,7 +116,7 @@ export default function TopSignals({ subscription, modelHorizon = "1d", loading 
         onLoadingChange(false);
       }
     },
-    [modelHorizon, onLoadingChange]
+    [onLoadingChange]
   );
 
   React.useEffect(() => {

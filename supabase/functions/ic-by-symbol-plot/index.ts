@@ -66,7 +66,6 @@ Plotly.newPlot(el, data, layout, config);
       html_top: makePlot(topRows, 'Top Tokens by IC', '#10b981'),
       html_bottom: makePlot(bottomRows, 'Bottom Tokens by IC', '#ef4444'),
       summary: {
-        horizon,
         min_points: minPoints,
         top: topRows,
         bottom: bottomRows,

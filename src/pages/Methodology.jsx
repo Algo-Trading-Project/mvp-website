@@ -13,7 +13,7 @@ const sections = [
   {
     icon: Ruler,
     title: "Metrics we publish",
-    body: "Spearman information coefficient (IC), top–bottom decile spread, hit rate, expectancy, and rolling statistics. All metrics are point-in-time, computed out-of-sample on data the model never saw during training.",
+    body: "Spearman information coefficient (IC), top–bottom decile spread, hit rate, and rolling statistics. All metrics are point-in-time, computed out-of-sample on data the model never saw during training.",
   },
   {
     icon: RefreshCw,
@@ -30,15 +30,11 @@ const sections = [
 const glossary = [
   {
     term: "Information Coefficient (IC)",
-    definition: "Rank correlation between our predicted 1-day (or 7-day) returns and the realized returns across the asset universe on the following day.",
+    definition: "Rank correlation between our predicted 1-day returns and the realized returns across the asset universe on the following day.",
   },
   {
     term: "Decile spread",
     definition: "Average performance of the top decile minus the bottom decile of ranked predictions, rebalanced daily with equal weights.",
-  },
-  {
-    term: "Expectancy",
-    definition: "Mean forward return conditional on a long-only or short-only signal set, expressed on a per-trade basis.",
   },
   {
     term: "Hit rate",
