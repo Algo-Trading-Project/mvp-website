@@ -48,7 +48,7 @@ export default function Docs() {
                 <a href="#schemas" className="block text-slate-400 hover:text-white">Schemas</a>
                 <a href="#data-api" className="block text-slate-400 hover:text-white">Data API</a>
                 <a href="#signals-api" className="block text-slate-400 hover:text-white">Signals API</a>
-                <a href="#code-examples" className="block text-slate-400 hover:text-white">Quickstart Code</a>
+                <a href="#quickstart" className="block text-slate-400 hover:text-white">Quickstart Code</a>
                 <a href="#faq" className="block text-slate-400 hover:text-white">FAQ</a>
                 <a href="#changelog" className="block text-slate-400 hover:text-white">Changelog</a>
               </nav>
@@ -68,7 +68,7 @@ export default function Docs() {
                 <p>Our API is designed to be simple and powerful, providing access to two core products:</p>
                 <ul className="list-disc pl-5 space-y-2">
                   <li><strong>Data API:</strong> Access the clean, curated historical datasets that power our proprietary models. Perfect for research, backtesting, and building your own alpha.</li>
-                  <li><strong>Signals API:</strong> Get daily predictions from our proven 7-day market-neutral model. Integrate our alpha directly into your trading strategies.</li>
+                  <li><strong>Signals API:</strong> Get daily predictions from our 1‑day regression model. Integrate our alpha directly into your trading strategies.</li>
                 </ul>
                 <p>The base URL for all endpoints is: <code className="bg-slate-800 text-amber-300 px-1 rounded-sm">https://api.quantpulse.ai/v1</code></p>
               </div>
@@ -161,7 +161,7 @@ export default function Docs() {
                 <h5 className="font-semibold pt-2">Example Response</h5>
                 <CodeBlock lang="JSON">{`{
   "signal_date": "2023-10-28",
-  "model_version": "7d_regression_v1.2",
+  "model_version": "1d_regression_v1.0",
   "signals": [
     {
       "symbol": "SOL-USD",
@@ -181,7 +181,7 @@ export default function Docs() {
               </div>
             </section>
 
-            <section id="code-examples" className="bg-slate-900 border border-slate-800 rounded-md">
+            <section id="quickstart" className="bg-slate-900 border border-slate-800 rounded-md">
               <div className="p-6 border-b border-slate-800">
                 <h2 className="flex items-center space-x-2 text-xl font-semibold">
                   <Code className="w-5 h-5 text-emerald-400" />

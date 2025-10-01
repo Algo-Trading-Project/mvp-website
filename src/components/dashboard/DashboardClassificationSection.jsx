@@ -4,7 +4,10 @@ import Section from "./Section";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Info, Download } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import {
   cross_sectional_metrics_1d,
   monthly_performance_metrics,
@@ -493,7 +496,19 @@ export default function DashboardClassificationSection() {
   }
 
   return (
-    <Section title="Classification Model Performance">
+    <Section
+      title="Classification Model Performance"
+      rightSlot={(
+        <Button asChild variant="outline" size="sm" className="border-slate-700 text-slate-200">
+          <Link to={createPageUrl("Signals")}>
+            <span className="flex items-center">
+              <Download className="w-4 h-4 mr-2" />
+              Download this view
+            </span>
+          </Link>
+        </Button>
+      )}
+    >
       <div className="space-y-8">
         <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-900 border border-slate-800 rounded-md p-4">
           <div className="flex items-center gap-2">

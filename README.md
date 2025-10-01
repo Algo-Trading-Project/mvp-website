@@ -40,7 +40,7 @@ Use the service-role secrets file to validate that the required RPCs exist and r
 npm run test:supabase supabase/.env.dev
 ```
 
-This invokes the database functions shown in the Supabase API docs (e.g. `rpc_decile_lift`, `rpc_precision_recall`).
+This invokes the database functions shown in the Supabase API docs (e.g. `rpc_symbol_ic`, `rpc_predictions_coverage`).
 
 ## Supabase Edge Functions
 
@@ -48,7 +48,7 @@ The legacy Aurora-backed lambdas have been ported to Supabase Edge Functions und
 
 ### Database helpers
 
-Complex analytics now execute inside Postgres via stored procedures. The definitions live in `supabase/migrations/20250301T000000_create_dashboard_functions.sql`. Apply the migration once (SQL editor or `supabase db push`) so the RPC endpoints such as `rpc_decile_lift`, `rpc_symbol_expectancy` are available to the edge functions.
+Complex analytics now execute inside Postgres via stored procedures. The definitions live in `supabase/migrations/20250301T000000_create_dashboard_functions.sql`. Apply the migration once (SQL editor or `supabase db push`) so the RPC endpoints such as `rpc_symbol_ic`, `rpc_predictions_coverage` are available to the edge functions.
 
 ### Required Secrets
 

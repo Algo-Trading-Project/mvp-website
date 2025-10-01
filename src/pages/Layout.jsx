@@ -158,6 +158,8 @@ export default function Layout({ children, currentPageName }) {
     ];
     const resourceItems = [
       { label: "Docs", href: "Docs", icon: FileText },
+      { label: "Methodology", href: "Methodology", icon: BookOpen },
+      { label: "Data Dictionary", href: "Data", icon: Database },
       { label: "About", href: "About", icon: Users },
       { label: "Contact", href: "Contact", icon: Mail }
     ];
@@ -368,4 +370,3 @@ export default function Layout({ children, currentPageName }) {
     </div>
   );
 }
-

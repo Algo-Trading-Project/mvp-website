@@ -9,6 +9,7 @@ import Downloads from "./Downloads";
 import SampleDay from "./SampleDay";
 
 import Docs from "./Docs";
+import Methodology from "./Methodology";
 
 import Home from "./Home";
 
@@ -39,6 +40,7 @@ const PAGES = {
     SampleDay: SampleDay,
     
     Docs: Docs,
+    Methodology: Methodology,
     
     Home: Home,
     
@@ -92,6 +94,7 @@ function PagesContent() {
                 <Route path="/SampleDay" element={<SampleDay />} />
                 
                 <Route path="/Docs" element={<Docs />} />
+                <Route path="/Methodology" element={<Methodology />} />
                 
                 <Route path="/Home" element={<Home />} />
                 

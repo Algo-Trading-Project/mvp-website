@@ -14,9 +14,6 @@ const {
   rollingIcPlot,
   icDistributionPlot,
   bootstrapIcDistributionPlot,
-  bootstrapExpectancyDistributionPlot,
-  getTokenPerformanceCharts,
-  getDecilePerformanceChart,
 } = await import("../src/api/functions.js");
 
 const results = [];
@@ -56,40 +53,24 @@ await capture("getLatestPredictions", async () => {
 });
 
 await capture("rollingIcPlot", async () => {
-  const res = await rollingIcPlot({ horizon: "1d", start: "2025-02-01", end: "2025-02-10" });
+  const res = await rollingIcPlot({ start: "2025-02-01", end: "2025-02-10" });
   if (!res?.data?.html) throw new Error("Missing HTML");
   return { containsPlotly: res.data.html.includes("Plotly.newPlot"), points: res.data.points };
 });
 
 await capture("icDistributionPlot", async () => {
-  const res = await icDistributionPlot({ horizon: "1d", start: "2025-02-01", end: "2025-02-10", bins: 15 });
+  const res = await icDistributionPlot({ start: "2025-02-01", end: "2025-02-10", bins: 15 });
   if (!res?.data?.html) throw new Error("Missing HTML");
   return { bins: res.data.bins, mean: res.data.summary?.mean ?? null };
 });
 
 await capture("bootstrapIcDistributionPlot", async () => {
-  const res = await bootstrapIcDistributionPlot({ horizon: "1d", start: "2025-02-01", end: "2025-02-10", samples: 500 });
+  const res = await bootstrapIcDistributionPlot({ start: "2025-02-01", end: "2025-02-10", samples: 500 });
   if (!res?.data?.html) throw new Error("Missing HTML");
   return { mean: res.data.summary?.mean ?? null };
 });
 
-await capture("bootstrapExpectancyDistributionPlot", async () => {
-  const res = await bootstrapExpectancyDistributionPlot({ horizon: "1d", direction: "long", start: "2025-02-01", end: "2025-02-10", samples: 500 });
-  if (!res?.data?.html) throw new Error("Missing HTML");
-  return { mean: res.data.summary?.mean ?? null };
-});
-
-await capture("getTokenPerformanceCharts", async () => {
-  const res = await getTokenPerformanceCharts({ horizon: "1d", direction: "long", windowDays: 14, minObs: 3, topN: 5 });
-  if (!res?.data?.html_top) throw new Error("Missing top chart");
-  return { count: res.data.count };
-});
-
-await capture("getDecilePerformanceChart", async () => {
-  const res = await getDecilePerformanceChart({ horizon: "1d", direction: "long", windowDays: 14 });
-  if (!res?.data?.html) throw new Error("Missing decile HTML");
-  return { n: res.data.n };
-});
+// Classification/expectancy visuals removed in 1d-only refactor
 
 const failures = results.filter((r) => !r.ok);
 

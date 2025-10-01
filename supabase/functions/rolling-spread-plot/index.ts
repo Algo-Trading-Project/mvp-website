@@ -10,18 +10,14 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { horizon = '1d', start, end, width = 980, height = 360 } = await req.json();
+    const { start, end, width = 980, height = 360 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
-
-    const field = horizon === '7d'
-      ? 'rolling_30d_ema_top_bottom_decile_spread_7d'
-      : 'rolling_30d_ema_top_bottom_decile_spread_1d';
 
     const supabase = getServiceSupabaseClient();
 
     const { data, error } = await supabase
       .from('cross_sectional_metrics_1d')
-      .select(`date, ${field}`)
+      .select(`date, rolling_30d_avg_top_bottom_decile_spread`)
       .gte('date', start)
       .lte('date', end)
       .order('date', { ascending: true });
@@ -31,7 +27,7 @@ Deno.serve(async (req) => {
     const rows = data ?? [];
     const x = rows.map((r: Record<string, unknown>) => r.date as string);
     const y = rows.map((r: Record<string, unknown>) => {
-      const val = r[field];
+      const val = r['rolling_30d_avg_top_bottom_decile_spread'];
       return typeof val === 'number' ? val : typeof val === 'string' ? Number(val) : null;
     });
 
@@ -39,7 +35,7 @@ Deno.serve(async (req) => {
 <html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id="chart"></div>
 <script>
-const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 2 }, hovertemplate: 'Date: %{x}<br>Spread (30d EMA): %{y:.2%}<extra></extra>' }];
+const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 2 }, hovertemplate: 'Date: %{x}<br>Spread (30d Avg): %{y:.2%}<extra></extra>' }];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
   xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' } };

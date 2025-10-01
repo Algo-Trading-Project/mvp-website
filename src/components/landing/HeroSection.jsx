@@ -72,7 +72,7 @@ export default function HeroSection() {
           </p>
 
           {/* CTA */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-10">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-4">
             <Link to={createPageUrl("GetStarted")}>
               <Button
                 size="lg"
@@ -89,6 +89,20 @@ export default function HeroSection() {
               >
                 View Performance
               </Button>
+            </Link>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mb-10">
+            <a
+              href="/sample-signals.csv"
+              className="text-sm text-emerald-300 hover:text-emerald-200 underline underline-offset-4"
+            >
+              Download yesterday’s free sample CSV
+            </a>
+            <span className="hidden sm:inline text-slate-600">|</span>
+            <Link to={createPageUrl("Docs#quickstart")}
+              className="text-sm text-slate-300 hover:text-white underline underline-offset-4"
+            >
+              Jump to API quickstart
             </Link>
           </div>
 

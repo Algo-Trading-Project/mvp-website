@@ -51,13 +51,13 @@ export default function SampleDay() {
   };
 
   // Sample data for previews
-  const scoresColumns = ["symbol_id", "date", "pred_proba_up", "pred_return_7d"];
+  const scoresColumns = ["symbol_id", "date", "y_pred", "forward_returns_1"];
   const scoresRows = [
-    { symbol_id: "BTC", date: "2025-08-25", pred_proba_up: 0.812, pred_return_7d: 0.056 },
-    { symbol_id: "ETH", date: "2025-08-25", pred_proba_up: 0.774, pred_return_7d: 0.042 },
-    { symbol_id: "SOL", date: "2025-08-25", pred_proba_up: 0.752, pred_return_7d: 0.038 },
-    { symbol_id: "AVAX", date: "2025-08-25", pred_proba_up: 0.731, pred_return_7d: 0.034 },
-    { symbol_id: "NEAR", date: "2025-08-25", pred_proba_up: 0.708, pred_return_7d: 0.029 }
+    { symbol_id: "BTC", date: "2025-08-25", y_pred: 0.012, forward_returns_1: 0.006 },
+    { symbol_id: "ETH", date: "2025-08-25", y_pred: 0.010, forward_returns_1: 0.004 },
+    { symbol_id: "SOL", date: "2025-08-25", y_pred: 0.008, forward_returns_1: 0.003 },
+    { symbol_id: "AVAX", date: "2025-08-25", y_pred: 0.007, forward_returns_1: 0.003 },
+    { symbol_id: "NEAR", date: "2025-08-25", y_pred: 0.006, forward_returns_1: 0.002 }
   ];
 
   const portfolioColumns = ["symbol_id", "allocation_weight", "allocation_weight_vol_targeted"];
@@ -204,7 +204,7 @@ export default function SampleDay() {
         <div className="grid md:grid-cols-2 gap-6 mb-10">
           <PreviewTable
             title="scores.parquet"
-            subtitle="Ranked predictions with probabilities and 7d return estimates"
+            subtitle="Ranked predictions with 1‑day return estimates"
             columns={scoresColumns}
             rows={scoresRows}
           />

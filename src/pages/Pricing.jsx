@@ -52,6 +52,7 @@ export default function Pricing() {
         "Top & bottom deciles for ~12 majors (CSV)",
         "24‑hour delay on files",
         "Email/Discord alerts on rebalance",
+        "Schema: symbol_id, date, decile_rank_1d (top/bottom)",
         "Access to public OOS dashboard (read‑only)"
       ],
       cta: "Start with Lite",
@@ -64,6 +65,7 @@ export default function Pricing() {
       features: [
         "Full daily ranks/scores across ~391 assets",
         "12–24 months history downloads (CSV)",
+        "Schema: symbol_id, date, y_pred, score_percentile",
         "Fee‑adjusted deciles, turnover & capacity metrics",
         "Access to OOS visuals & methodology"
       ],
@@ -78,6 +80,7 @@ export default function Pricing() {
       features: [
         "Programmatic ranks/scores + optional weights",
         "Point‑in‑time retrieval & historical archives",
+        "Schema: symbol_id, date, score, weight, confidence",
         "Higher rate limits + webhooks",
         "Versioned model cards & monitoring"
       ],
@@ -92,6 +95,7 @@ export default function Pricing() {
       features: [
         "Private endpoints & SLAs",
         "Custom universes & cadence",
+        "Dedicated schema planning & onboarding",
         "PIT audit tooling & onboarding help",
         "Transact via AWS Marketplace / private offers"
       ],
@@ -268,6 +272,7 @@ export default function Pricing() {
               </ul>
             </div>
             <div className="mt-auto">
+              <p className="text-[11px] text-slate-500 mb-3">Delivery: daily @ 13:00 UTC · Schema docs & asset list included with every plan.</p>
               {authLoading ? (
                 <Button disabled className="w-full py-3 text-sm font-semibold bg-slate-700 text-slate-400 rounded-md">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -373,9 +378,9 @@ export default function Pricing() {
               <AccordionTrigger className="px-4 text-left">What’s on the OOS Dashboard (public)</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
                 <ul className="list-disc pl-5 space-y-2">
-                  <li>Monthly rank IC (1d & 7d) with confidence bands</li>
+                  <li>Monthly rank IC (1d) with confidence bands</li>
                   <li>Decile long‑short curves (gross and fee/slippage‑adjusted)</li>
-                  <li>Drawdowns & recovery time by horizon</li>
+                  <li>Drawdowns & recovery time</li>
                   <li>Turnover and capacity notes (avg daily traded $/pair assumption)</li>
                   <li>Methodology card: factor families, training cadence, leakage tests, data handling, and quality checks</li>
                   <li>Audit artifacts: daily prediction file hash, timestamp, immutable ID</li>
@@ -446,7 +451,7 @@ export default function Pricing() {
                   </div>
                   <div>
                     <p className="font-semibold text-white">What about capacity?</p>
-                    <p>We disclose turnover and notional assumptions by decile and horizon, plus sensitivity to rebalance frequency.</p>
+                    <p>We disclose turnover and notional assumptions by decile, plus sensitivity to rebalance frequency.</p>
                   </div>
                 </div>
               </AccordionContent>

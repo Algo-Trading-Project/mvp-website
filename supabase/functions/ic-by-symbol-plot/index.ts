@@ -9,11 +9,7 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { horizon = '1d', start, end, minPoints = 30, topN = 20 } = await req.json();
-
-    if (!['1d', '7d'].includes(horizon)) {
-      return json({ error: `Unsupported horizon ${horizon}` }, { status: 400 });
-    }
+    const { start, end, minPoints = 30, topN = 20 } = await req.json();
 
     if (!start || !end) {
       return json({ error: 'start and end dates required' }, { status: 400 });
@@ -22,7 +18,6 @@ Deno.serve(async (req) => {
     const supabase = getServiceSupabaseClient();
 
     const { data, error } = await supabase.rpc('rpc_symbol_ic', {
-      horizon,
       start_date: start,
       end_date: end,
       min_points: minPoints,
@@ -40,7 +35,6 @@ Deno.serve(async (req) => {
     const topRows = sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(0, topN);
     const bottomRows = [...sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(-topN)].reverse();
 
-    const horizonLabel = horizon === '1d' ? '1-Day' : '7-Day';
     const makePlot = (rows: typeof symbols, title: string, color: string) => {
       const x = rows.map((r) => r.symbol);
       const y = rows.map((r) => r.spearman_ic);
@@ -55,7 +49,7 @@ const y = ${JSON.stringify(y)};
 const counts = ${JSON.stringify(counts)};
 const data = [{ type: 'bar', x, y, marker: { color: '${color}' }, hovertemplate: 'IC: %{y:.3f}<br>Observations: %{customdata}<br>Symbol: %{x}<extra></extra>', customdata: counts }];
 const layout = {
-  title: { text: '${title} (${horizonLabel})', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
+  title: { text: '${title}', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
   paper_bgcolor: '#0b1220',
   plot_bgcolor: '#0b1220',
   margin: { l: 48, r: 20, t: 40, b: 80 },

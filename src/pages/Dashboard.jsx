@@ -13,14 +13,15 @@ import TopSignals from "../components/dashboard/TopSignals";
 
 // Import subpage components
 import DashboardOOSSection from "../components/dashboard/DashboardOOSSection";
-import DashboardClassificationSection from "../components/dashboard/DashboardClassificationSection";
+// Classification section removed in 1d-only refactor
 
 import DashboardOverviewSkeleton from "@/components/skeletons/DashboardOverviewSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 
 export default function Dashboard() {
+  const MODEL_VERSION = "Model v1.3";
+  const MODEL_RELEASED_AT = "Retrained 2025-08-22";
   const [activeTab, setActiveTab] = useState("regression"); // default to regression to avoid blank page
-  const [modelHorizon, setModelHorizon] = useState("1d"); // NEW: model toggle for overview
   const [user, setUser] = useState(null);
   const [contentLoading, setContentLoading] = useState(true);
   const [metricsRows, setMetricsRows] = useState([]);
@@ -33,7 +34,7 @@ export default function Dashboard() {
   useEffect(() => {
     const urlParams = new URLSearchParams(search);
     const tabParam = urlParams.get('tab');
-    if (tabParam && ["overview","regression","classification"].includes(tabParam)) {
+    if (tabParam && ["overview","regression"].includes(tabParam)) {
       setActiveTab(tabParam);
     } else if (!tabParam) {
       setActiveTab("regression");
@@ -64,12 +65,9 @@ export default function Dashboard() {
         rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
         const mapped = rows.map(r => ({
           date: r.date,
-          // Map IC 30d EMA to legacy keys expected in the overview display
-          rolling_30d_ic_1d: Number(r.rolling_30d_ema_ic_1d ?? null),
-          rolling_30d_ic_7d: Number(r.rolling_30d_ema_ic_7d ?? null),
-          // Map decile spread 30d EMA
-          rolling_30d_avg_top_bottom_decile_spread_1d: Number(r.rolling_30d_ema_top_bottom_decile_spread_1d ?? null),
-          rolling_30d_avg_top_bottom_decile_spread_7d: Number(r.rolling_30d_ema_top_bottom_decile_spread_7d ?? null),
+          // New schema fields mapped to legacy keys used by overview
+          rolling_30d_ic_1d: Number(r.rolling_30d_avg_ic ?? null),
+          rolling_30d_avg_top_bottom_decile_spread_1d: Number(r.rolling_30d_avg_top_bottom_decile_spread ?? null),
         }));
         setMetricsRows(mapped);
       } catch (error) {
@@ -99,11 +97,7 @@ export default function Dashboard() {
     return () => clearTimeout(t);
   }, [activeTab]);
 
-  const handleModelHorizonChange = async (newHorizon) => {
-    if (signalsLoading || newHorizon === modelHorizon) return;
-    setSignalsLoading(true);
-    setModelHorizon(newHorizon);
-  };
+  // Horizon toggle removed (1d-only)
 
   const displayName = user?.full_name || "Guest";
   const subscription = user ? { plan: user.subscription_level || "free", current_period_end: new Date().toISOString() } : null;
@@ -122,26 +116,19 @@ export default function Dashboard() {
     return null;
   };
 
-  // NEW: Choose metrics based on selected model horizon using latest non-null values
+  // Latest overview metrics (1d only)
   const currentModelData = metricsRows.length
     ? {
-        rolling_ic_30d:
-          modelHorizon === "1d"
-            ? latestValue(metricsRows, "rolling_30d_ic_1d")
-            : latestValue(metricsRows, "rolling_30d_ic_7d"),
-        // Hit rate removed in data; keep null so UI won't mislead
+        rolling_ic_30d: latestValue(metricsRows, "rolling_30d_ic_1d"),
+        // Hit rate not present in monthly schema
         hit_rate_30d: null,
-        top_bottom_spread_30d:
-          modelHorizon === "1d"
-            ? latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_1d")
-            : latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_7d"),
+        top_bottom_spread_30d: latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_1d"),
       }
     : null;
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "regression", label: "Regression Model Performance" },
-    { id: "classification", label: "Classification Model Performance" }
+    { id: "regression", label: "Regression Model Performance" }
   ];
 
   const renderContent = () => {
@@ -167,57 +154,20 @@ export default function Dashboard() {
                 {metricsError}
               </div>
             ) : null}
-            <div className="flex justify-end mb-6">
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={contentLoading || metricsLoading || signalsLoading}
-                  className={`px-3 py-1.5 rounded-md border transition-colors ${
-                    modelHorizon === "1d"
-                      ? "bg-blue-600 border-blue-500 text-white"
-                      : (contentLoading || metricsLoading || signalsLoading)
-                      ? "bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed"
-                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-                  }`}
-                  onClick={() => handleModelHorizonChange("1d")}
-                >
-                  1‑Day Model
-                </button>
-                <button
-                  disabled={contentLoading || metricsLoading || signalsLoading}
-                  className={`px-3 py-1.5 rounded-md border transition-colors ${
-                    modelHorizon === "7d"
-                      ? "bg-blue-600 border-blue-500 text-white"
-                      : (contentLoading || metricsLoading || signalsLoading)
-                      ? "bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed"
-                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-                  }`}
-                  onClick={() => handleModelHorizonChange("7d")}
-                >
-                  7‑Day Model
-                </button>
-              </div>
-            </div>
+            {/* Horizon toggle removed; 1d-only */}
 
             <div className="grid lg:grid-cols-1 gap-6 mb-8">
               {currentModelData && (
-                <SignalHealthDisplay
-                  title={`${modelHorizon === "1d" ? "1-Day" : "7-Day"} Model Health (Most Recent Data)`}
-                  data={currentModelData}
-                />
+                <SignalHealthDisplay title="1-Day Model Health (Most Recent Data)" data={currentModelData} />
               )}
             </div>
-            <TopSignals
-              subscription={subscription}
-              modelHorizon={modelHorizon}
-              loading={signalsLoading}
-              onLoadingChange={setSignalsLoading}
-            />
+            <TopSignals subscription={subscription} loading={signalsLoading} onLoadingChange={setSignalsLoading} />
           </>
         );
       case "regression":
         return <DashboardOOSSection />;
       case "classification":
-        return <DashboardClassificationSection />;
+        return null;
       default:
         return null;
     }
@@ -226,6 +176,19 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen py-8 bg-slate-950">
       <div className="max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Model status</p>
+            <p className="text-sm text-slate-200">{MODEL_VERSION}</p>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-current" />
+              Live OOS feed
+            </span>
+            <span>{MODEL_RELEASED_AT}</span>
+          </div>
+        </div>
         <div className="border-b border-slate-800 mb-6">
           <div className="flex flex-wrap gap-x-6">
             {tabs.map((tab) => (

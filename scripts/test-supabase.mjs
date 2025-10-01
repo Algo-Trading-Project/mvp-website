@@ -47,28 +47,12 @@ async function main() {
       run: () => client.from('monthly_performance_metrics').select('year,month').limit(1)
     },
     {
-      name: 'rpc_decile_lift',
-      run: () => client.rpc('rpc_decile_lift', { horizon: '1d', direction: 'long', start_date: startDate, end_date: endDate })
-    },
-    {
-      name: 'rpc_decile_performance',
-      run: () => client.rpc('rpc_decile_performance', { horizon: '1d', direction: 'long', start_date: startDate, end_date: endDate })
-    },
-    {
-      name: 'rpc_symbol_expectancy',
-      run: () => client.rpc('rpc_symbol_expectancy', { horizon: '1d', direction: 'long', start_date: startDate, end_date: endDate, min_obs: 5 })
-    },
-    {
       name: 'rpc_symbol_ic',
-      run: () => client.rpc('rpc_symbol_ic', { horizon: '1d', start_date: startDate, end_date: endDate, min_points: 5 })
+      run: () => client.rpc('rpc_symbol_ic', { start_date: startDate, end_date: endDate, min_points: 5 })
     },
     {
       name: 'rpc_predictions_coverage',
-      run: () => client.rpc('rpc_predictions_coverage', { p_start_date: startDate, p_end_date: endDate })
-    },
-    {
-      name: 'rpc_expectancy_distribution_summary',
-      run: () => client.rpc('rpc_expectancy_distribution_summary', { field_name: 'cs_1d_expectancy', start_date: startDate, end_date: endDate })
+      run: () => client.rpc('rpc_predictions_coverage', { start_date: startDate, end_date: endDate })
     }
   ];
 

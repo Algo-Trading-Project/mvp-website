@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const { data: rows, error: rowsError } = await supabase
       .from('predictions')
-      .select('symbol_id, date, y_pred_1d, y_pred_7d')
+      .select('symbol_id, date, y_pred')
       .eq('date', d);
 
     if (rowsError) throw rowsError;

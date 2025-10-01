@@ -10,13 +10,13 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { horizon = '1d', start, end, bins = 20, width = 980, height = 360 } = await req.json();
+    const { start, end, bins = 20, width = 980, height = 360 } = await req.json();
 
     if (!start || !end) {
         return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">Start and end date are required.</body></html>', bins: [] });
     }
 
-    const field = horizon === '1d' ? 'cross_sectional_ic_1d' : 'cross_sectional_ic_7d';
+    const field = 'cross_sectional_ic_1d';
 
     const supabase = getServiceSupabaseClient();
 

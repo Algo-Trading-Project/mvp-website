@@ -8,16 +8,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { symbol_ids } from "@/api/entities";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 function toCSV(rows) {
-  const headers = ["date", "symbol", "y_pred_1d", "y_pred_7d"];
+  const headers = ["date", "symbol", "y_pred"];
   const lines = [headers.join(",")];
   rows.forEach(r => {
     const line = [
       r.date,
       r.symbol,
-      r.y_pred_1d ?? "",
-      r.y_pred_7d ?? ""
+      r.y_pred ?? ""
     ].join(",");
     lines.push(line);
   });
@@ -29,8 +30,7 @@ async function fetchPredictionsForDate(date) {
   return rows.map(r => ({
     date: r.date,
     symbol: r.symbol_id.split("_")[0],
-    y_pred_1d: r.y_pred_1d,
-    y_pred_7d: r.y_pred_7d
+    y_pred: r.y_pred
   }));
 }
 
@@ -188,6 +188,16 @@ export default function SignalsHub() {
   const isPro = plan === "pro" || plan === "desk";
   const isFreeUser = !me || plan === "free";
 
+  const freshness = React.useMemo(() => {
+    if (!latestDate) return { label: "Syncing", tone: "pending" };
+    const latest = new Date(`${latestDate}T00:00:00Z`);
+    const now = new Date();
+    const diffDays = (now - latest) / (1000 * 60 * 60 * 24);
+    if (diffDays <= 1.5) return { label: "On schedule", tone: "ok" };
+    if (diffDays <= 2.5) return { label: "Slight delay", tone: "warn" };
+    return { label: "Investigating", tone: "alert" };
+  }, [latestDate]);
+
   // Set selected tokens based on user tier
   React.useEffect(() => {
     if (isFreeUser && selectedTokens.length !== FREE_TIER_TOKENS.length) {
@@ -299,10 +309,27 @@ export default function SignalsHub() {
               <Calendar className="w-4 h-4" />
               <span>Latest: {latestDate || "Loading..."}</span>
             </div>
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border ${
+                freshness.tone === 'ok'
+                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                  : freshness.tone === 'warn'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                  : freshness.tone === 'alert'
+                  ? 'bg-red-500/10 border-red-500/40 text-red-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-current" />
+              {freshness.label}
+            </span>
             <div className="flex items-center gap-2">
               <Lock className="w-4 h-4" />
               <span>Extended access requires Pro</span>
             </div>
+            <Link to={createPageUrl("Data")} className="text-emerald-300 hover:text-emerald-200">
+              See column dictionary →
+            </Link>
           </div>
         </div>
 

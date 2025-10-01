@@ -44,7 +44,7 @@ const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
   </div>
 );
 
-export default function TopSignals({ subscription, modelHorizon = "7d", loading = false, onLoadingChange = () => {} }) {
+export default function TopSignals({ subscription, modelHorizon = "1d", loading = false, onLoadingChange = () => {} }) {
   const [topSignals, setTopSignals] = React.useState([]);
   const [bottomSignals, setBottomSignals] = React.useState([]);
   const [internalLoading, setInternalLoading] = React.useState(true);
@@ -71,7 +71,7 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
           return;
         }
 
-        const predField = modelHorizon === "1d" ? "y_pred_1d" : "y_pred_7d";
+        const predField = "y_pred";
         const scored = rows
           .filter((r) => typeof r[predField] === "number" && !Number.isNaN(r[predField]))
           .map((r) => ({ symbol: String(r.symbol_id).split("_")[0], score: r[predField] }));
@@ -178,7 +178,7 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
               <span>{title}</span>
             </h3>
           </div>
-          <div className="p-6 text-center text-sm text-slate-300">No signals available for the selected horizon.</div>
+          <div className="p-6 text-center text-sm text-slate-300">No signals available today.</div>
         </div>
       );
     }
@@ -219,7 +219,7 @@ export default function TopSignals({ subscription, modelHorizon = "7d", loading 
                     <div className={`font-semibold text-sm ${getReturnColor(signal.pred_return)}`}>
                       {pct(signal.pred_return, 1)}
                     </div>
-                    <div className="text-xs text-slate-400">{modelHorizon} Pred</div>
+                    <div className="text-xs text-slate-400">1d Pred</div>
                   </div>
                   <div className="px-3 text-center">
                     <div className={`font-semibold text-sm ${getPercentileColor(signal.percentile)}`}>

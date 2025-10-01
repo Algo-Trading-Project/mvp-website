@@ -9,15 +9,13 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { horizon = '1d', start, end, width = 980, height = 360 } = await req.json();
+    const { start, end, width = 980, height = 360 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
-
-    const field = horizon === '7d' ? 'rolling_30d_ema_ic_7d' : 'rolling_30d_ema_ic_1d';
     const supabase = getServiceSupabaseClient();
 
     const { data, error } = await supabase
       .from('cross_sectional_metrics_1d')
-      .select(`date, ${field}`)
+      .select(`date, rolling_30d_avg_ic`)
       .gte('date', start)
       .lte('date', end)
       .order('date', { ascending: true });
@@ -27,7 +25,7 @@ Deno.serve(async (req) => {
     const rows = data ?? [];
     const x = rows.map((r: Record<string, unknown>) => r.date as string);
     const y = rows.map((r: Record<string, unknown>) => {
-      const val = r[field];
+      const val = r['rolling_30d_avg_ic'];
       return typeof val === 'number' ? val : typeof val === 'string' ? Number(val) : null;
     });
 

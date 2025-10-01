@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import Section from "@/components/dashboard/Section";
-import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Info, Download } from "lucide-react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -14,7 +14,6 @@ import {
 } from "recharts";
 import PerformancePublicSkeleton from "@/components/skeletons/PerformancePublicSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cross_sectional_metrics_1d } from "@/api/entities";
 import { monthly_performance_metrics } from "@/api/entities";
@@ -22,6 +21,9 @@ import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage } from "@/api/functions";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 // Helper function to generate nice y-axis ticks
 const generateNiceTicks = (min, max, targetCount = 6) => {
@@ -58,16 +60,9 @@ const generateNiceTicks = (min, max, targetCount = 6) => {
   return ticks;
 };
 
-const HORIZON_OPTIONS = [
-  { id: "1d", label: "1-Day" },
-  { id: "7d", label: "7-Day" },
-];
-
-
 export default function DashboardOOSSection() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [horizon, setHorizon] = useState("1d");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [availableRange, setAvailableRange] = useState({ start: "", end: "" });
 
@@ -97,10 +92,11 @@ export default function DashboardOOSSection() {
       const rows = rawRows
         .map((row) => ({
           ...row,
-          rolling_30d_ema_ic_1d: toNumber(row.rolling_30d_ema_ic_1d),
-          rolling_30d_ema_ic_7d: toNumber(row.rolling_30d_ema_ic_7d),
-          rolling_30d_ema_top_bottom_decile_spread_1d: toNumber(row.rolling_30d_ema_top_bottom_decile_spread_1d),
-          rolling_30d_ema_top_bottom_decile_spread_7d: toNumber(row.rolling_30d_ema_top_bottom_decile_spread_7d),
+          cross_sectional_ic_1d: toNumber(row.cross_sectional_ic_1d),
+          rolling_30d_avg_ic: toNumber(row.rolling_30d_avg_ic),
+          cs_top_bottom_decile_spread: toNumber(row.cs_top_bottom_decile_spread),
+          rolling_30d_avg_top_bottom_decile_spread: toNumber(row.rolling_30d_avg_top_bottom_decile_spread),
+          rolling_30d_hit_rate: toNumber(row.rolling_30d_hit_rate),
         }))
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
@@ -144,11 +140,7 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingIcPlot({
-        horizon,
-        start: fallbackStart,
-        end: endDate
-      });
+      const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
       // Now using HTML (interactive Plotly) from backend
       setIcSvg(data?.html || null);
       setIcSvgLoading(false);
@@ -156,7 +148,7 @@ export default function DashboardOOSSection() {
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
     }
-  }, [horizon, dateRange.start, dateRange.end, allRows]);
+  }, [dateRange.start, dateRange.end, allRows]);
 
   // Load Plotly HTML for Decile Spread
   React.useEffect(() => {
@@ -169,18 +161,14 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingSpreadPlot({
-        horizon,
-        start: fallbackStart,
-        end: endDate
-      });
+      const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
       setSpreadHtml(data?.html || null);
       setSpreadLoading(false);
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
     }
-  }, [horizon, dateRange.start, dateRange.end, allRows]);
+  }, [dateRange.start, dateRange.end, allRows]);
 
 
   const filtered = React.useMemo(() => {
@@ -189,14 +177,12 @@ export default function DashboardOOSSection() {
   }, [allRows, dateRange]);
 
   const series = React.useMemo(() => {
-    const icField = horizon === "1d" ? "rolling_30d_ema_ic_1d" : "rolling_30d_ema_ic_7d";
-    const spreadField = horizon === "1d" ? "rolling_30d_ema_top_bottom_decile_spread_1d" : "rolling_30d_ema_top_bottom_decile_spread_7d";
     return filtered.map((r) => ({
       date: r.date,
-      ic: typeof r[icField] === "number" ? Number(r[icField].toFixed(4)) : null,
-      spread: typeof r[spreadField] === "number" ? Number(r[spreadField].toFixed(4)) : null
+      ic: typeof r["rolling_30d_avg_ic"] === "number" ? Number(r["rolling_30d_avg_ic"].toFixed(4)) : null,
+      spread: typeof r["rolling_30d_avg_top_bottom_decile_spread"] === "number" ? Number(r["rolling_30d_avg_top_bottom_decile_spread"].toFixed(4)) : null
     }));
-  }, [filtered, horizon]);
+  }, [filtered]);
 
   // Helper: compute deltas vs N days ago using series index offsets
   const getDeltas = (data, key) => {
@@ -228,7 +214,7 @@ export default function DashboardOOSSection() {
   const icDeltas = getDeltas(series, "ic");
   const spreadDeltas = getDeltas(series, "spread");
 
-  const horizonLabel = horizon === "1d" ? "1-Day" : "7-Day";
+  const horizonLabel = "1-Day";
 
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
@@ -245,9 +231,7 @@ export default function DashboardOOSSection() {
     const vals1d = monthlyRows
       .map((r) => r.information_coefficient_1d)
       .filter((v) => typeof v === "number" && !Number.isNaN(v));
-    const vals7d = monthlyRows
-      .map((r) => r.information_coefficient_7d)
-      .filter((v) => typeof v === "number" && !Number.isNaN(v));
+    const vals7d = [];
 
     const mean = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
     const std = (arr) => {
@@ -267,9 +251,9 @@ export default function DashboardOOSSection() {
     const s1 = std(vals1d);
     const icir1 = s1 > 0 ? m1 / s1 * Math.sqrt(12) : 0;
 
-    const m7 = mean(vals7d);
-    const s7 = std(vals7d);
-    const icir7 = s7 > 0 ? m7 / s7 * Math.sqrt(12) : 0;
+    const m7 = 0;
+    const s7 = 0;
+    const icir7 = 0;
 
     return {
       mean1d: m1,
@@ -298,25 +282,9 @@ export default function DashboardOOSSection() {
     };
   };
 
-  // NEW: top control bar (model dropdown + date pickers) - no background
+  // NEW: top control bar (date pickers) - model selection removed
   const controlBar = (
     <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-900 border border-slate-800 rounded-md p-4">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-400">Model</span>
-        <Select value={horizon} onValueChange={setHorizon}>
-          <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700 h-9 text-white">
-            <SelectValue placeholder="Select model" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-white">
-            {HORIZON_OPTIONS.map((option) => (
-              <SelectItem key={option.id} value={option.id} className="text-white hover:bg-slate-800">
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <div className="flex items-center gap-2">
         <span className="text-sm text-slate-400">From</span>
         <input
@@ -384,12 +352,7 @@ export default function DashboardOOSSection() {
             description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">
-          {(() => {
-            const val = horizon === "1d" ? globalStats.mean1d : globalStats.mean7d;
-            return val != null ? val.toFixed(3) : "—";
-          })()}
-        </div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.mean1d != null ? globalStats.mean1d.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
@@ -399,12 +362,7 @@ export default function DashboardOOSSection() {
             description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">
-          {(() => {
-            const val = horizon === "1d" ? globalStats.std1d : globalStats.std7d;
-            return val != null ? val.toFixed(3) : "—";
-          })()}
-        </div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.std1d != null ? globalStats.std1d.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
@@ -414,12 +372,7 @@ export default function DashboardOOSSection() {
             description="Proportion of months with a positive average Information Coefficient."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">
-          {(() => {
-            const val = horizon === "1d" ? globalStats.positiveProp1d : globalStats.positiveProp7d;
-            return val != null ? `${(val * 100).toFixed(1)}%` : "—";
-          })()}
-        </div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp1d != null ? `${(globalStats.positiveProp1d * 100).toFixed(1)}%` : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
@@ -429,12 +382,7 @@ export default function DashboardOOSSection() {
             description="Mean monthly IC ÷ std of monthly IC, annualized by √12. Measures risk-adjusted skill."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">
-          {(() => {
-            const val = horizon === "1d" ? globalStats.icir1d : globalStats.icir7d;
-            return val != null ? val.toFixed(3) : "—";
-          })()}
-        </div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.icir1d != null ? globalStats.icir1d.toFixed(3) : "—"}</div>
       </div>
     </div>
   );
@@ -542,7 +490,7 @@ export default function DashboardOOSSection() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Regression <span className="gradient-text">Performance</span></h1>
           <p className="text-slate-400 mt-2">
-            Out‑of‑sample rolling performance metrics for our models (1d, 7d). Data available starting from 2019-02-01.
+            Out‑of‑sample rolling performance metrics for our 1‑day regression model. Data available starting from 2019-02-01.
           </p>
         </div>
 
@@ -552,7 +500,7 @@ export default function DashboardOOSSection() {
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">
         <div className="text-center mt-8">
-          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC ({horizonLabel})</h3>
+          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC (1‑Day)</h3>
           {monthlyBadges}
         </div>
           {rollingBadges}
@@ -562,8 +510,19 @@ export default function DashboardOOSSection() {
         <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <Section
-              title={`Rolling 30‑Day Information Coefficient (${horizon})`}
-              subtitle="Out-of-sample rank correlation of predictions vs. realized returns">
+              title={`Rolling 30‑Day Information Coefficient (1d)`}
+              subtitle="Out-of-sample rank correlation of predictions vs. realized returns"
+              rightSlot={(
+                <Button asChild variant="outline" size="sm" className="border-slate-700 text-slate-200">
+                  <Link to={createPageUrl("Signals")}>
+                    <span className="flex items-center">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export data
+                    </span>
+                  </Link>
+                </Button>
+              )}
+            >
               <div className="h-auto">
                 {icSvgLoading ? (
                   <div className="animate-pulse">
@@ -585,7 +544,7 @@ export default function DashboardOOSSection() {
             </Section>
 
             <Section
-              title={`Rolling 30‑Day Avg. Top–Bottom Decile Spread (${horizon})`}
+              title={`Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)`}
               subtitle="30‑day moving average of the net performance difference between top and bottom deciles">
               <div className="h-auto">
                 {spreadLoading ? (
@@ -609,11 +568,11 @@ export default function DashboardOOSSection() {
           </div>
 
           {/* New: IC by Symbol -- Now uses dateRange */}
-          <ICBySymbol horizon={horizon} dateRange={dateRange} />
+          <ICBySymbol dateRange={dateRange} />
 
           <div className="grid md:grid-cols-2 gap-6">
-            <ICDistribution horizon={horizon} dateRange={dateRange} />
-            <BootstrapICDistribution horizon={horizon} dateRange={dateRange} />
+            <ICDistribution dateRange={dateRange} />
+            <BootstrapICDistribution dateRange={dateRange} />
           </div>
         </div>
 
