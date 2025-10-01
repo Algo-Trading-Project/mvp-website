@@ -1,7 +1,7 @@
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 import { getServiceSupabaseClient } from '../_shared/supabase.ts';
-import { getUserFromRequest } from '../_shared/auth.ts';
+// Public endpoint: coverage is safe to publish and helps drive default range
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -9,10 +9,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const user = await getUserFromRequest(req);
-    if (!user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // No auth requirement for public dashboard usage
 
     if (req.method !== 'POST') {
       return json({ error: 'Use POST' }, { status: 405 });
@@ -46,14 +43,33 @@ Deno.serve(async (req) => {
       startDate = d.toISOString().slice(0, 10);
     }
 
-    const { data: coverageData, error: coverageError } = await supabase.rpc('rpc_predictions_coverage', {
-      start_date: startDate,
-      end_date: endDate,
-    });
-
-    if (coverageError) throw coverageError;
-
-    const coverage = (coverageData ?? []) as { month: string; day_count: number }[];
+    let coverage: { month: string; day_count: number }[] = [];
+    try {
+      const rpc = await supabase.rpc('rpc_predictions_coverage', {
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (rpc.error) throw rpc.error;
+      coverage = (rpc.data ?? []) as { month: string; day_count: number }[];
+    } catch (_rpcErr) {
+      // Fallback: compute using table directly
+      const { data, error } = await supabase
+        .from('predictions')
+        .select('date')
+        .gte('date', startDate)
+        .lte('date', endDate);
+      if (error) throw error;
+      const counts: Record<string, Set<string>> = {};
+      for (const r of (data ?? []) as { date: string }[]) {
+        const d = String(r.date ?? '').slice(0, 10);
+        if (!d) continue;
+        const month = `${d.slice(0, 7)}`;
+        (counts[month] ||= new Set()).add(d);
+      }
+      coverage = Object.entries(counts)
+        .map(([month, days]) => ({ month, day_count: days.size }))
+        .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
+    }
     const minDate = coverage.length ? `${coverage[0].month}-01` : startDate;
     const maxDate = coverage.length ? `${coverage[coverage.length - 1].month}-01` : endDate;
     const total = coverage.reduce((sum, row) => sum + Number(row.day_count ?? 0), 0);

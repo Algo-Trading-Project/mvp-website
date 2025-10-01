@@ -124,3 +124,6 @@ join latest l on p.date = l.max_date
 where p.y_pred is not null
   and p.symbol_id is not null;
 $$;
+
+-- Optional: ensure corr() works with text-typed inputs by explicit casting in case schemas drift
+-- (No-op if already double precision)

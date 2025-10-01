@@ -15,12 +15,25 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const { data, error } = await supabase.rpc('rpc_cross_sectional_metrics_time_series', {
-      start_date: start,
-      end_date: end,
-    });
-
-    if (error) throw error;
+    // Prefer RPC if available; otherwise fall back to direct table query
+    let data: unknown[] | null = null;
+    try {
+      const rpc = await supabase.rpc('rpc_cross_sectional_metrics_time_series', {
+        start_date: start,
+        end_date: end,
+      });
+      if (rpc.error) throw rpc.error;
+      data = rpc.data as unknown[] | null;
+    } catch (_rpcErr) {
+      const { data: tbl, error: tblErr } = await supabase
+        .from('cross_sectional_metrics_1d')
+        .select('date, rolling_30d_avg_top_bottom_decile_spread')
+        .gte('date', start)
+        .lte('date', end)
+        .order('date', { ascending: true });
+      if (tblErr) throw tblErr;
+      data = tbl as unknown[] | null;
+    }
 
     const rows = (data ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? ''),

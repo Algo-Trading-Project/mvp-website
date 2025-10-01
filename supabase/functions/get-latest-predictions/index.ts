@@ -14,9 +14,33 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const { data, error: rpcError } = await supabase.rpc('rpc_latest_predictions_snapshot');
-
-    if (rpcError) throw rpcError;
+    // Try RPC; if unavailable, fall back to querying the latest date directly
+    let data: unknown[] | null = null;
+    try {
+      const rpc = await supabase.rpc('rpc_latest_predictions_snapshot');
+      if (rpc.error) throw rpc.error;
+      data = rpc.data as unknown[] | null;
+    } catch (_rpcErr) {
+      // Find latest date
+      const { data: latest, error: latestErr } = await supabase
+        .from('predictions')
+        .select('date')
+        .not('date', 'is', null)
+        .order('date', { ascending: false })
+        .limit(1);
+      if (latestErr) throw latestErr;
+      const maxDate = latest?.[0]?.date;
+      if (!maxDate) {
+        return json({ date: null, rows: [] });
+      }
+      const { data: rows, error: rowsErr } = await supabase
+        .from('predictions')
+        .select('date, symbol_id, y_pred')
+        .eq('date', maxDate)
+        .limit(100000);
+      if (rowsErr) throw rowsErr;
+      data = rows as unknown[] | null;
+    }
 
     const rows = (data ?? []).map((row: Record<string, unknown>) => ({
       symbol_id: String(row.symbol_id ?? ''),

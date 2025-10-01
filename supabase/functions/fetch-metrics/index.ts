@@ -14,15 +14,23 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const { data: crossData, error: crossError } = await supabase.rpc(
-      'rpc_cross_sectional_metrics_time_series',
-      {
+    // Prefer RPC for normalized numeric fields; fall back to direct table reads if RPC missing
+    let crossData: unknown[] | null = null;
+    try {
+      const rpc = await supabase.rpc('rpc_cross_sectional_metrics_time_series', {
         start_date: '2000-01-01',
         end_date: '2099-12-31',
-      },
-    );
-
-    if (crossError) throw crossError;
+      });
+      if (rpc.error) throw rpc.error;
+      crossData = rpc.data as unknown[] | null;
+    } catch (_rpcErr) {
+      const { data, error } = await supabase
+        .from('cross_sectional_metrics_1d')
+        .select('date, cross_sectional_ic_1d, rolling_30d_avg_ic, cs_top_bottom_decile_spread, rolling_30d_avg_top_bottom_decile_spread, rolling_30d_hit_rate')
+        .order('date', { ascending: true });
+      if (error) throw error;
+      crossData = data as unknown[] | null;
+    }
 
     const coerceNumber = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -71,9 +79,20 @@ Deno.serve(async (req) => {
       n_preds: normalizeInteger(row.n_preds) ?? 0,
     }));
 
-    const { data: latest, error: latestError } = await supabase.rpc('rpc_latest_cross_sectional_metrics');
-
-    if (latestError) throw latestError;
+    let latest: any[] | null = null;
+    try {
+      const rpc = await supabase.rpc('rpc_latest_cross_sectional_metrics');
+      if (rpc.error) throw rpc.error;
+      latest = rpc.data as any[] | null;
+    } catch (_rpcErr) {
+      const { data, error } = await supabase
+        .from('cross_sectional_metrics_1d')
+        .select('date, rolling_30d_avg_ic, rolling_30d_avg_top_bottom_decile_spread, rolling_30d_hit_rate')
+        .order('date', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      latest = data as any[] | null;
+    }
 
     const latestRow = Array.isArray(latest) && latest.length
       ? {
