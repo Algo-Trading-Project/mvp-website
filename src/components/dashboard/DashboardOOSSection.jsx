@@ -25,41 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-// Helper function to generate nice y-axis ticks
-const generateNiceTicks = (min, max, targetCount = 6) => {
-  if (min === max) {
-    const offset = Math.abs(min) * 0.1 || 0.1;
-    return [Number((min - offset).toFixed(2)), Number(min.toFixed(2)), Number((min + offset).toFixed(2))];
-  }
-
-  const range = max - min;
-  const roughStep = range / (targetCount - 1);
-
-  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-  const normalized = roughStep / magnitude;
-  let niceStep;
-
-  if (normalized <= 1) niceStep = 1 * magnitude;
-  else if (normalized <= 2) niceStep = 2 * magnitude;
-  else if (normalized <= 5) niceStep = 5 * magnitude;
-  else niceStep = 10 * magnitude;
-
-  const niceMin = Math.floor(min / niceStep) * niceStep;
-  const niceMax = Math.ceil(max / niceStep) * niceStep;
-
-  const ticks = [];
-  for (let tick = niceMin; tick <= niceMax + niceStep / 2; tick += niceStep) {
-    ticks.push(Number(tick.toFixed(2)));
-  }
-
-  if (min <= 0 && max >= 0 && !ticks.includes(0)) {
-    ticks.push(0);
-    ticks.sort((a, b) => a - b);
-  }
-
-  return ticks;
-};
-
 export default function DashboardOOSSection() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,10 +36,12 @@ export default function DashboardOOSSection() {
   // New state for backend-rendered IC Plotly HTML (interactive)
   const [icSvg, setIcSvg] = React.useState(null);
   const [icSvgLoading, setIcSvgLoading] = React.useState(true);
+  const [icError, setIcError] = React.useState(null);
 
   // New state for backend-rendered Decile Spread Plotly HTML
   const [spreadHtml, setSpreadHtml] = React.useState(null);
   const [spreadLoading, setSpreadLoading] = React.useState(true);
+  const [spreadError, setSpreadError] = React.useState(null);
 
 
   React.useEffect(() => {
@@ -133,17 +100,26 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       setIcSvgLoading(true);
+      setIcError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
         setIcSvg(null);
+        setIcError(null);
         setIcSvgLoading(false);
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
-      // Now using HTML (interactive Plotly) from backend
-      setIcSvg(data?.html || null);
-      setIcSvgLoading(false);
+      try {
+        const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
+        setIcSvg(data?.html || null);
+      } catch (error) {
+        console.error("Failed to load rolling IC plot", error);
+        const message = error?.message || "Unable to load rolling IC plot.";
+        setIcError(message);
+        setIcSvg(null);
+      } finally {
+        setIcSvgLoading(false);
+      }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
@@ -154,16 +130,26 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       setSpreadLoading(true);
+      setSpreadError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
         setSpreadHtml(null);
+        setSpreadError(null);
         setSpreadLoading(false);
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
-      setSpreadHtml(data?.html || null);
-      setSpreadLoading(false);
+      try {
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
+        setSpreadHtml(data?.html || null);
+      } catch (error) {
+        console.error("Failed to load rolling spread plot", error);
+        const message = error?.message || "Unable to load rolling spread plot.";
+        setSpreadError(message);
+        setSpreadHtml(null);
+      } finally {
+        setSpreadLoading(false);
+      }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
@@ -192,7 +178,7 @@ export default function DashboardOOSSection() {
       }
       return -1;
     })();
-    if (lastIdx < 0) return { d1: null, d7: null, d30: null, cur: null };
+    if (lastIdx < 0) return { d1: null, d30: null, cur: null };
     const cur = data[lastIdx][key];
 
     const pick = (offset) => {
@@ -206,15 +192,12 @@ export default function DashboardOOSSection() {
     return {
       cur,
       d1: pick(1),
-      d7: pick(7),
       d30: pick(30)
     };
   };
 
   const icDeltas = getDeltas(series, "ic");
   const spreadDeltas = getDeltas(series, "spread");
-
-  const horizonLabel = "1-Day";
 
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
@@ -226,61 +209,44 @@ export default function DashboardOOSSection() {
     return val >= 0 ? "text-emerald-400" : "text-red-400";
   };
 
-  // NEW: global monthly stats (mean, std, annualized ICIR) from monthly_ic_metrics
+  // Monthly aggregates derived from the 1d regression metrics
   const globalStats = React.useMemo(() => {
-    const vals1d = monthlyRows
-      .map((r) => r.information_coefficient_1d)
-      .filter((v) => typeof v === "number" && !Number.isNaN(v));
-    const vals7d = [];
+    const toNumber = (value) => {
+      if (typeof value === "number") return Number.isNaN(value) ? null : value;
+      if (typeof value === "string" && value.trim() !== "") {
+        const num = Number(value);
+        return Number.isNaN(num) ? null : num;
+      }
+      return null;
+    };
 
-    const mean = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const icValues = monthlyRows
+      .map((r) => toNumber(r.information_coefficient_1d))
+      .filter((v) => v !== null);
+
+    const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
     const std = (arr) => {
-      if (!arr.length || arr.length < 2) return 0; // Need at least 2 points for std dev
+      if (arr.length < 2) return 0;
       const m = mean(arr);
-      const variance = arr.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (arr.length - 1); // Sample standard deviation
+      const variance = arr.reduce((sum, val) => sum + Math.pow(val - m, 2), 0) / (arr.length - 1);
       return Math.sqrt(variance);
     };
 
-    const positiveMonths1d = vals1d.filter(v => v > 0).length;
-    const positiveProp1d = vals1d.length > 0 ? positiveMonths1d / vals1d.length : 0;
-
-    const positiveMonths7d = vals7d.filter(v => v > 0).length;
-    const positiveProp7d = vals7d.length > 0 ? positiveMonths7d / vals7d.length : 0;
-
-    const m1 = mean(vals1d);
-    const s1 = std(vals1d);
-    const icir1 = s1 > 0 ? m1 / s1 * Math.sqrt(12) : 0;
-
-    const m7 = 0;
-    const s7 = 0;
-    const icir7 = 0;
+    const positiveMonths = icValues.filter((v) => v > 0).length;
+    const positiveProp = icValues.length ? positiveMonths / icValues.length : 0;
+    const icMean = mean(icValues);
+    const icStd = std(icValues);
+    const avgMonthlyPreds = monthlyRows.length
+      ? monthlyRows.reduce((sum, row) => sum + (toNumber(row.n_preds) ?? 0), 0) / monthlyRows.length
+      : 0;
 
     return {
-      mean1d: m1,
-      std1d: s1,
-      icir1d: icir1,
-      positiveProp1d,
-      mean7d: m7,
-      std7d: s7,
-      icir7d: icir7,
-      positiveProp7d
+      meanIc: icMean,
+      stdIc: icStd,
+      positiveProp,
+      avgMonthlyPreds,
     };
   }, [monthlyRows]);
-
-  // Replace getChartProps to enforce 2-decimal ticks
-  const getChartProps = (data, key) => {
-    const vals = data.map((d) => d[key]).filter((v) => typeof v === "number" && !Number.isNaN(v));
-    if (!vals.length) return { domain: [-1, 1], ticks: [-1, -0.5, 0, 0.5, 1] };
-
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const ticks = generateNiceTicks(min, max);
-
-    return {
-      domain: [ticks[0], ticks[ticks.length - 1]],
-      ticks
-    };
-  };
 
   // NEW: top control bar (date pickers) - model selection removed
   const controlBar = (
@@ -341,28 +307,28 @@ export default function DashboardOOSSection() {
     );
   };
 
-  // Individual monthly badges: separate evenly-sized badges for Mean, Std, Positive %, ICIR
+  // Individual monthly badges summarising the 1d regression model
   const monthlyBadges = (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Mean
+          Mean (IC)
           <InfoTooltip
             title="Mean IC"
             description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">{globalStats.mean1d != null ? globalStats.mean1d.toFixed(3) : "—"}</div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.meanIc != null ? globalStats.meanIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Std Dev
+          Std Dev (IC)
           <InfoTooltip
             title="Standard Deviation of IC"
             description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">{globalStats.std1d != null ? globalStats.std1d.toFixed(3) : "—"}</div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.stdIc != null ? globalStats.stdIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
@@ -372,17 +338,17 @@ export default function DashboardOOSSection() {
             description="Proportion of months with a positive average Information Coefficient."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp1d != null ? `${(globalStats.positiveProp1d * 100).toFixed(1)}%` : "—"}</div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp != null ? `${(globalStats.positiveProp * 100).toFixed(1)}%` : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          ICIR
+          Avg Predictions / Month
           <InfoTooltip
-            title="Annualized ICIR"
-            description="Mean monthly IC ÷ std of monthly IC, annualized by √12. Measures risk-adjusted skill."
+            title="Prediction Coverage"
+            description="Average number of model predictions logged per month within the selected history."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">{globalStats.icir1d != null ? globalStats.icir1d.toFixed(3) : "—"}</div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.avgMonthlyPreds != null ? Math.round(globalStats.avgMonthlyPreds).toLocaleString() : "—"}</div>
       </div>
     </div>
   );
@@ -410,13 +376,6 @@ export default function DashboardOOSSection() {
                   <ArrowUpRight className={`w-3 h-3 ${icDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${icDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(icDeltas.d1, { asPct: false, decimals: 4 })}</span>
-                </>}
-              </div>
-              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d7)}`}>
-                {icDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
-                  <ArrowUpRight className={`w-3 h-3 ${icDeltas.d7 >= 0 ? "" : "hidden"}`} />
-                  <ArrowDownRight className={`w-3 h-3 ${icDeltas.d7 < 0 ? "" : "hidden"}`} />
-                  <span className="font-medium">7d: {formatDelta(icDeltas.d7, { asPct: false, decimals: 4 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d30)}`}>
@@ -454,13 +413,6 @@ export default function DashboardOOSSection() {
                   <span className="font-medium">1d: {formatDelta(spreadDeltas.d1, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
-              <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d7)}`}>
-                {spreadDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
-                  <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d7 >= 0 ? "" : "hidden"}`} />
-                  <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d7 < 0 ? "" : "hidden"}`} />
-                  <span className="font-medium">7d: {formatDelta(spreadDeltas.d7, { asPct: true, decimals: 2 })}</span>
-                </>}
-              </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d30)}`}>
                 {spreadDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d30 >= 0 ? "" : "hidden"}`} />
@@ -479,9 +431,6 @@ export default function DashboardOOSSection() {
   if (loading) {
     return <PerformancePublicSkeleton />;
   }
-
-  const firstDataDate = allRows[0]?.date;
-  const lastDataDate = allRows[allRows.length - 1]?.date;
 
   return (
     <div className="min-h-screen py-8 bg-slate-950">
@@ -528,6 +477,10 @@ export default function DashboardOOSSection() {
                   <div className="animate-pulse">
                     <ChartCardSkeleton height={360} />
                   </div>
+                ) : icError ? (
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+                    {icError}
+                  </div>
                 ) : icSvg ? (
                   <div className="w-full">
                     <iframe
@@ -550,6 +503,10 @@ export default function DashboardOOSSection() {
                 {spreadLoading ? (
                   <div className="animate-pulse">
                     <ChartCardSkeleton height={360} />
+                  </div>
+                ) : spreadError ? (
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+                    {spreadError}
                   </div>
                 ) : spreadHtml ? (
                   <div className="w-full">

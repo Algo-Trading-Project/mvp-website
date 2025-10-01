@@ -25,15 +25,41 @@ Deno.serve(async (req) => {
 
     if (error) throw error;
 
-    const symbols = (data ?? []) as { symbol: string; spearman_ic: number; observation_count: number }[];
+    const coerceNumber = (value: unknown) => {
+      if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+      if (typeof value === 'string') {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+      }
+      return null;
+    };
+
+    const symbols = (data ?? [])
+      .map((row: Record<string, unknown>) => ({
+        symbol: String(row.symbol ?? ''),
+        spearman_ic: coerceNumber(row.spearman_ic),
+        observation_count:
+          typeof row.observation_count === 'number'
+            ? Math.trunc(row.observation_count)
+            : Number(row.observation_count ?? 0) || 0,
+      }))
+      .filter((row) => row.symbol);
+
     if (!symbols.length) {
       const empty = '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data available for IC calculation.</body></html>';
       return json({ html_top: empty, html_bottom: empty });
     }
 
-    const sorted = [...symbols].sort((a, b) => b.spearman_ic - a.spearman_ic);
-    const topRows = sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(0, topN);
-    const bottomRows = [...sorted.filter((row) => Number.isFinite(row.spearman_ic)).slice(-topN)].reverse();
+    const valid = symbols.filter((row) => typeof row.spearman_ic === 'number' && Number.isFinite(row.spearman_ic));
+
+    if (!valid.length) {
+      const empty = '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No valid IC values available.</body></html>';
+      return json({ html_top: empty, html_bottom: empty });
+    }
+
+    const sorted = [...valid].sort((a, b) => (b.spearman_ic as number) - (a.spearman_ic as number));
+    const topRows = sorted.slice(0, topN);
+    const bottomRows = [...sorted.slice(-topN)].reverse();
 
     const makePlot = (rows: typeof symbols, title: string, color: string) => {
       const x = rows.map((r) => r.symbol);
@@ -66,7 +92,6 @@ Plotly.newPlot(el, data, layout, config);
       html_top: makePlot(topRows, 'Top Tokens by IC', '#10b981'),
       html_bottom: makePlot(bottomRows, 'Bottom Tokens by IC', '#ef4444'),
       summary: {
-        horizon,
         min_points: minPoints,
         top: topRows,
         bottom: bottomRows,

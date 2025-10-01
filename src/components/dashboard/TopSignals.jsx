@@ -44,7 +44,7 @@ const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
   </div>
 );
 
-export default function TopSignals({ subscription, modelHorizon = "1d", loading = false, onLoadingChange = () => {} }) {
+export default function TopSignals({ subscription, loading = false, onLoadingChange = () => {} }) {
   const [topSignals, setTopSignals] = React.useState([]);
   const [bottomSignals, setBottomSignals] = React.useState([]);
   const [internalLoading, setInternalLoading] = React.useState(true);
@@ -73,8 +73,23 @@ export default function TopSignals({ subscription, modelHorizon = "1d", loading 
 
         const predField = "y_pred";
         const scored = rows
-          .filter((r) => typeof r[predField] === "number" && !Number.isNaN(r[predField]))
-          .map((r) => ({ symbol: String(r.symbol_id).split("_")[0], score: r[predField] }));
+          .map((r) => {
+            const raw = r[predField];
+            const score =
+              typeof raw === "number"
+                ? (Number.isNaN(raw) ? null : raw)
+                : typeof raw === "string"
+                ? (() => {
+                    const num = Number(raw);
+                    return Number.isFinite(num) ? num : null;
+                  })()
+                : null;
+            return {
+              symbol: String(r.symbol_id ?? "").split("_")[0] || "",
+              score,
+            };
+          })
+          .filter((r) => r.symbol && typeof r.score === "number");
 
         if (!scored.length) {
           setTopSignals([]);
@@ -116,7 +131,7 @@ export default function TopSignals({ subscription, modelHorizon = "1d", loading 
         onLoadingChange(false);
       }
     },
-    [modelHorizon, onLoadingChange]
+    [onLoadingChange]
   );
 
   React.useEffect(() => {

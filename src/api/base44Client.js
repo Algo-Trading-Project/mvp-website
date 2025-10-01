@@ -118,16 +118,7 @@ const functionMap = {
   icBySymbolPlot: "ic-by-symbol-plot",
   icDistributionPlot: "ic-distribution-plot",
   bootstrapIcDistributionPlot: "bootstrap-ic-distribution-plot",
-  bootstrapExpectancyDistributionPlot: "bootstrap-expectancy-distribution-plot",
-  getTokenPerformanceCharts: "get-token-performance-charts",
-  getDecilePerformanceChart: "get-decile-performance-plot",
-  rollingExpectancyPlot: "rolling-expectancy-plot",
-  getSymbolExpectancyPlot: "get-symbol-expectancy-plot",
-  tokenReturnAnalysis: "token-return-analysis",
-  decileLiftPlot: "decile-lift-plot",
   predictionsCoverage: "predictions-coverage",
-  expectancyDistributionPlot: "expectancy-distribution-plot",
-  expectancyBySymbolPlot: "expectancy-by-symbol-plot",
 };
 
 const functionsClient = Object.fromEntries(

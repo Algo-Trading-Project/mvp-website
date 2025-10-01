@@ -40,11 +40,11 @@ export default function MarketRegimeCards() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 bg-slate-800/60 rounded-md">
             <h4 className="text-sm font-medium mb-2">Cross-Sectional Dispersion</h4>
-            <div className="text-lg font-bold text-purple-400">
-              {marketData.dispersion.toFixed(1)}%
-            </div>
-            <p className="text-xs text-slate-400">7-day return std</p>
+          <div className="text-lg font-bold text-purple-400">
+            {marketData.dispersion.toFixed(1)}%
           </div>
+          <p className="text-xs text-slate-400">1-day return std</p>
+        </div>
 
           <div className="p-4 bg-slate-800/60 rounded-md">
             <h4 className="text-sm font-medium mb-2">Avg Correlation</h4>
