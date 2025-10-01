@@ -36,10 +36,12 @@ export default function DashboardOOSSection() {
   // New state for backend-rendered IC Plotly HTML (interactive)
   const [icSvg, setIcSvg] = React.useState(null);
   const [icSvgLoading, setIcSvgLoading] = React.useState(true);
+  const [icError, setIcError] = React.useState(null);
 
   // New state for backend-rendered Decile Spread Plotly HTML
   const [spreadHtml, setSpreadHtml] = React.useState(null);
   const [spreadLoading, setSpreadLoading] = React.useState(true);
+  const [spreadError, setSpreadError] = React.useState(null);
 
 
   React.useEffect(() => {
@@ -98,17 +100,26 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       setIcSvgLoading(true);
+      setIcError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
         setIcSvg(null);
+        setIcError(null);
         setIcSvgLoading(false);
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
-      // Now using HTML (interactive Plotly) from backend
-      setIcSvg(data?.html || null);
-      setIcSvgLoading(false);
+      try {
+        const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
+        setIcSvg(data?.html || null);
+      } catch (error) {
+        console.error("Failed to load rolling IC plot", error);
+        const message = error?.message || "Unable to load rolling IC plot.";
+        setIcError(message);
+        setIcSvg(null);
+      } finally {
+        setIcSvgLoading(false);
+      }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
@@ -119,16 +130,26 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       setSpreadLoading(true);
+      setSpreadError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
         setSpreadHtml(null);
+        setSpreadError(null);
         setSpreadLoading(false);
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
-      setSpreadHtml(data?.html || null);
-      setSpreadLoading(false);
+      try {
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
+        setSpreadHtml(data?.html || null);
+      } catch (error) {
+        console.error("Failed to load rolling spread plot", error);
+        const message = error?.message || "Unable to load rolling spread plot.";
+        setSpreadError(message);
+        setSpreadHtml(null);
+      } finally {
+        setSpreadLoading(false);
+      }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
@@ -456,6 +477,10 @@ export default function DashboardOOSSection() {
                   <div className="animate-pulse">
                     <ChartCardSkeleton height={360} />
                   </div>
+                ) : icError ? (
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+                    {icError}
+                  </div>
                 ) : icSvg ? (
                   <div className="w-full">
                     <iframe
@@ -478,6 +503,10 @@ export default function DashboardOOSSection() {
                 {spreadLoading ? (
                   <div className="animate-pulse">
                     <ChartCardSkeleton height={360} />
+                  </div>
+                ) : spreadError ? (
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
+                    {spreadError}
                   </div>
                 ) : spreadHtml ? (
                   <div className="w-full">

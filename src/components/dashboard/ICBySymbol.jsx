@@ -100,13 +100,17 @@ export default function ICBySymbol({ dateRange }) {
         />
       );
     }
-    return <div className="text-slate-400 text-sm p-4 text-center">No data available for this date range.</div>;
+    return (
+      <div className="text-slate-400 text-sm p-4 text-center">
+        No data available for this date range.
+      </div>
+    );
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-semibold text-sm">Information Coefficient (IC) by Token</div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="font-semibold text-sm text-slate-200">Information Coefficient (IC) by Token</div>
         <InfoTooltip
           title="IC by Token"
           description="Spearman rank correlation between model predictions and forward returns for each token over the selected date range. Calculated from the 'predictions' table."
@@ -118,8 +122,18 @@ export default function ICBySymbol({ dateRange }) {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          <Plot html={htmlTop} title="Top 20 Tokens by IC" />
-          <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
+          <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
+            </div>
+            <Plot html={htmlTop} title="Top 20 Tokens by IC" />
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
+            </div>
+            <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
+          </div>
         </div>
       )}
     </div>

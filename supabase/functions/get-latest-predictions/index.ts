@@ -14,30 +14,34 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const { data: latestRows, error: latestError } = await supabase
-      .from('predictions')
-      .select('date')
-      .order('date', { ascending: false })
-      .limit(1);
+    const { data, error: rpcError } = await supabase.rpc('rpc_latest_predictions_snapshot');
 
-    if (latestError) throw latestError;
+    if (rpcError) throw rpcError;
 
-    const maxDate = latestRows?.[0]?.date ?? null;
+    const rows = (data ?? []).map((row: Record<string, unknown>) => ({
+      symbol_id: String(row.symbol_id ?? ''),
+      date: String(row.date ?? '').slice(0, 10),
+      y_pred:
+        typeof row.y_pred === 'number'
+          ? (Number.isFinite(row.y_pred) ? row.y_pred : null)
+          : typeof row.y_pred === 'string'
+          ? (() => {
+              const num = Number(row.y_pred);
+              return Number.isFinite(num) ? num : null;
+            })()
+          : null,
+    })).filter((row) => row.symbol_id && row.date);
 
-    if (!maxDate) {
+    if (!rows.length) {
       return json({ date: null, rows: [] });
     }
 
-    const d = String(maxDate).slice(0, 10);
+    const latestDate = rows[0].date;
 
-    const { data: rows, error: rowsError } = await supabase
-      .from('predictions')
-      .select('symbol_id, date, y_pred')
-      .eq('date', d);
-
-    if (rowsError) throw rowsError;
-
-    return json({ date: d, rows });
+    return json({
+      date: latestDate,
+      rows,
+    });
   } catch (error) {
     return json({ error: error && error.message ? error.message : String(error) }, { status: 500 });
   }

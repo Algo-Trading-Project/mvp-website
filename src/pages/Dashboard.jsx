@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [signalsLoading, setSignalsLoading] = useState(true);
   const [metricsError, setMetricsError] = useState(null);
+  const [latestSnapshot, setLatestSnapshot] = useState(null);
   const { search } = useLocation();
 
   // Check for URL parameter to set active tab
@@ -60,19 +61,41 @@ export default function Dashboard() {
       setMetricsError(null);
       try {
         const data = await fetchMetrics({});
-        const rows = data?.cross || [];
+        const normalize = (value) => {
+          if (typeof value === "number") return Number.isFinite(value) ? value : null;
+          if (typeof value === "string") {
+            const num = Number(value);
+            return Number.isFinite(num) ? num : null;
+          }
+          return null;
+        };
+
+        const rows = Array.isArray(data?.cross) ? [...data.cross] : [];
         rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-        const mapped = rows.map(r => ({
+
+        const mapped = rows.map((r) => ({
           date: r.date,
-          // New schema fields mapped to legacy keys used by overview
-          rolling_30d_ic_1d: Number(r.rolling_30d_avg_ic ?? null),
-          rolling_30d_avg_top_bottom_decile_spread_1d: Number(r.rolling_30d_avg_top_bottom_decile_spread ?? null),
-          rolling_30d_hit_rate_1d: Number(r.rolling_30d_hit_rate ?? null),
+          rolling_30d_ic_1d: normalize(r.rolling_30d_avg_ic ?? r.rolling_30d_ic_1d),
+          rolling_30d_avg_top_bottom_decile_spread_1d: normalize(
+            r.rolling_30d_avg_top_bottom_decile_spread ?? r.top_bottom_spread
+          ),
+          rolling_30d_hit_rate_1d: normalize(r.rolling_30d_hit_rate ?? r.hit_rate),
         }));
+
         setMetricsRows(mapped);
+        setLatestSnapshot(
+          data?.latest
+            ? {
+                rolling_ic_30d: normalize(data.latest.rolling_30d_avg_ic),
+                top_bottom_spread_30d: normalize(data.latest.rolling_30d_avg_top_bottom_decile_spread),
+                hit_rate_30d: normalize(data.latest.rolling_30d_hit_rate),
+              }
+            : null
+        );
       } catch (error) {
         console.error("Failed to fetch metrics:", error);
         setMetricsRows([]); // Clear data on error
+        setLatestSnapshot(null);
         const message = error?.message || "Unable to load dashboard metrics.";
         setMetricsError(message);
         toast.error("Metrics data could not be loaded", {
@@ -117,13 +140,15 @@ export default function Dashboard() {
   };
 
   // Latest overview metrics (1d only)
-  const currentModelData = metricsRows.length
-    ? {
-        rolling_ic_30d: latestValue(metricsRows, "rolling_30d_ic_1d"),
-        hit_rate_30d: latestValue(metricsRows, "rolling_30d_hit_rate_1d"),
-        top_bottom_spread_30d: latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_1d"),
-      }
-    : null;
+  const currentModelData = React.useMemo(() => {
+    if (latestSnapshot) return latestSnapshot;
+    if (!metricsRows.length) return null;
+    return {
+      rolling_ic_30d: latestValue(metricsRows, "rolling_30d_ic_1d"),
+      hit_rate_30d: latestValue(metricsRows, "rolling_30d_hit_rate_1d"),
+      top_bottom_spread_30d: latestValue(metricsRows, "rolling_30d_avg_top_bottom_decile_spread_1d"),
+    };
+  }, [latestSnapshot, metricsRows]);
 
   const tabs = [
     { id: "overview", label: "Overview" },
