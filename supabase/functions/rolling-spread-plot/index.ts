@@ -61,7 +61,7 @@ const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
   xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
-  autosize: true,
+  dragmode: 'zoom', autosize: true,
   height: ${Number(height) || 360}
  };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false };

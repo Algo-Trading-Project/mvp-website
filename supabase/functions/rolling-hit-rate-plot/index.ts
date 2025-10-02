@@ -59,13 +59,14 @@ Deno.serve(async (req) => {
 const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 2 }, hovertemplate: 'Date: %{x}<br>Hit Rate: %{y:.2%}<extra></extra>' }];
 const layout = {
   paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  yaxis: { fixedrange:true, tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [0, 1] },
-  xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
-  width: ${width}, height: ${height}
+  yaxis: { tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [0, 1] },
+  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
+  dragmode: 'zoom', autosize: true, height: ${height}
 };
-const config = { responsive: false, displayModeBar: false, scrollZoom: false };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
+window.addEventListener('resize', () => Plotly.Plots.resize(el));
 </script></body></html>`;
 
     return json({ html, points: rows.length, window: windowSize });
@@ -73,4 +74,3 @@ Plotly.newPlot(el, data, layout, config);
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 });
-
