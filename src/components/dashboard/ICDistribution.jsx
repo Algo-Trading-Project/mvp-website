@@ -93,12 +93,12 @@ export default function ICDistribution({ dateRange }) {
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-semibold text-sm">Distribution of Daily Cross‑Sectional IC</div>
+      <div className="flex items-center mb-2 gap-2">
         <InfoTooltip
           title="IC Distribution"
           description="Histogram of daily Spearman rank correlations between predictions and realized returns across assets over the selected window. Red line at 0, blue line at mean."
         />
+        <div className="font-semibold text-sm">Distribution of Daily Cross‑Sectional IC</div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-3">

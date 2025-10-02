@@ -85,21 +85,21 @@ export default function BootstrapICDistribution({ dateRange }) {
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-semibold text-sm">Bootstrapped Distribution of Mean Daily IC</div>
+      <div className="flex items-center mb-2 gap-2">
         <InfoTooltip
           title="Bootstrapped Mean IC Distribution"
-          description="Histogram of 10,000 mean ICs, each calculated from a resampled (with replacement) daily IC series. This shows the variability of the mean IC statistic."
+          description="Histogram of 10,000 mean ICs from resampled daily IC series. Shows how much the average IC could vary."
         />
+        <div className="font-semibold text-sm">Bootstrapped Distribution of Mean Daily IC</div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">Mean <InfoTooltip title="Mean of Bootstrapped Means" description="The average of the 10,000 bootstrapped sample means, providing a stable estimate of the true mean daily IC." /></div>
+            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1"><InfoTooltip title="Mean of Bootstrapped Means" description="Average of the 10,000 sample means; a stable estimate of the true daily IC." /> Mean</div>
             <div className="text-sm font-semibold">{summary.mean?.toFixed(4)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">99% CI <InfoTooltip title="99% Confidence Interval" description="The range in which we are 99% confident the true mean daily IC lies, based on the bootstrapped distribution." /></div>
+            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1"><InfoTooltip title="99% Confidence Interval" description="Range in which the true average daily IC likely falls (99% confidence)." /> 99% CI</div>
             <div className="text-sm font-semibold">[{summary.ci_lower?.toFixed(4)}, {summary.ci_upper?.toFixed(4)}]</div>
         </div>
       </div>

@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
 const x=${JSON.stringify(dates)}, y=${JSON.stringify(alpha)};
 const data=[{x,y,type:'scatter',mode:'lines',line:{color:'#22c55e',width:2},hovertemplate:'%{x}<br>%{y:.4%}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},
-  yaxis:{showticklabels:false,gridcolor:'#334155'},
+  yaxis:{tickformat:'.2%',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},
   xaxis:{title:'Date',type:'date',range:['${axisStart}','${axisEnd}'],gridcolor:'#334155',tickfont:{color:'#94a3b8'}, titlefont:{color:'#cbd5e1'}},
   shapes:[{type:'line',x0:'${axisStart}',x1:'${axisEnd}',y0:0,y1:0,line:{dash:'dot',color:'#ef4444'}}],height:${Number(height)||360}};
 const config={responsive:true,displayModeBar:false,scrollZoom:false};
@@ -98,7 +98,7 @@ Plotly.newPlot('chart',data,layout,config);window.addEventListener('resize',()=>
 const x=${JSON.stringify(dates)}, y=${JSON.stringify(beta)};
 const data=[{x,y,type:'scatter',mode:'lines',line:{color:'#f59e0b',width:2},hovertemplate:'%{x}<br>%{y:.2f}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},
-  yaxis:{showticklabels:false,gridcolor:'#334155'},
+  yaxis:{tickformat:'.2f',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},
   xaxis:{title:'Date',type:'date',range:['${axisStart}','${axisEnd}'],gridcolor:'#334155',tickfont:{color:'#94a3b8'}, titlefont:{color:'#cbd5e1'}},
   shapes:[{type:'line',x0:'${axisStart}',x1:'${axisEnd}',y0:0,y1:0,line:{dash:'dot',color:'#ef4444'}}],height:${Number(height)||360}};
 const config={responsive:true,displayModeBar:false,scrollZoom:false};

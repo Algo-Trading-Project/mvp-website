@@ -109,12 +109,12 @@ export default function ICBySymbol({ dateRange }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="font-semibold text-sm text-slate-200">Information Coefficient (IC) by Token</div>
+      <div className="flex items-center gap-2">
         <InfoTooltip
           title="IC by Token"
           description="Spearman rank correlation between model predictions and forward returns for each token over the selected date range. Calculated from the 'predictions' table."
         />
+        <div className="font-semibold text-sm text-slate-200">Information Coefficient (IC) by Token</div>
       </div>
       {error ? (
         <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
@@ -123,16 +123,16 @@ export default function ICBySymbol({ dateRange }) {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
+            <div className="flex items-center mb-2 gap-2">
               <InfoTooltip title="Top 20 by IC" description="Tokens with highest Information Coefficient over the selected date range." />
+              <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
             </div>
             <Plot html={htmlTop} title="Top 20 Tokens by IC" />
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
+            <div className="flex items-center mb-2 gap-2">
               <InfoTooltip title="Bottom 20 by IC" description="Tokens with lowest Information Coefficient over the selected date range." />
+              <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
             </div>
             <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
           </div>

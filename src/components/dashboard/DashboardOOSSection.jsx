@@ -349,41 +349,41 @@ export default function DashboardOOSSection() {
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Mean (IC)
           <InfoTooltip
             title="Mean IC"
             description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
           />
+          Mean (IC)
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.meanIc != null ? globalStats.meanIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Std Dev (IC)
           <InfoTooltip
             title="Standard Deviation of IC"
             description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
           />
+          Std Dev (IC)
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.stdIc != null ? globalStats.stdIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Positive Months %
           <InfoTooltip
             title="Positive Months"
             description="Proportion of months with a positive average Information Coefficient."
           />
+          Positive Months %
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp != null ? `${(globalStats.positiveProp * 100).toFixed(1)}%` : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          ICIR (Annualized)
           <InfoTooltip
             title="IC Information Ratio (annualized)"
             description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)."
           />
+          ICIR (Annualized)
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.icirAnn != null ? globalStats.icirAnn.toFixed(2) : "—"}</div>
       </div>
@@ -576,11 +576,11 @@ export default function DashboardOOSSection() {
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
-                  Average Returns by Cross-Sectional Prediction Quintile
                   <InfoTooltip
                     title="Quintile Returns"
                     description="Per‑day, assets are binned into quintiles by predicted return. Bars show the average 1‑day forward return across days for each quintile."
                   />
+                  Average Returns by Cross-Sectional Prediction Quintile
                 </span>
               </div>
               {quintileLoading ? (
@@ -597,11 +597,11 @@ export default function DashboardOOSSection() {
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
-                  Rolling 30‑Day Hit Rate
                   <InfoTooltip
                     title="Rolling Hit Rate"
                     description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)."
                   />
+                  Rolling 30‑Day Hit Rate
                 </span>
               </div>
               {hitLoading ? (
