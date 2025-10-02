@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
       total,
       min_date: minDate,
       max_date: maxDate,
+      latest_date: endDate, // most recent actual day present in predictions
       coverage_columns: ['month', 'count'],
       coverage: coverage.map(({ month, day_count }) => ({ month, count: Number(day_count) })),
       modeUsed: 'supabase_rpc',

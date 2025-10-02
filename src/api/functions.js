@@ -33,6 +33,14 @@ export const rollingSpreadPlot = wrapCall(
   "Failed to load rolling spread plot",
   base44.functions.rollingSpreadPlot
 );
+export const quintileReturnsPlot = wrapCall(
+  "Failed to load quintile returns plot",
+  base44.functions.quintileReturnsPlot
+);
+export const rollingHitRatePlot = wrapCall(
+  "Failed to load rolling hit rate plot",
+  base44.functions.rollingHitRatePlot
+);
 export const icBySymbolPlot = wrapCall(
   "Failed to load IC by symbol plot",
   base44.functions.icBySymbolPlot

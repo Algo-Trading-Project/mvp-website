@@ -125,12 +125,14 @@ export default function ICBySymbol({ dateRange }) {
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
+              <InfoTooltip title="Top 20 by IC" description="Tokens with highest Information Coefficient over the selected date range." />
             </div>
             <Plot html={htmlTop} title="Top 20 Tokens by IC" />
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
+              <InfoTooltip title="Bottom 20 by IC" description="Tokens with lowest Information Coefficient over the selected date range." />
             </div>
             <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
           </div>

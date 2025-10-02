@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, width = 980, height = 360 } = await req.json();
+    const { start, end, width = null, height = 360 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     const supabase = getServiceSupabaseClient();
 
@@ -57,16 +57,17 @@ const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   yaxis: { fixedrange:true, tickformat: '.3f', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, zeroline: true, zerolinecolor: '#475569' },
   xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
-  width: ${Number(width) || 980},
+  autosize: true,
   height: ${Number(height) || 360}
 };
-    const config = { responsive: false, displayModeBar: false, scrollZoom: false };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
+window.addEventListener('resize', () => Plotly.Plots.resize(el));
 </script></body></html>`;
 
     return json({
-      html, 
+      html,
       points: rows.length, 
       columns: [{ name: 'date', type: 'string' }, { name: 'ic', type: 'number' }] 
     });

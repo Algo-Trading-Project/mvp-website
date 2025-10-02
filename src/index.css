@@ -156,3 +156,12 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* Make the native date input calendar icon visible on dark background */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(150%);
+  opacity: 1;
+}
+input[type="date"] {
+  color-scheme: dark;
+}

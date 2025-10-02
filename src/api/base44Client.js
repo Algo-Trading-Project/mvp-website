@@ -115,6 +115,8 @@ const functionMap = {
   getLatestPredictions: "get-latest-predictions",
   rollingIcPlot: "rolling-ic-plot",
   rollingSpreadPlot: "rolling-spread-plot",
+  quintileReturnsPlot: "quintile-returns-plot",
+  rollingHitRatePlot: "rolling-hit-rate-plot",
   icBySymbolPlot: "ic-by-symbol-plot",
   icDistributionPlot: "ic-distribution-plot",
   bootstrapIcDistributionPlot: "bootstrap-ic-distribution-plot",

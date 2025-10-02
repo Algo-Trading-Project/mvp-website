@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import Section from "@/components/dashboard/Section";
-import { ArrowUpRight, ArrowDownRight, Info, Download } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -19,13 +18,13 @@ import { cross_sectional_metrics_1d } from "@/api/entities";
 import { monthly_performance_metrics } from "@/api/entities";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
-import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage } from "@/api/functions";
+import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+// removed Section + Export button + routing imports for compact headers
 
 export default function DashboardOOSSection() {
+  // Today in YYYY-MM-DD for clamping date inputs
+  const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
@@ -42,6 +41,13 @@ export default function DashboardOOSSection() {
   const [spreadHtml, setSpreadHtml] = React.useState(null);
   const [spreadLoading, setSpreadLoading] = React.useState(true);
   const [spreadError, setSpreadError] = React.useState(null);
+  // New plot states
+  const [quintileHtml, setQuintileHtml] = React.useState(null);
+  const [quintileLoading, setQuintileLoading] = React.useState(true);
+  const [quintileError, setQuintileError] = React.useState(null);
+  const [hitHtml, setHitHtml] = React.useState(null);
+  const [hitLoading, setHitLoading] = React.useState(true);
+  const [hitError, setHitError] = React.useState(null);
 
 
   React.useEffect(() => {
@@ -86,8 +92,10 @@ export default function DashboardOOSSection() {
       const coverageStart = coverageInfo?.min_date || earliestDate || '2019-01-01';
       const coverageEnd = coverageInfo?.max_date || latestDate || coverageStart;
 
-      const defaultEnd = coverageEnd;
-      const defaultStartTarget = defaultEnd && defaultEnd >= '2025-01-01' ? '2025-01-01' : coverageStart;
+      // Default to YTD: 01-01 of the year of the most recent prediction date
+      const defaultEnd = coverageInfo?.latest_date || coverageEnd;
+      const defaultYear = defaultEnd ? String(defaultEnd).slice(0, 4) : (new Date().getFullYear()).toString();
+      const defaultStartTarget = `${defaultYear}-01-01`;
       const clampedStart = defaultStartTarget && coverageStart
         ? (defaultStartTarget < coverageStart ? coverageStart : defaultStartTarget)
         : coverageStart;
@@ -166,6 +174,44 @@ export default function DashboardOOSSection() {
       load();
     }
   }, [dateRange.start, dateRange.end, allRows]);
+
+  // Load Quintile Returns plot
+  React.useEffect(() => {
+    const load = async () => {
+      setQuintileLoading(true);
+      setQuintileError(null);
+      if (!dateRange.start || !dateRange.end) { setQuintileHtml(null); setQuintileLoading(false); return; }
+      try {
+        const data = await quintileReturnsPlot({ start: dateRange.start, end: dateRange.end });
+        setQuintileHtml(data?.html || null);
+      } catch (e) {
+        setQuintileHtml(null);
+        setQuintileError(e?.message || 'Unable to load quintile returns plot');
+      } finally {
+        setQuintileLoading(false);
+      }
+    };
+    load();
+  }, [dateRange.start, dateRange.end]);
+
+  // Load Rolling Hit Rate plot
+  React.useEffect(() => {
+    const load = async () => {
+      setHitLoading(true);
+      setHitError(null);
+      if (!dateRange.start || !dateRange.end) { setHitHtml(null); setHitLoading(false); return; }
+      try {
+        const data = await rollingHitRatePlot({ start: dateRange.start, end: dateRange.end, window: 30 });
+        setHitHtml(data?.html || null);
+      } catch (e) {
+        setHitHtml(null);
+        setHitError(e?.message || 'Unable to load rolling hit rate plot');
+      } finally {
+        setHitLoading(false);
+      }
+    };
+    load();
+  }, [dateRange.start, dateRange.end]);
 
 
   const filtered = React.useMemo(() => {
@@ -259,7 +305,7 @@ export default function DashboardOOSSection() {
     };
   }, [monthlyRows]);
 
-  // NEW: top control bar (date pickers) - model selection removed
+  // NEW: top control bar (date pickers) - compact, right-aligned, no background
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-2">
@@ -268,7 +314,7 @@ export default function DashboardOOSSection() {
           type="date"
           value={dateRange.start}
           min={availableRange.start || '2019-01-01'}
-          max={availableRange.end || dateRange.end}
+          max={dateRange.end || todayIso}
           onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
           disabled={loading}
           className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
@@ -278,7 +324,7 @@ export default function DashboardOOSSection() {
           type="date"
           value={dateRange.end}
           min={availableRange.start || '2019-01-01'}
-          max={availableRange.end}
+          max={todayIso}
           onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
           disabled={loading}
           className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
@@ -362,6 +408,21 @@ export default function DashboardOOSSection() {
   );
 
 
+  // Loading skeleton for delta badges while plots update
+  const badgesLoading = icSvgLoading || spreadLoading;
+  const BadgeSkeleton = () => (
+    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+      <div className="flex items-center justify-center gap-4">
+        <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+        <div className="flex flex-col gap-1 w-32">
+          <div className="h-3 bg-slate-800 rounded" />
+          <div className="h-3 bg-slate-800 rounded" />
+          <div className="h-3 bg-slate-800 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+
   // Tighter rolling badges: value + deltas INSIDE the badge, titles centered above; reduced padding
   const rollingBadges = (
     <div className="grid gap-6 md:grid-cols-2 mb-4">
@@ -373,6 +434,7 @@ export default function DashboardOOSSection() {
             description="30‑day average of daily cross‑sectional IC (per‑day rank correlation across assets). Not a pooled 30‑day correlation." />
           <span>Rolling IC (30d)</span>
         </h4>
+        {badgesLoading ? <BadgeSkeleton /> : (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
@@ -403,6 +465,7 @@ export default function DashboardOOSSection() {
               </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Decile spread */}
@@ -413,6 +476,7 @@ export default function DashboardOOSSection() {
             description="30‑day average of daily cross‑sectional top‑minus‑bottom decile performance. Higher suggests more tradable signal." />
           <span>Decile Spread (30d)</span>
         </h4>
+        {badgesLoading ? <BadgeSkeleton /> : (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
@@ -443,6 +507,7 @@ export default function DashboardOOSSection() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
@@ -477,75 +542,91 @@ export default function DashboardOOSSection() {
 
         {/* Charts */}
         <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Section
-              title={`Rolling 30‑Day Information Coefficient (1d)`}
-              subtitle="Out-of-sample rank correlation of predictions vs. realized returns"
-              rightSlot={(
-                <Button asChild variant="outline" size="sm" className="border-slate-700 text-slate-200">
-                  <Link to={createPageUrl("Signals")}>
-                    <span className="flex items-center">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export data
-                    </span>
-                  </Link>
-                </Button>
-              )}
-            >
+          <div className="grid md:grid-cols-2 gap-6 mt-8">
+            {/* Rolling IC chart with compact title inside card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200">Rolling 30‑Day Information Coefficient (1d)</span>
+              </div>
               <div className="h-auto">
                 {icSvgLoading ? (
-                  <div className="animate-pulse">
-                    <ChartCardSkeleton height={360} />
-                  </div>
+                  <div className="animate-pulse"><ChartCardSkeleton height={360} /></div>
                 ) : icError ? (
-                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
-                    {icError}
-                  </div>
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{icError}</div>
                 ) : icSvg ? (
-                  <div className="w-full">
-                    <iframe
-                      srcDoc={icSvg}
-                      title="Rolling 30-Day IC"
-                      className="w-full rounded-md"
-                      style={{ height: 380, border: "none", background: "transparent" }}
-                    />
-                  </div>
+                  <iframe srcDoc={icSvg} title="Rolling 30-Day IC" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
                 ) : (
                   <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
               </div>
-            </Section>
+            </div>
 
-            <Section
-              title={`Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)`}
-              subtitle="30‑day moving average of the net performance difference between top and bottom deciles">
+            {/* Rolling decile spread chart with compact title inside card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200">Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)</span>
+              </div>
               <div className="h-auto">
                 {spreadLoading ? (
-                  <div className="animate-pulse">
-                    <ChartCardSkeleton height={360} />
-                  </div>
+                  <div className="animate-pulse"><ChartCardSkeleton height={360} /></div>
                 ) : spreadError ? (
-                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
-                    {spreadError}
-                  </div>
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{spreadError}</div>
                 ) : spreadHtml ? (
-                  <div className="w-full">
-                    <iframe
-                      srcDoc={spreadHtml}
-                      title="Rolling 30-Day Decile Spread"
-                      className="w-full rounded-md"
-                      style={{ height: 380, border: "none", background: "transparent" }}
-                    />
-                  </div>
+                  <iframe srcDoc={spreadHtml} title="Rolling 30-Day Decile Spread" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
                 ) : (
                   <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
               </div>
-            </Section>
+            </div>
           </div>
 
           {/* New: IC by Symbol -- Now uses dateRange */}
           <ICBySymbol dateRange={dateRange} />
+
+          {/* New plots: Quintile Returns + Rolling Hit Rate */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  Average Returns by Cross-Sectional Prediction Quintile
+                  <InfoTooltip
+                    title="Quintile Returns"
+                    description="Per‑day, assets are binned into quintiles by predicted return. Bars show the average 1‑day forward return across days for each quintile."
+                  />
+                </span>
+              </div>
+              {quintileLoading ? (
+                <ChartCardSkeleton height={360} />
+              ) : quintileError ? (
+                <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{quintileError}</div>
+              ) : quintileHtml ? (
+                <iframe srcDoc={quintileHtml} title="Quintile Returns" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+              ) : (
+                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+              )}
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  Rolling 30‑Day Hit Rate
+                  <InfoTooltip
+                    title="Rolling Hit Rate"
+                    description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)."
+                  />
+                </span>
+              </div>
+              {hitLoading ? (
+                <ChartCardSkeleton height={360} />
+              ) : hitError ? (
+                <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{hitError}</div>
+              ) : hitHtml ? (
+                <iframe srcDoc={hitHtml} title="Rolling Hit Rate" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+              ) : (
+                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+              )}
+            </div>
+          </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             <ICDistribution dateRange={dateRange} />
