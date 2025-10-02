@@ -96,13 +96,12 @@ export default function DashboardOOSSection() {
       const coverageStart = coverageInfo?.min_date || earliestDate || '2019-01-01';
       const coverageEnd = coverageInfo?.max_date || latestDate || coverageStart;
 
-      // Default to YTD: 01-01 of the year of the most recent prediction date
+      // Default full coverage: 2019-01-01 -> latest predictions date
       const defaultEnd = coverageInfo?.latest_date || coverageEnd;
-      const defaultYear = defaultEnd ? String(defaultEnd).slice(0, 4) : (new Date().getFullYear()).toString();
-      const defaultStartTarget = `${defaultYear}-01-01`;
-      const clampedStart = defaultStartTarget && coverageStart
+      const defaultStartTarget = '2019-01-01';
+      const clampedStart = coverageStart
         ? (defaultStartTarget < coverageStart ? coverageStart : defaultStartTarget)
-        : coverageStart;
+        : defaultStartTarget;
       const safeStart = clampedStart > defaultEnd ? coverageStart : clampedStart;
 
       setAvailableRange({

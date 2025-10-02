@@ -89,6 +89,20 @@ export default function Methodology() {
           </div>
         </section>
 
+        <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-6">
+          <h2 className="text-xl font-semibold mb-3">Out‑of‑sample coverage</h2>
+          <p className="text-slate-300 text-sm leading-relaxed">
+            All performance shown on the site is out‑of‑sample. We compute metrics on data the model never saw during training, beginning {"2019‑02‑01"}. Daily predictions are stored before any returns are known and only then evaluated. This keeps the measurement clean and decision‑grade.
+          </p>
+        </section>
+
+        <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-6">
+          <h2 className="text-xl font-semibold mb-3">Setting expectations</h2>
+          <p className="text-slate-300 text-sm leading-relaxed">
+            Signals are a source of alpha, not a complete portfolio. Expect drawdowns and tracking error—especially when markets regime‑shift. We recommend combining signals with your own risk sizing, slippage assumptions, and hedging policy.
+          </p>
+        </section>
+
         <section className="border border-slate-800 rounded-xl p-6 bg-slate-900/60">
           <h2 className="text-xl font-semibold mb-3">Update & versioning cadence</h2>
           <p className="text-slate-300 text-sm leading-relaxed">

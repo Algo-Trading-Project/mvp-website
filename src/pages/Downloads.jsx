@@ -60,6 +60,9 @@ export default function Downloads() {
           <p className="text-slate-400">
             Preview mode • Daily files and historical examples
           </p>
+          <div className="mt-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 inline-block px-2 py-1 rounded">
+            Token filter (Free Tier: 8 tokens) — a small, representative subset for evaluation. See <Link to={createPageUrl('Data')} className="text-blue-400 hover:underline">Data Dictionary</Link> for symbol IDs.
+          </div>
         </div>
 
         {todaySignals && (

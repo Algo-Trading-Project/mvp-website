@@ -24,6 +24,7 @@ import Contact from "./Contact";
 import Signals from "./Signals";
 
 import Data from "./Data";
+import ApiDocs from "./ApiDocs";
 
 import WhatsNew from "./WhatsNew";
 
@@ -55,6 +56,7 @@ const PAGES = {
     Signals: Signals,
     
     Data: Data,
+    ApiDocs: ApiDocs,
     
     WhatsNew: WhatsNew,
     
@@ -109,6 +111,7 @@ function PagesContent() {
                 <Route path="/Signals" element={<Signals />} />
                 
                 <Route path="/Data" element={<Data />} />
+                <Route path="/ApiDocs" element={<ApiDocs />} />
                 
                 <Route path="/WhatsNew" element={<WhatsNew />} />
                 

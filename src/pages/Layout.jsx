@@ -158,6 +158,7 @@ export default function Layout({ children, currentPageName }) {
     ];
     const resourceItems = [
       { label: "Docs", href: "Docs", icon: FileText },
+      { label: "API Docs", href: "ApiDocs", icon: FileText },
       { label: "Methodology", href: "Methodology", icon: BookOpen },
       { label: "Data Dictionary", href: "Data", icon: Database },
       { label: "About", href: "About", icon: Users },

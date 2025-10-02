@@ -2,14 +2,16 @@ import React from "react";
 // Note: This component is intended to be embedded inside Dashboard.jsx.
 // Do not wrap with Layout to avoid duplicate headers.
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
-import { backtestEquityCurvePlot, backtestRollingAlphaPlot, backtestBootstrapRobustnessPlot } from "@/api/functions";
+import { backtestEquityCurvePlot, backtestRollingAlphaPlot, backtestBootstrapRobustnessPlot, predictionsCoverage } from "@/api/functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
 
 export default function Backtest() {
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [dateRange, setDateRange] = React.useState({ start: "2019-02-01", end: todayIso });
+  const [dateRange, setDateRange] = React.useState({ start: "2019-01-01", end: todayIso });
+  const [coverage, setCoverage] = React.useState(null);
+  const [initialized, setInitialized] = React.useState(false);
 
   const [equityHtml, setEquityHtml] = React.useState(null);
   const [equityLoading, setEquityLoading] = React.useState(true);
@@ -27,6 +29,26 @@ export default function Backtest() {
   const [bootstrapLoading, setBootstrapLoading] = React.useState(true);
   const [bootstrapError, setBootstrapError] = React.useState(null);
 
+  // Initialize default range to 2019-01-01 -> latest predictions date
+  React.useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      try {
+        const info = await predictionsCoverage({ monthsBack: 240 });
+        if (cancelled) return;
+        setCoverage(info || null);
+        const latest = info?.latest_date || info?.max_date || todayIso;
+        const min = info?.min_date || '2019-01-01';
+        const start = ('2019-01-01' < min) ? min : '2019-01-01';
+        setDateRange({ start, end: latest });
+      } finally {
+        if (!cancelled) setInitialized(true);
+      }
+    };
+    init();
+    return () => { cancelled = true; };
+  }, [todayIso]);
+
   React.useEffect(() => {
     const load = async () => {
       setEquityLoading(true); setEquityError(null);
@@ -38,8 +60,8 @@ export default function Backtest() {
       } catch (e) { setEquityError(e?.message || 'Unable to load equity curve'); setEquityHtml(null); }
       finally { setEquityLoading(false); }
     };
-    load();
-  }, [dateRange.start, dateRange.end]);
+    if (initialized) load();
+  }, [dateRange.start, dateRange.end, initialized]);
 
   React.useEffect(() => {
     const load = async () => {
@@ -51,8 +73,8 @@ export default function Backtest() {
       } catch (e) { setAbError(e?.message || 'Unable to load alpha/beta'); setAlphaHtml(null); setBetaHtml(null); }
       finally { setAbLoading(false); }
     };
-    load();
-  }, [dateRange.start, dateRange.end]);
+    if (initialized) load();
+  }, [dateRange.start, dateRange.end, initialized]);
 
   // Removed OOS plots from Backtest per request
 
@@ -66,8 +88,8 @@ export default function Backtest() {
       } catch (e) { setBootstrapError(e?.message || 'Unable to load bootstrap plot'); setBootstrapHtml(null); }
       finally { setBootstrapLoading(false); }
     };
-    load();
-  }, [dateRange.start, dateRange.end]);
+    if (initialized) load();
+  }, [dateRange.start, dateRange.end, initialized]);
 
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
