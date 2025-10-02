@@ -431,7 +431,6 @@ export default function DashboardOOSSection() {
             description="30‑day average of daily cross‑sectional IC (per‑day rank correlation across assets). Not a pooled 30‑day correlation." />
           <span>Rolling IC (30d)</span>
         </h4>
-        {badgesLoading ? <BadgeSkeleton /> : (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
@@ -462,7 +461,6 @@ export default function DashboardOOSSection() {
               </div>
           </div>
         </div>
-        )}
       </div>
 
       {/* Decile spread */}
@@ -473,7 +471,6 @@ export default function DashboardOOSSection() {
             description="30‑day average of daily cross‑sectional top‑minus‑bottom decile performance. Higher suggests more tradable signal." />
           <span>Decile Spread (30d)</span>
         </h4>
-        {badgesLoading ? <BadgeSkeleton /> : (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
@@ -504,7 +501,6 @@ export default function DashboardOOSSection() {
             </div>
           </div>
         </div>
-        )}
       </div>
     </div>
   );
