@@ -2,7 +2,7 @@ import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 
-type RpcRow = { date: string; rate: number | null };
+type Row = { date: string; rate: number | null };
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,8 +15,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const start: string | undefined = body?.start;
     const end: string | undefined = body?.end;
-    const windowSize: number = Number(body?.window ?? 30);
-    const width = Number(body?.width ?? 980);
+    const windowSize: number = Number(body?.window ?? 30); // Kept for compatibility; data is precomputed at 30d
     const height = Number(body?.height ?? 360);
 
     if (!start || !end) {
@@ -25,30 +24,45 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Use RPC defined in migrations for efficiency
-    const { data, error } = await supabase.rpc('rpc_rolling_hit_rate', {
-      start_date: start,
-      end_date: end,
-      window: windowSize,
-    });
+    // Directly query precomputed rolling 30d hit rate; page through results
+    const pageSize = 1000;
+    let fromIdx = 0;
+    const tbl: Array<Record<string, unknown>> = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('cross_sectional_metrics_1d')
+        .select('date, rolling_30d_hit_rate')
+        .gte('date', start)
+        .lte('date', end)
+        .order('date', { ascending: true })
+        .range(fromIdx, fromIdx + pageSize - 1);
+      if (error) throw error;
+      if (data && data.length) tbl.push(...data as Array<Record<string, unknown>>);
+      if (!data || data.length < pageSize) break;
+      fromIdx += pageSize;
+    }
 
-    if (error) throw error;
+    const coerceNumber = (v: unknown): number | null => {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+      if (typeof v === 'string') {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    };
 
-    const rows: RpcRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
-      date: String(r.date ?? ''),
-      rate:
-        typeof r.rate === 'number'
-          ? (Number.isFinite(r.rate) ? (r.rate as number) : null)
-          : typeof r.rate === 'string'
-          ? (() => {
-              const num = Number(r.rate);
-              return Number.isFinite(num) ? num : null;
-            })()
-          : null,
-    })).filter((r) => r.date);
+    const rows: Row[] = (tbl ?? [])
+      .map((r: Record<string, unknown>) => ({
+        date: String(r.date ?? '').slice(0, 10),
+        rate: coerceNumber(r['rolling_30d_hit_rate']),
+      }))
+      .filter((r) => r.date);
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.rate === 'number' ? r.rate : null));
+
+    const axisStart = rows.length ? rows[0].date : String(start);
+    const axisEnd = rows.length ? rows[rows.length - 1].date : String(end);
 
     const html = `<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -60,7 +74,7 @@ const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter
 const layout = {
   paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   yaxis: { tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [0, 1] },
-  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
+  xaxis: { type: 'date', range: ['${axisStart}', '${axisEnd}'], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
   dragmode: 'zoom', autosize: true, height: ${height}
 };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false };

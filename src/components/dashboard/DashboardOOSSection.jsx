@@ -406,9 +406,16 @@ export default function DashboardOOSSection() {
     </div>
   );
 
-  // Tighter rolling badges: value + deltas INSIDE the badge, titles centered above; reduced padding
+  // Tighter rolling badges with loading skeleton on date-range changes
   const rollingBadges = (
     <div className="grid gap-6 md:grid-cols-2 mb-4">
+      {badgesLoading ? (
+        <>
+          <BadgeSkeleton />
+          <BadgeSkeleton />
+        </>
+      ) : (
+        <>
       {/* Rolling IC */}
       <div className="text-center">
         <h4 className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
@@ -488,6 +495,8 @@ export default function DashboardOOSSection() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 

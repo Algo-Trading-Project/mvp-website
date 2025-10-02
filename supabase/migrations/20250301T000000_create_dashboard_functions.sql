@@ -30,32 +30,7 @@ as $$
   order by quintile;
 $$;
 
--- Rolling hit rate: sign match between prediction and 1d forward return
-create or replace function rpc_rolling_hit_rate(
-  start_date date,
-  end_date date,
-  "window" integer default 30
-) returns table(date date, rate double precision)
-language sql
-stable
-as $$
-  with daily as (
-    select date,
-           avg(case when sign(y_pred) = sign(forward_returns_1) then 1 else 0 end)::double precision as daily_rate
-    from predictions
-    where date between start_date and end_date
-      and y_pred is not null and forward_returns_1 is not null
-    group by date
-  ),
-  shifted as (
-    select date, lag(daily_rate) over (order by date) as lag_rate
-    from daily
-  )
-  select date,
-         avg(lag_rate) over (order by date rows between ("window" - 1) preceding and 1 preceding) as rate
-  from shifted
-  order by date;
-$$;
+-- Removed: rpc_rolling_hit_rate (replaced by direct reads from cross_sectional_metrics_1d.rolling_30d_hit_rate)
 
 -- 4) Latest cross-sectional regression metrics snapshot
 create or replace function rpc_latest_cross_sectional_metrics()

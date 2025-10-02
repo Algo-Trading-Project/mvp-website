@@ -121,6 +121,9 @@ const functionMap = {
   icDistributionPlot: "ic-distribution-plot",
   bootstrapIcDistributionPlot: "bootstrap-ic-distribution-plot",
   predictionsCoverage: "predictions-coverage",
+  backtestEquityCurvePlot: "backtest-equity-curve-plot",
+  backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",
+  backtestBootstrapRobustnessPlot: "backtest-bootstrap-robustness-plot",
 };
 
 const functionsClient = Object.fromEntries(

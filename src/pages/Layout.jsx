@@ -154,6 +154,7 @@ export default function Layout({ children, currentPageName }) {
     const productItems = [
       { label: "Live Performance", href: "Dashboard?tab=regression", icon: BarChart3 },
       { label: "Dashboard", href: "Dashboard?tab=overview", icon: LayoutGrid },
+      { label: "Backtest", href: "Backtest", icon: BarChart3 },
       { label: "Signals", href: "Signals", icon: TrendingUp }
     ];
     const resourceItems = [

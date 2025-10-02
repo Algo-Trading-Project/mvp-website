@@ -41,6 +41,18 @@ export const rollingHitRatePlot = wrapCall(
   "Failed to load rolling hit rate plot",
   base44.functions.rollingHitRatePlot
 );
+export const backtestEquityCurvePlot = wrapCall(
+  "Failed to load backtest equity curve",
+  base44.functions.backtestEquityCurvePlot
+);
+export const backtestRollingAlphaPlot = wrapCall(
+  "Failed to load backtest rolling alpha/beta",
+  base44.functions.backtestRollingAlphaPlot
+);
+export const backtestBootstrapRobustnessPlot = wrapCall(
+  "Failed to load bootstrap robustness plot",
+  base44.functions.backtestBootstrapRobustnessPlot
+);
 export const icBySymbolPlot = wrapCall(
   "Failed to load IC by symbol plot",
   base44.functions.icBySymbolPlot
