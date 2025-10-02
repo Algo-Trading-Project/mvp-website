@@ -116,7 +116,10 @@ Deno.serve(async (req) => {
 
     const sorted = [...valid].sort((a, b) => (b.spearman_ic as number) - (a.spearman_ic as number));
     const topRows = sorted.slice(0, topN);
-    const bottomRows = [...sorted.slice(-topN)].reverse();
+    // For bottom chart, also sort greatest→least (i.e., less negative to more negative)
+    const bottomRows = [...sorted.slice(-topN)].sort(
+      (a, b) => (b.spearman_ic as number) - (a.spearman_ic as number)
+    );
 
     const makePlot = (rows: typeof symbols, title: string, color: string) => {
       const x = rows.map((r) => r.symbol);
@@ -136,7 +139,7 @@ const layout = {
   paper_bgcolor: '#0b1220',
   plot_bgcolor: '#0b1220',
   margin: { l: 48, r: 20, t: 40, b: 80 },
-  xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45 },
+  xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45, categoryorder: 'array', categoryarray: ${JSON.stringify(x)} },
   yaxis: { fixedrange:true, tickformat: '.3f', tickfont: { color: '#94a3b8' }, gridcolor: '#334155', zeroline: true, zerolinecolor: '#475569' }
 };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false};

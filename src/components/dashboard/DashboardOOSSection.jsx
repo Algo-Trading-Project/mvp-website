@@ -54,7 +54,18 @@ export default function DashboardOOSSection() {
           return null;
         }),
       ]);
-      const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
+      const toNumber = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+          const t = value.trim();
+          if (t === '') return null; // treat empty strings as missing
+          const n = Number(t);
+          return Number.isFinite(n) ? n : null;
+        }
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+      };
 
       const rows = rawRows
         .map((row) => ({
@@ -178,7 +189,7 @@ export default function DashboardOOSSection() {
       }
       return -1;
     })();
-    if (lastIdx < 0) return { d1: null, d30: null, cur: null };
+    if (lastIdx < 0) return { d1: null, d7: null, d30: null, cur: null };
     const cur = data[lastIdx][key];
 
     const pick = (offset) => {
@@ -192,6 +203,7 @@ export default function DashboardOOSSection() {
     return {
       cur,
       d1: pick(1),
+      d7: pick(7),
       d30: pick(30)
     };
   };
@@ -236,23 +248,22 @@ export default function DashboardOOSSection() {
     const positiveProp = icValues.length ? positiveMonths / icValues.length : 0;
     const icMean = mean(icValues);
     const icStd = std(icValues);
-    const avgMonthlyPreds = monthlyRows.length
-      ? monthlyRows.reduce((sum, row) => sum + (toNumber(row.n_preds) ?? 0), 0) / monthlyRows.length
-      : 0;
+    // Annualized ICIR = mean(IC)/std(IC) * sqrt(12)
+    const icirAnn = icStd ? (icMean / icStd) * Math.sqrt(12) : 0;
 
     return {
       meanIc: icMean,
       stdIc: icStd,
       positiveProp,
-      avgMonthlyPreds,
+      icirAnn,
     };
   }, [monthlyRows]);
 
   // NEW: top control bar (date pickers) - model selection removed
   const controlBar = (
-    <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-900 border border-slate-800 rounded-md p-4">
+    <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-400">From</span>
+        <label className="text-xs text-slate-400">From</label>
         <input
           type="date"
           value={dateRange.start}
@@ -260,12 +271,9 @@ export default function DashboardOOSSection() {
           max={availableRange.end || dateRange.end}
           onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
           disabled={loading}
-          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
+          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
         />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-400">To</span>
+        <label className="text-xs text-slate-400 ml-2">To</label>
         <input
           type="date"
           value={dateRange.end}
@@ -273,7 +281,7 @@ export default function DashboardOOSSection() {
           max={availableRange.end}
           onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
           disabled={loading}
-          className="bg-slate-800 border border-slate-700 px-2 py-1 rounded h-9 text-white"
+          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
         />
       </div>
     </div>
@@ -342,13 +350,13 @@ export default function DashboardOOSSection() {
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-          Avg Predictions / Month
+          ICIR (Annualized)
           <InfoTooltip
-            title="Prediction Coverage"
-            description="Average number of model predictions logged per month within the selected history."
+            title="IC Information Ratio (annualized)"
+            description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)."
           />
         </div>
-        <div className="text-xl font-bold text-white mt-1">{globalStats.avgMonthlyPreds != null ? Math.round(globalStats.avgMonthlyPreds).toLocaleString() : "—"}</div>
+        <div className="text-xl font-bold text-white mt-1">{globalStats.icirAnn != null ? globalStats.icirAnn.toFixed(2) : "—"}</div>
       </div>
     </div>
   );
@@ -356,7 +364,7 @@ export default function DashboardOOSSection() {
 
   // Tighter rolling badges: value + deltas INSIDE the badge, titles centered above; reduced padding
   const rollingBadges = (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid gap-6 md:grid-cols-2 mb-4">
       {/* Rolling IC */}
       <div className="text-center">
         <h4 className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
@@ -368,24 +376,31 @@ export default function DashboardOOSSection() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
-              <div className="text-2xl font-bold text-white">{icDeltas.cur !== null ? icDeltas.cur.toFixed(4) : "—"}</div>
+              <div className="text-2xl font-bold text-white">{typeof icDeltas.cur === 'number' ? icDeltas.cur.toFixed(4) : "—"}</div>
             </div>
             <div className="flex flex-col gap-1">
-              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d1)}`}>
-                {icDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
-                  <ArrowUpRight className={`w-3 h-3 ${icDeltas.d1 >= 0 ? "" : "hidden"}`} />
-                  <ArrowDownRight className={`w-3 h-3 ${icDeltas.d1 < 0 ? "" : "hidden"}`} />
-                  <span className="font-medium">1d: {formatDelta(icDeltas.d1, { asPct: false, decimals: 4 })}</span>
-                </>}
+                <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d1)}`}>
+                  {icDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
+                    <ArrowUpRight className={`w-3 h-3 ${icDeltas.d1 >= 0 ? "" : "hidden"}`} />
+                    <ArrowDownRight className={`w-3 h-3 ${icDeltas.d1 < 0 ? "" : "hidden"}`} />
+                    <span className="font-medium">1d: {formatDelta(icDeltas.d1, { asPct: false, decimals: 4 })}</span>
+                  </>}
+                </div>
+                <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d7)}`}>
+                  {icDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                    <ArrowUpRight className={`w-3 h-3 ${icDeltas.d7 >= 0 ? "" : "hidden"}`} />
+                    <ArrowDownRight className={`w-3 h-3 ${icDeltas.d7 < 0 ? "" : "hidden"}`} />
+                    <span className="font-medium">7d: {formatDelta(icDeltas.d7, { asPct: false, decimals: 4 })}</span>
+                  </>}
+                </div>
+                <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d30)}`}>
+                  {icDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
+                    <ArrowUpRight className={`w-3 h-3 ${icDeltas.d30 >= 0 ? "" : "hidden"}`} />
+                    <ArrowDownRight className={`w-3 h-3 ${icDeltas.d30 < 0 ? "" : "hidden"}`} />
+                    <span className="font-medium">30d: {formatDelta(icDeltas.d30, { asPct: false, decimals: 4 })}</span>
+                  </>}
+                </div>
               </div>
-              <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d30)}`}>
-                {icDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
-                  <ArrowUpRight className={`w-3 h-3 ${icDeltas.d30 >= 0 ? "" : "hidden"}`} />
-                  <ArrowDownRight className={`w-3 h-3 ${icDeltas.d30 < 0 ? "" : "hidden"}`} />
-                  <span className="font-medium">30d: {formatDelta(icDeltas.d30, { asPct: false, decimals: 4 })}</span>
-                </>}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -401,9 +416,7 @@ export default function DashboardOOSSection() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
             <div className="min-w-[88px]">
-              <div className="text-2xl font-bold text-white">
-                {spreadDeltas.cur !== null ? `${(spreadDeltas.cur * 100).toFixed(2)}%` : "—"}
-              </div>
+              <div className="text-2xl font-bold text-white">{typeof spreadDeltas.cur === 'number' ? `${(spreadDeltas.cur * 100).toFixed(2)}%` : "—"}</div>
             </div>
             <div className="flex flex-col gap-1">
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d1)}`}>
@@ -411,6 +424,13 @@ export default function DashboardOOSSection() {
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(spreadDeltas.d1, { asPct: true, decimals: 2 })}</span>
+                </>}
+              </div>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d7)}`}>
+                {spreadDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                  <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d7 >= 0 ? "" : "hidden"}`} />
+                  <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d7 < 0 ? "" : "hidden"}`} />
+                  <span className="font-medium">7d: {formatDelta(spreadDeltas.d7, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d30)}`}>
