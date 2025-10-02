@@ -219,6 +219,9 @@ export default function DashboardOOSSection() {
     return allRows.filter((d) => d.date >= dateRange.start && d.date <= dateRange.end);
   }, [allRows, dateRange]);
 
+  // Prepare full series once; delta computation will respect the date pickers
+  // by anchoring on the last point ≤ 'To' and only comparing to points within
+  // the selected range.
   const series = React.useMemo(() => {
     return filtered.map((r) => ({
       date: r.date,
@@ -228,34 +231,28 @@ export default function DashboardOOSSection() {
   }, [filtered]);
 
   // Helper: compute deltas vs N days ago using series index offsets
+  // Simple index-based deltas within the filtered series
   const getDeltas = (data, key) => {
-    const lastIdx = (() => {
-      for (let i = data.length - 1; i >= 0; i--) {
-        if (typeof data[i]?.[key] === "number" && !Number.isNaN(data[i][key])) return i;
-      }
-      return -1;
-    })();
-    if (lastIdx < 0) return { d1: null, d7: null, d30: null, cur: null };
+    let lastIdx = -1;
+    for (let i = data.length - 1; i >= 0; i--) {
+      const v = data[i]?.[key];
+      if (typeof v === 'number' && !Number.isNaN(v)) { lastIdx = i; break; }
+    }
+    if (lastIdx < 0) return { cur: null, d1: null, d7: null, d30: null };
     const cur = data[lastIdx][key];
-
     const pick = (offset) => {
       const j = lastIdx - offset;
-      if (j >= 0 && typeof data[j]?.[key] === "number" && !Number.isNaN(data[j][key])) {
-        return cur - data[j][key]; // subtraction, not percent return
+      if (j >= 0) {
+        const v = data[j]?.[key];
+        if (typeof v === 'number' && !Number.isNaN(v)) return cur - v;
       }
       return null;
     };
-
-    return {
-      cur,
-      d1: pick(1),
-      d7: pick(7),
-      d30: pick(30)
-    };
+    return { cur, d1: pick(1), d7: pick(7), d30: pick(30) };
   };
 
-  const icDeltas = getDeltas(series, "ic");
-  const spreadDeltas = getDeltas(series, "spread");
+  const icDeltas = React.useMemo(() => getDeltas(series, 'ic'), [series]);
+  const spreadDeltas = React.useMemo(() => getDeltas(series, 'spread'), [series]);
 
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
