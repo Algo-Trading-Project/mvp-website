@@ -46,13 +46,37 @@ Deno.serve(async (req) => {
     const retsS: number[] = [];
     for (let i = 0; i < retsAll.length; i += step) { datesS.push(datesAll[i]); retsS.push(retsAll[i]); }
 
-    // Apply fees per rebalance
+    // Apply fees per rebalance and compute equity curve
     const fee = Number(fees || 0);
-    const retsNet: number[] = retsS.map((r) => r - fee);
-
-    // Compute equity curve (treat any NaNs as 0 return)
+    const retsNet: number[] = retsS.map((r) => (Number.isFinite(r) ? (r as number) : 0) - fee);
     const equity: number[] = []; let eq = 1;
     for (const r of retsNet) { const rr = Number.isFinite(r) ? r : 0; eq *= (1 + rr); equity.push(eq); }
+
+    // Compute summary metrics for badges
+    const mean = (arr:number[]) => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : 0;
+    const std = (arr:number[]) => {
+      if (arr.length < 2) return 0;
+      const m = mean(arr);
+      const v = arr.reduce((s,x)=> s + (x-m)*(x-m), 0) / (arr.length - 1);
+      return Math.sqrt(v);
+    };
+    const periodsPerYear = Math.max(1, Math.round(365 / (ndays || 1)));
+    const totalReturn = equity.length ? (equity[equity.length-1] - 1) : 0;
+    // Drawdowns
+    let peak = -Infinity; const dds:number[] = [];
+    for (const e of equity) { peak = Math.max(peak, e); dds.push(e/peak - 1); }
+    const maxDrawdown = dds.length ? Math.min(...dds) : 0; // negative value
+    const avgDrawdown = (()=>{ const neg = dds.filter((x)=> x < 0); return neg.length ? (neg.reduce((a,b)=>a+b,0)/neg.length) : 0;})();
+    // CAGR
+    const years = Math.max(1e-9, (datesS.length * ndays) / 365);
+    const cagr = years > 0 && equity.length ? Math.pow(equity[equity.length-1], 1/years) - 1 : 0;
+    // Ratios
+    const m = mean(retsNet);
+    const s = std(retsNet);
+    const sharpe = s ? (m / s) * Math.sqrt(periodsPerYear) : 0;
+    const downside = (()=>{ const neg = retsNet.filter((x)=> x < 0); if (!neg.length) return 0; const msq = mean(neg.map((x)=> x*x)); return Math.sqrt(msq); })();
+    const sortino = downside ? (m / downside) * Math.sqrt(periodsPerYear) : 0;
+    const calmar = maxDrawdown ? (cagr / Math.abs(maxDrawdown)) : 0;
 
     // BTC comparison using predictions table
     fromIdx = 0; const btc: any[] = [];
@@ -88,6 +112,19 @@ Deno.serve(async (req) => {
     for (let i = 0; i < btcDates.length; i += step) { btcDatesS.push(btcDates[i]); btcRetS.push(btcRet[i]); }
     const btcEquity: number[] = []; let beq = 1; for (const r of btcRetS) { beq *= (1 + (typeof r === 'number' ? r : 0)); btcEquity.push(beq); }
 
+    // BTC metrics (no fees applied)
+    const btcTotalReturn = btcEquity.length ? (btcEquity[btcEquity.length-1] - 1) : 0;
+    let btcPeak = -Infinity; const btcDDs:number[] = []; for (const e of btcEquity){ btcPeak=Math.max(btcPeak,e); btcDDs.push(e/btcPeak - 1);} 
+    const btcMaxDrawdown = btcDDs.length ? Math.min(...btcDDs) : 0;
+    const btcAvgDrawdown = (()=>{ const neg=btcDDs.filter(x=>x<0); return neg.length? (neg.reduce((a,b)=>a+b,0)/neg.length) : 0; })();
+    const btcYears = Math.max(1e-9, (btcDatesS.length * ndays) / 365);
+    const btcCagr = btcYears > 0 && btcEquity.length ? Math.pow(btcEquity[btcEquity.length-1], 1/btcYears) - 1 : 0;
+    const bm = mean(btcRetS); const bs = std(btcRetS);
+    const btcSharpe = bs ? (bm/bs) * Math.sqrt(periodsPerYear) : 0;
+    const bDown = (()=>{ const neg=btcRetS.filter(x=>x<0); if (!neg.length) return 0; const msq=mean(neg.map(x=>x*x)); return Math.sqrt(msq); })();
+    const btcSortino = bDown ? (bm/bDown) * Math.sqrt(periodsPerYear) : 0;
+    const btcCalmar = btcMaxDrawdown ? (btcCagr / Math.abs(btcMaxDrawdown)) : 0;
+
     const axisStart = datesS.length ? datesS[0] : String(start);
     const axisEnd = datesS.length ? datesS[datesS.length-1] : String(end);
 
@@ -103,8 +140,8 @@ const data = [
   { x: x2, y: y2, type: 'scatter', mode: 'lines', name: 'BTC Equity Curve', line: { color: '#ef4444', width: 2 }, hovertemplate: '%{x}<br>%{y:.2f}<extra></extra>' }
 ];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  xaxis: { type: 'date', range: ['${axisStart}', '${axisEnd}'], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
-  yaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+  xaxis: { title: 'Date', type: 'date', range: ['${axisStart}', '${axisEnd}'], tickfont: { color: '#94a3b8' }, titlefont:{color:'#cbd5e1'}, gridcolor: '#334155' },
+  yaxis: { title:'Equity', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, titlefont:{color:'#cbd5e1'} },
   shapes: [{ type: 'line', x0: '${axisStart}', x1: '${axisEnd}', y0: 1, y1: 1, line: { color: '#ef4444', width: 1, dash: 'dot' } }],
   legend: { orientation: 'h', x: 0.02, y: 1.1, font: { color: '#cbd5e1' } },
   height: ${Number(height) || 380}
@@ -114,7 +151,11 @@ Plotly.newPlot('chart', data, layout, config);
 window.addEventListener('resize', () => Plotly.Plots.resize(document.getElementById('chart')));
 </script></body></html>`;
 
-    return json({ html, points: equity.length, params: { start, end, period, fees } });
+    return json({ html, points: equity.length, params: { start, end, period, fees },
+      series: { dates: datesS, returns: retsNet, equity },
+      metrics: { total_return: totalReturn, max_drawdown: maxDrawdown, avg_drawdown: avgDrawdown, cagr, sharpe, sortino, calmar, periods_per_year: periodsPerYear },
+      btc_metrics: { total_return: btcTotalReturn, max_drawdown: btcMaxDrawdown, avg_drawdown: btcAvgDrawdown, cagr: btcCagr, sharpe: btcSharpe, sortino: btcSortino, calmar: btcCalmar }
+    });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }

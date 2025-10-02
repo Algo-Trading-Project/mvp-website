@@ -13,6 +13,7 @@ import TopSignals from "../components/dashboard/TopSignals";
 
 // Import subpage components
 import DashboardOOSSection from "../components/dashboard/DashboardOOSSection";
+import Backtest from "./Backtest";
 
 import DashboardOverviewSkeleton from "@/components/skeletons/DashboardOverviewSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
@@ -152,7 +153,8 @@ export default function Dashboard() {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "regression", label: "Regression Model Performance" }
+    { id: "regression", label: "Regression Model Performance" },
+    { id: "backtest", label: "Backtest" },
   ];
 
   const renderContent = () => {
@@ -190,6 +192,8 @@ export default function Dashboard() {
         );
       case "regression":
         return <DashboardOOSSection />;
+      case "backtest":
+        return <Backtest />;
       default:
         return null;
     }

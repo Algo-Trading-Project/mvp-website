@@ -3,7 +3,6 @@ import Layout from "./Layout.jsx";
 import Pricing from "./Pricing";
 
 import Dashboard from "./Dashboard";
-import Backtest from "./Backtest";
 
 import Downloads from "./Downloads";
 
@@ -89,7 +88,6 @@ function PagesContent() {
                 <Route path="/Pricing" element={<Pricing />} />
                 
                 <Route path="/Dashboard" element={<Dashboard />} />
-                <Route path="/Backtest" element={<Backtest />} />
                 
                 <Route path="/Downloads" element={<Downloads />} />
                 
