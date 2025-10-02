@@ -36,11 +36,15 @@ export default function DashboardOOSSection() {
   const [icSvg, setIcSvg] = React.useState(null);
   const [icSvgLoading, setIcSvgLoading] = React.useState(true);
   const [icError, setIcError] = React.useState(null);
+  const [icSeries, setIcSeries] = React.useState([]);
+  const [icSummary, setIcSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
 
   // New state for backend-rendered Decile Spread Plotly HTML
   const [spreadHtml, setSpreadHtml] = React.useState(null);
   const [spreadLoading, setSpreadLoading] = React.useState(true);
   const [spreadError, setSpreadError] = React.useState(null);
+  const [spreadSeries, setSpreadSeries] = React.useState([]);
+  const [spreadSummary, setSpreadSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
   // New plot states
   const [quintileHtml, setQuintileHtml] = React.useState(null);
   const [quintileLoading, setQuintileLoading] = React.useState(true);
@@ -131,11 +135,15 @@ export default function DashboardOOSSection() {
       try {
         const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
         setIcSvg(data?.html || null);
+        setIcSeries(Array.isArray(data?.data) ? data.data : []);
+        if (data?.summary) setIcSummary(data.summary);
       } catch (error) {
         console.error("Failed to load rolling IC plot", error);
         const message = error?.message || "Unable to load rolling IC plot.";
         setIcError(message);
         setIcSvg(null);
+        setIcSeries([]);
+        setIcSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
         setIcSvgLoading(false);
       }
@@ -161,11 +169,15 @@ export default function DashboardOOSSection() {
       try {
         const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
         setSpreadHtml(data?.html || null);
+        setSpreadSeries(Array.isArray(data?.data) ? data.data : []);
+        if (data?.summary) setSpreadSummary(data.summary);
       } catch (error) {
         console.error("Failed to load rolling spread plot", error);
         const message = error?.message || "Unable to load rolling spread plot.";
         setSpreadError(message);
         setSpreadHtml(null);
+        setSpreadSeries([]);
+        setSpreadSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
         setSpreadLoading(false);
       }
@@ -214,45 +226,19 @@ export default function DashboardOOSSection() {
   }, [dateRange.start, dateRange.end]);
 
 
-  const filtered = React.useMemo(() => {
-    if (!allRows.length || !dateRange.start || !dateRange.end) return [];
-    return allRows.filter((d) => d.date >= dateRange.start && d.date <= dateRange.end);
-  }, [allRows, dateRange]);
-
-  // Prepare full series once; delta computation will respect the date pickers
-  // by anchoring on the last point ≤ 'To' and only comparing to points within
-  // the selected range.
-  const series = React.useMemo(() => {
-    return filtered.map((r) => ({
-      date: r.date,
-      ic: typeof r["rolling_30d_avg_ic"] === "number" ? Number(r["rolling_30d_avg_ic"].toFixed(4)) : null,
-      spread: typeof r["rolling_30d_avg_top_bottom_decile_spread"] === "number" ? Number(r["rolling_30d_avg_top_bottom_decile_spread"].toFixed(4)) : null
-    }));
-  }, [filtered]);
-
-  // Helper: compute deltas vs N days ago using series index offsets
-  // Simple index-based deltas within the filtered series
-  const getDeltas = (data, key) => {
-    let lastIdx = -1;
-    for (let i = data.length - 1; i >= 0; i--) {
-      const v = data[i]?.[key];
-      if (typeof v === 'number' && !Number.isNaN(v)) { lastIdx = i; break; }
-    }
-    if (lastIdx < 0) return { cur: null, d1: null, d7: null, d30: null };
-    const cur = data[lastIdx][key];
-    const pick = (offset) => {
-      const j = lastIdx - offset;
-      if (j >= 0) {
-        const v = data[j]?.[key];
-        if (typeof v === 'number' && !Number.isNaN(v)) return cur - v;
-      }
-      return null;
-    };
-    return { cur, d1: pick(1), d7: pick(7), d30: pick(30) };
-  };
-
-  const icDeltas = React.useMemo(() => getDeltas(series, 'ic'), [series]);
-  const spreadDeltas = React.useMemo(() => getDeltas(series, 'spread'), [series]);
+  // Summaries from backend functions (already computed within filtered range)
+  const icDeltas = React.useMemo(() => ({
+    cur: typeof icSummary?.last === 'number' ? Number(icSummary.last) : null,
+    d1: typeof icSummary?.deltas?.d1 === 'number' ? Number(icSummary.deltas.d1) : null,
+    d7: typeof icSummary?.deltas?.d7 === 'number' ? Number(icSummary.deltas.d7) : null,
+    d30: typeof icSummary?.deltas?.d30 === 'number' ? Number(icSummary.deltas.d30) : null,
+  }), [icSummary]);
+  const spreadDeltas = React.useMemo(() => ({
+    cur: typeof spreadSummary?.last === 'number' ? Number(spreadSummary.last) : null,
+    d1: typeof spreadSummary?.deltas?.d1 === 'number' ? Number(spreadSummary.deltas.d1) : null,
+    d7: typeof spreadSummary?.deltas?.d7 === 'number' ? Number(spreadSummary.deltas.d7) : null,
+    d30: typeof spreadSummary?.deltas?.d30 === 'number' ? Number(spreadSummary.deltas.d30) : null,
+  }), [spreadSummary]);
 
   const formatDelta = (val, { asPct = false, decimals = 4 }) => {
     if (val === null || typeof val !== "number" || Number.isNaN(val)) return "—";
