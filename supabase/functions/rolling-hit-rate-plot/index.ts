@@ -83,7 +83,30 @@ Plotly.newPlot(el, data, layout, config);
 window.addEventListener('resize', () => Plotly.Plots.resize(el));
 </script></body></html>`;
 
-    return json({ html, points: rows.length, window: windowSize });
+    // Build summary deltas similar to other rolling plots
+    const lastIndex = (() => {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (typeof rows[i]?.rate === 'number') return i;
+      }
+      return -1;
+    })();
+    const current = lastIndex >= 0 ? (rows[lastIndex].rate as number) : null;
+    const currentDate = lastIndex >= 0 ? rows[lastIndex].date : null;
+    const pickDelta = (offset: number) => {
+      if (lastIndex < 0) return null;
+      const j = lastIndex - offset;
+      if (j >= 0 && typeof rows[j]?.rate === 'number' && typeof current === 'number') {
+        return current - (rows[j].rate as number);
+      }
+      return null;
+    };
+    const summary = {
+      last: current,
+      last_date: currentDate,
+      deltas: { d1: pickDelta(1), d7: pickDelta(7), d30: pickDelta(30) }
+    } as const;
+
+    return json({ html, points: rows.length, window: windowSize, data: rows, summary });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }

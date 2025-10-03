@@ -7,7 +7,6 @@ import { Calendar, Download, Search, Filter, Lock, ChevronDown, X } from "lucide
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { symbol_ids } from "@/api/entities";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -117,7 +116,7 @@ export default function SignalsHub() {
   // Load symbol list, lexicographic
   React.useEffect(() => {
     const loadTokens = async () => {
-      const rows = await symbol_ids.filter({}, "symbol_id", 10000);
+      const rows = await predictions.filter({}, "symbol_id", 10000);
       const unique = Array.from(new Set(rows.map(r => r.symbol_id.split("_")[0])));
       unique.sort((a, b) => a.localeCompare(b));
       setAllTokens(unique);

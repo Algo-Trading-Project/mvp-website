@@ -240,8 +240,8 @@ export default function Backtest() {
   };
 
   return (
-      <div className="min-h-screen py-8 bg-slate-950 text-white">
-        <div className="max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
+      <div className="min-h-screen py-6 bg-slate-950 text-white">
+        <div className="max-w-[1700px] mx-auto px-2 sm:px-3 lg:px-4">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Backtest</h1>
             <p className="text-slate-400 mt-2">Run simple top-bottom decile strategy backtests and view OOS metrics.</p>

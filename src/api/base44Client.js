@@ -122,6 +122,7 @@ const functionMap = {
   bootstrapIcDistributionPlot: "bootstrap-ic-distribution-plot",
   spreadDistributionPlot: "spread-distribution-plot",
   bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
+  advByDecilePlot: "adv-by-decile-plot",
   predictionsCoverage: "predictions-coverage",
   backtestEquityCurvePlot: "backtest-equity-curve-plot",
   backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",
@@ -133,11 +134,8 @@ const functionsClient = Object.fromEntries(
 );
 
 const entityTableMap = {
-  EmailCapture: "email_captures",
-  ContactSubmission: "contact_submissions",
   predictions: "predictions",
-  spot_ohlcv_1d: "spot_ohlcv_1d",
-  symbol_ids: "symbol_ids",
+  ohlcv_1d: "ohlcv_1d",
   cross_sectional_metrics_1d: "cross_sectional_metrics_1d",
   monthly_performance_metrics: "monthly_performance_metrics",
 };

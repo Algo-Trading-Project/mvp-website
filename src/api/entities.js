@@ -33,11 +33,8 @@ const wrapAuth = (auth) => ({
   logout: (options) => wrapCall("Failed to logout", () => auth.logout(options ?? {})),
 });
 
-export const EmailCapture = wrapEntity("EmailCapture", base44.entities.EmailCapture);
-export const ContactSubmission = wrapEntity("ContactSubmission", base44.entities.ContactSubmission);
 export const predictions = wrapEntity("predictions", base44.entities.predictions);
-export const spot_ohlcv_1d = wrapEntity("spot_ohlcv_1d", base44.entities.spot_ohlcv_1d);
-export const symbol_ids = wrapEntity("symbol_ids", base44.entities.symbol_ids);
+export const ohlcv_1d = wrapEntity("ohlcv_1d", base44.entities.ohlcv_1d);
 export const cross_sectional_metrics_1d = wrapEntity(
   "cross_sectional_metrics_1d",
   base44.entities.cross_sectional_metrics_1d

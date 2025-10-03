@@ -6,7 +6,6 @@ import Dashboard from "./Dashboard";
 
 import Downloads from "./Downloads";
 
-import SampleDay from "./SampleDay";
 
 import Docs from "./Docs";
 import Methodology from "./Methodology";
@@ -36,7 +35,6 @@ const PAGES = {
     Pricing: Pricing,
     Dashboard: Dashboard,
     Downloads: Downloads,
-    SampleDay: SampleDay,
     Docs: Docs,
     Methodology: Methodology,
     Account: Account,
@@ -71,8 +69,7 @@ function PagesContent() {
         <Layout currentPageName={currentPage}>
             <Routes>            
                 
-                    <Route path="/" element={<Home />} />
-                
+                <Route path="/" element={<Home />} />
                 
                 <Route path="/Pricing" element={<Pricing />} />
                 
@@ -80,7 +77,6 @@ function PagesContent() {
                 
                 <Route path="/Downloads" element={<Downloads />} />
                 
-                <Route path="/SampleDay" element={<SampleDay />} />
                 
                 <Route path="/Docs" element={<Docs />} />
                 <Route path="/Methodology" element={<Methodology />} />

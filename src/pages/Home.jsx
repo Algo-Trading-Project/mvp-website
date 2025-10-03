@@ -7,7 +7,6 @@ import WhyDifferentSection from "../components/landing/WhyDifferentSection";
 import HowItWorksSection from "../components/landing/HowItWorksSection";
 import CTASection from "../components/landing/CTASection";
 import ProductSection from "../components/landing/ProductSection";
-import WaitlistSection from "../components/landing/WaitlistSection";
 
 export default function Home() {
   return (
@@ -19,7 +18,6 @@ export default function Home() {
         <SocialProofSection />
         <WhyDifferentSection />
         <ProductSection />
-        <WaitlistSection />
         <HowItWorksSection />
         <CTASection />
       </main>

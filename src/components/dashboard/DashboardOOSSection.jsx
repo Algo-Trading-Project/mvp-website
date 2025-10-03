@@ -20,6 +20,7 @@ import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
 import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
+import MedianADVByDecile from "@/components/dashboard/MedianADVByDecile";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
 import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
 // removed Section + Export button + routing imports for compact headers
@@ -54,6 +55,7 @@ export default function DashboardOOSSection() {
   const [hitHtml, setHitHtml] = React.useState(null);
   const [hitLoading, setHitLoading] = React.useState(true);
   const [hitError, setHitError] = React.useState(null);
+  const [hitSummary, setHitSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
 
 
   React.useEffect(() => {
@@ -216,9 +218,11 @@ export default function DashboardOOSSection() {
       try {
         const data = await rollingHitRatePlot({ start: dateRange.start, end: dateRange.end, window: 30 });
         setHitHtml(data?.html || null);
+        if (data?.summary) setHitSummary(data.summary);
       } catch (e) {
         setHitHtml(null);
         setHitError(e?.message || 'Unable to load rolling hit rate plot');
+        setHitSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
         setHitLoading(false);
       }
@@ -393,7 +397,7 @@ export default function DashboardOOSSection() {
 
 
   // Loading skeleton for delta badges while plots update
-  const badgesLoading = icSvgLoading || spreadLoading;
+  const badgesLoading = icSvgLoading || spreadLoading || hitLoading;
   const BadgeSkeleton = () => (
     <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
       <div className="flex items-center justify-center gap-4">
@@ -407,11 +411,20 @@ export default function DashboardOOSSection() {
     </div>
   );
 
+  // Summaries from backend function for hit rate (uniform with IC & Spread)
+  const hitDeltas = React.useMemo(() => ({
+    cur: typeof hitSummary?.last === 'number' ? Number(hitSummary.last) : null,
+    d1: typeof hitSummary?.deltas?.d1 === 'number' ? Number(hitSummary.deltas.d1) : null,
+    d7: typeof hitSummary?.deltas?.d7 === 'number' ? Number(hitSummary.deltas.d7) : null,
+    d30: typeof hitSummary?.deltas?.d30 === 'number' ? Number(hitSummary.deltas.d30) : null,
+  }), [hitSummary]);
+
   // Tighter rolling badges with loading skeleton on date-range changes
   const rollingBadges = (
-    <div className="grid gap-6 md:grid-cols-2 mb-4">
+    <div className="grid gap-6 md:grid-cols-3 mb-4">
       {badgesLoading ? (
         <>
+          <BadgeSkeleton />
           <BadgeSkeleton />
           <BadgeSkeleton />
         </>
@@ -496,6 +509,47 @@ export default function DashboardOOSSection() {
           </div>
         </div>
       </div>
+
+      {/* Hit rate */}
+      <div className="text-center">
+        <h4 className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
+          <InfoTooltip
+            title="Rolling Hit Rate (30d avg)"
+            description="Share of days where prediction signs matched next‑day returns, averaged over the past 30 days."
+          />
+          <span>Hit Rate (30d)</span>
+        </h4>
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
+          <div className="flex items-center justify-center gap-4">
+            <div className="min-w-[88px]">
+              <div className="text-2xl font-bold text-white">{typeof hitDeltas.cur === 'number' ? `${(hitDeltas.cur * 100).toFixed(2)}%` : "—"}</div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d1)}`}>
+                {hitDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
+                  <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d1 >= 0 ? "" : "hidden"}`} />
+                  <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d1 < 0 ? "" : "hidden"}`} />
+                  <span className="font-medium">1d: {formatDelta(hitDeltas.d1, { asPct: true, decimals: 2 })}</span>
+                </>}
+              </div>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d7)}`}>
+                {hitDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                  <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d7 >= 0 ? "" : "hidden"}`} />
+                  <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d7 < 0 ? "" : "hidden"}`} />
+                  <span className="font-medium">7d: {formatDelta(hitDeltas.d7, { asPct: true, decimals: 2 })}</span>
+                </>}
+              </div>
+              <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d30)}`}>
+                {hitDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
+                  <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d30 >= 0 ? "" : "hidden"}`} />
+                  <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d30 < 0 ? "" : "hidden"}`} />
+                  <span className="font-medium">30d: {formatDelta(hitDeltas.d30, { asPct: true, decimals: 2 })}</span>
+                </>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
         </>
       )}
     </div>
@@ -508,7 +562,7 @@ export default function DashboardOOSSection() {
 
   return (
     <div className="min-h-screen py-8 bg-slate-950">
-      <div className="max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
+      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Title with clearer spacing */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Regression <span className="gradient-text">Performance</span></h1>
@@ -531,7 +585,7 @@ export default function DashboardOOSSection() {
 
         {/* Charts */}
         <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6 mt-8">
+          <div className="grid md:grid-cols-3 gap-6 mt-8">
             {/* Rolling IC chart with compact title inside card */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
@@ -567,12 +621,34 @@ export default function DashboardOOSSection() {
                 )}
               </div>
             </div>
+
+            {/* Rolling hit rate chart in same row */}
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  <InfoTooltip
+                    title="Rolling Hit Rate"
+                    description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)."
+                  />
+                  Rolling 30‑Day Hit Rate
+                </span>
+              </div>
+              {hitLoading ? (
+                <ChartCardSkeleton height={360} />
+              ) : hitError ? (
+                <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{hitError}</div>
+              ) : hitHtml ? (
+                <iframe srcDoc={hitHtml} title="Rolling Hit Rate" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+              ) : (
+                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+              )}
+            </div>
           </div>
 
           {/* New: IC by Symbol -- Now uses dateRange */}
           <ICBySymbol dateRange={dateRange} />
 
-          {/* New plots: Quintile Returns + Rolling Hit Rate */}
+          {/* New plots: Quintile Returns + Capacity proxy */}
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
@@ -594,27 +670,7 @@ export default function DashboardOOSSection() {
                 <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
             </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
-                  <InfoTooltip
-                    title="Rolling Hit Rate"
-                    description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)."
-                  />
-                  Rolling 30‑Day Hit Rate
-                </span>
-              </div>
-              {hitLoading ? (
-                <ChartCardSkeleton height={360} />
-              ) : hitError ? (
-                <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{hitError}</div>
-              ) : hitHtml ? (
-                <iframe srcDoc={hitHtml} title="Rolling Hit Rate" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
-              ) : (
-                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
-              )}
-            </div>
+            <MedianADVByDecile dateRange={dateRange} />
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">

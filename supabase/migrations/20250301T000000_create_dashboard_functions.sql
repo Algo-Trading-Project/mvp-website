@@ -79,5 +79,40 @@ where p.y_pred is not null
   and p.symbol_id is not null;
 $$;
 
--- Optional: ensure corr() works with text-typed inputs by explicit casting in case schemas drift
--- (No-op if already double precision)
+-- Median ADV 30 by prediction decile (capacity proxy)
+create or replace function rpc_adv_by_decile(
+  start_date date,
+  end_date date
+) returns table(decile int, median_adv_30 double precision)
+language sql
+stable
+as $$
+  with preds as (
+    select
+      date,
+      symbol_id,
+      ntile(10) over (partition by date order by y_pred) as cs_decile
+    from predictions
+    where date between start_date and end_date
+  ),
+  vols as (
+    select
+      date,
+      symbol_id,
+      avg(volume) over (partition by symbol_id order by date rows between 29 preceding and current row) as adv_30
+    from ohlcv_1d
+    where volume is not null
+      and date between (start_date - interval '29 days')::date and end_date
+  ),
+  joined as (
+    select p.cs_decile as decile, v.adv_30
+    from preds p
+    left join vols v on p.date = v.date and p.symbol_id = v.symbol_id
+    where v.adv_30 is not null
+  )
+  select decile,
+         percentile_cont(0.5) within group (order by adv_30) as median_adv_30
+  from joined
+  group by decile
+  order by decile;
+$$;
