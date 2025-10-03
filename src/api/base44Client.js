@@ -120,6 +120,8 @@ const functionMap = {
   icBySymbolPlot: "ic-by-symbol-plot",
   icDistributionPlot: "ic-distribution-plot",
   bootstrapIcDistributionPlot: "bootstrap-ic-distribution-plot",
+  spreadDistributionPlot: "spread-distribution-plot",
+  bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
   predictionsCoverage: "predictions-coverage",
   backtestEquityCurvePlot: "backtest-equity-curve-plot",
   backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",

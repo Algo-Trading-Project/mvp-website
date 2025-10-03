@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
     const variance = allVals.reduce((sum, val) => sum + (val - mean) ** 2, 0) / allVals.length;
     const std = Math.sqrt(variance);
     const pos = allVals.filter((v) => v > 0).length / allVals.length;
+    const icir_ann = std ? (mean / std) * Math.sqrt(365) : 0;
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -80,7 +81,7 @@ Plotly.newPlot(el, data, layout, config);
 
     return json({ 
       html, 
-      summary: { mean, std, pos }, 
+      summary: { mean, std, pos, icir_ann }, 
       bins: bins, 
       start, 
       end, 

@@ -31,35 +31,22 @@ import WhatsNew from "./WhatsNew";
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
-    
+    // Put Home first so unknown/"/" defaults to Home
+    Home: Home,
     Pricing: Pricing,
-    
     Dashboard: Dashboard,
-    
     Downloads: Downloads,
-    
     SampleDay: SampleDay,
-    
     Docs: Docs,
     Methodology: Methodology,
-    
-    Home: Home,
-    
     Account: Account,
-    
     GetStarted: GetStarted,
-    
     About: About,
-    
     Contact: Contact,
-    
     Signals: Signals,
-    
     Data: Data,
     ApiDocs: ApiDocs,
-    
     WhatsNew: WhatsNew,
-    
 }
 
 function _getCurrentPage(url) {
@@ -84,7 +71,7 @@ function PagesContent() {
         <Layout currentPageName={currentPage}>
             <Routes>            
                 
-                    <Route path="/" element={<Pricing />} />
+                    <Route path="/" element={<Home />} />
                 
                 
                 <Route path="/Pricing" element={<Pricing />} />

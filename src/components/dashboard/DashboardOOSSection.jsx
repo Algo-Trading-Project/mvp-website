@@ -18,8 +18,10 @@ import { cross_sectional_metrics_1d } from "@/api/entities";
 import { monthly_performance_metrics } from "@/api/entities";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
+import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
 import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
+import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
 // removed Section + Export button + routing imports for compact headers
 
 export default function DashboardOOSSection() {
@@ -616,8 +618,14 @@ export default function DashboardOOSSection() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <ICDistribution dateRange={dateRange} />
-            <BootstrapICDistribution dateRange={dateRange} />
+            <div className="space-y-6">
+              <ICDistribution dateRange={dateRange} />
+              <SpreadDistribution dateRange={dateRange} />
+            </div>
+            <div className="space-y-6">
+              <BootstrapICDistribution dateRange={dateRange} />
+              <BootstrapSpreadDistribution dateRange={dateRange} />
+            </div>
           </div>
         </div>
 

@@ -103,16 +103,30 @@ export default function ICDistribution({ dateRange }) {
 
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400">Mean</div>
+          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+            <InfoTooltip title="Mean IC" description="Average daily IC over the selected range. IC measures rank correlation between predictions and next‑day returns." />
+            <span>Mean</span>
+          </div>
           <div className="text-sm font-semibold">{summary.mean?.toFixed(3)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400">Std</div>
+          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+            <InfoTooltip title="IC Std Dev" description="Day‑to‑day variability of IC across the selected period (standard deviation)." />
+            <span>Std</span>
+          </div>
           <div className="text-sm font-semibold">{summary.std?.toFixed(3)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400">Positive Days %</div>
-          <div className="text-sm font-semibold">{((summary.pos || 0) * 100).toFixed(1)}%</div>
+          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+            <InfoTooltip title="ICIR (Annualized)" description="Information Coefficient Information Ratio: mean IC divided by its std, scaled by √365 to express yearly ‘efficiency’." />
+            <span>ICIR (Annualized)</span>
+          </div>
+          <div className="text-sm font-semibold">{(() => {
+            const m = Number(summary.mean);
+            const s = Number(summary.std);
+            const icir = s ? (m / s) * Math.sqrt(365) : 0;
+            return Number.isFinite(icir) ? icir.toFixed(2) : '—';
+          })()}</div>
         </div>
       </div>
 

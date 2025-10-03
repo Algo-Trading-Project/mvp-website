@@ -65,6 +65,14 @@ export const bootstrapIcDistributionPlot = wrapCall(
   "Failed to load bootstrap IC distribution plot",
   base44.functions.bootstrapIcDistributionPlot
 );
+export const spreadDistributionPlot = wrapCall(
+  "Failed to load spread distribution plot",
+  base44.functions.spreadDistributionPlot
+);
+export const bootstrapSpreadDistributionPlot = wrapCall(
+  "Failed to load bootstrap spread distribution plot",
+  base44.functions.bootstrapSpreadDistributionPlot
+);
 export const predictionsCoverage = wrapCall(
   "Failed to load predictions coverage",
   base44.functions.predictionsCoverage
