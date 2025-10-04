@@ -172,9 +172,9 @@ export default function Account() {
                 </Dialog>
               </div>
 
-              <a href={createPageUrl('Docs')} className="text-blue-400 hover:text-blue-300 text-sm">
-                View API Documentation
-              </a>
+              <Link to={createPageUrl('Contact')} className="text-blue-400 hover:text-blue-300 text-sm">
+                Request API documentation
+              </Link>
             </div>
           </div>
 

@@ -1,28 +1,22 @@
-
-
-import React, { useState, useEffect, useRef } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import PropTypes from "prop-types";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { User } from "@/api/entities";
 import {
   TrendingUp,
-  Download,
   BarChart3,
   Settings,
   Menu,
   X,
   LogOut,
-  FileText,
   LayoutGrid,
-  Home as HomeIcon,
   User as UserIcon,
   DollarSign,
-  LogIn,
   Users,
   Mail,
   BookOpen,
-  ChevronDown,
-  Database // Added for the new Data page icon
+  ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +30,8 @@ import {
 export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -92,6 +85,11 @@ export default function Layout({ children, currentPageName }) {
         {children}
       </Link>
     );
+  };
+  NavLink.propTypes = {
+    href: PropTypes.string.isRequired,
+    children: PropTypes.node,
+    className: PropTypes.string,
   };
 
   // Finalized dropdown: 
@@ -148,6 +146,16 @@ export default function Layout({ children, currentPageName }) {
       </DropdownMenu>
     );
   };
+  NavDropdown.propTypes = {
+    label: PropTypes.string.isRequired,
+    items: PropTypes.arrayOf(
+      PropTypes.shape({
+        label: PropTypes.string.isRequired,
+        href: PropTypes.string.isRequired,
+        icon: PropTypes.elementType,
+      })
+    ).isRequired,
+  };
 
   // Simplified Product menu: Dashboard, Live Performance, Signals only
   const renderNavLinks = () => {
@@ -157,10 +165,7 @@ export default function Layout({ children, currentPageName }) {
       { label: "Signals", href: "Signals", icon: TrendingUp }
     ];
     const resourceItems = [
-      { label: "Docs", href: "Docs", icon: FileText },
-      { label: "API Docs", href: "ApiDocs", icon: FileText },
       { label: "Methodology", href: "Methodology", icon: BookOpen },
-      { label: "Data Dictionary", href: "Data", icon: Database },
       { label: "About", href: "About", icon: Users },
       { label: "Contact", href: "Contact", icon: Mail }
     ];
@@ -305,10 +310,6 @@ export default function Layout({ children, currentPageName }) {
                   
                   {/* Resources group */}
                   <div className="text-xs uppercase tracking-wide text-slate-500 px-3 pt-4">Resources</div>
-                  <Link to={createPageUrl("Docs")} className="-mx-3 flex items-center space-x-3 rounded-md px-3 py-2 text-base font-semibold leading-7 text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <FileText className="w-5 h-5" />
-                    <span>Docs</span>
-                  </Link>
                   <Link to={createPageUrl("About")} className="-mx-3 flex items-center space-x-3 rounded-md px-3 py-2 text-base font-semibold leading-7 text-slate-300 hover:bg-slate-800 hover:text-white">
                     <Users className="w-5 h-5" />
                     <span>About</span>
@@ -354,7 +355,6 @@ export default function Layout({ children, currentPageName }) {
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="md:flex md:items-center md:justify-between">
             <div className="flex justify-center space-x-6 md:order-2">
-              <Link to={createPageUrl("Docs")} className="text-slate-400 hover:text-slate-300">Docs</Link>
               <Link to={createPageUrl("Pricing")} className="text-slate-400 hover:text-slate-300">Pricing</Link>
               <a href="https://github.com/quantpulse-ai" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-300">GitHub</a>
               <a href="https://discord.gg/quantpulse" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-300">Discord</a>
@@ -371,3 +371,8 @@ export default function Layout({ children, currentPageName }) {
     </div>
   );
 }
+
+Layout.propTypes = {
+  children: PropTypes.node,
+  currentPageName: PropTypes.string,
+};

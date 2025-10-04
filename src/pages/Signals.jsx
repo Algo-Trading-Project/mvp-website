@@ -7,8 +7,6 @@ import { Calendar, Download, Search, Filter, Lock, ChevronDown, X } from "lucide
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 
 function toCSV(rows) {
   const headers = ["date", "symbol", "y_pred"];
@@ -326,9 +324,9 @@ export default function SignalsHub() {
               <Lock className="w-4 h-4" />
               <span>Extended access requires Pro</span>
             </div>
-            <Link to={createPageUrl("Data")} className="text-emerald-300 hover:text-emerald-200">
-              See column dictionary →
-            </Link>
+            <span className="text-emerald-300">
+              Need a full column dictionary? Contact the team.
+            </span>
           </div>
         </div>
 

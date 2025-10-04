@@ -515,9 +515,6 @@ export default function Pricing() {
           <Link to={createPageUrl("Dashboard?tab=regression")}>
             <Button variant="outline" className="rounded-md bg-white text-slate-900 border-slate-300 hover:bg-slate-100">See live OOS dashboard</Button>
           </Link>
-          <Link to={createPageUrl("Docs")}>
-            <Button variant="outline" className="rounded-md bg-white text-slate-900 border-slate-300 hover:bg-slate-100">API docs</Button>
-          </Link>
           <Link to={createPageUrl("Contact")}>
             <Button className="bg-indigo-600 hover:bg-indigo-700 rounded-md">Contact sales</Button>
           </Link>

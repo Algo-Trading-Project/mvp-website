@@ -5,6 +5,7 @@ import {
   SUPABASE_FUNCTION_URL,
   API_DEBUG,
 } from "./config.js";
+import { createPageUrl } from "@/utils";
 import { ApiError } from "./errors.js";
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -13,7 +14,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false },
+      auth: { persistSession: true, autoRefreshToken: true },
       functions: SUPABASE_FUNCTION_URL ? { url: SUPABASE_FUNCTION_URL } : undefined,
     })
   : null;
@@ -95,11 +96,38 @@ const authClient = {
     }
     return data.user ?? null;
   },
-  async loginWithRedirect() {
-    throw new ApiError("Supabase auth redirect is not implemented. Integrate Supabase Auth UI or OAuth flows as needed.");
+  async signUp({ email, password }) {
+    if (!email || !password) throw new ApiError("Email and password required for sign up");
+    const client = ensureClient();
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}${createPageUrl('AuthCallback')}`
+      : undefined;
+    const { data, error } = await client.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error) {
+      throw new ApiError(error.message || "Failed to sign up", { status: error.status, data: error });
+    }
+    return data;
   },
-  async updateMyUserData() {
-    throw new ApiError("Supabase auth profile updates are not implemented.");
+  async signIn({ email, password }) {
+    if (!email || !password) throw new ApiError("Email and password required for login");
+    const client = ensureClient();
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw new ApiError(error.message || "Failed to login", { status: error.status, data: error });
+    }
+    return data;
+  },
+  async updateMyUserData(updates) {
+    const client = ensureClient();
+    const { data, error } = await client.auth.updateUser({ data: updates });
+    if (error) {
+      throw new ApiError(error.message || "Failed to update user", { status: error.status, data: error });
+    }
+    return data;
   },
   async logout() {
     const client = ensureClient();

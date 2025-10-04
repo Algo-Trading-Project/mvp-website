@@ -105,12 +105,6 @@ export default function HeroSection() {
             >
               Download yesterday’s free sample CSV
             </a>
-            <span className="hidden sm:inline text-slate-600">|</span>
-            <Link to={createPageUrl("Docs#quickstart")}
-              className="text-sm text-slate-300 hover:text-white underline underline-offset-4"
-            >
-              Jump to API quickstart
-            </Link>
           </div>
 
           {/* ICIR Highlight Strip */}

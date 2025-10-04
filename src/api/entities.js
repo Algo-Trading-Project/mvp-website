@@ -26,8 +26,10 @@ const wrapEntity = (label, entity) => ({
 
 const wrapAuth = (auth) => ({
   me: (options) => wrapCall("Failed to fetch current user", () => auth.me(options ?? {})),
-  loginWithRedirect: (options) =>
-    wrapCall("Failed to initiate login", () => auth.loginWithRedirect(options ?? {})),
+  signUp: (payload, options) =>
+    wrapCall("Failed to sign up", () => auth.signUp(payload, options ?? {})),
+  signIn: (payload, options) =>
+    wrapCall("Failed to login", () => auth.signIn(payload, options ?? {})),
   updateMyUserData: (updates, options) =>
     wrapCall("Failed to update user", () => auth.updateMyUserData(updates, options ?? {})),
   logout: (options) => wrapCall("Failed to logout", () => auth.logout(options ?? {})),

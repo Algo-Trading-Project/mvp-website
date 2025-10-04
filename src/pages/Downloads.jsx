@@ -1,11 +1,8 @@
 
 import React, { useEffect, useState } from "react";
-import { createPageUrl } from "@/utils";
 import { Download as DownloadIcon, FileText, Database, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "react-router-dom";
 import LoadingOverlay from "@/components/skeletons/LoadingOverlay";
 
 export default function Downloads() {
@@ -61,7 +58,7 @@ export default function Downloads() {
             Preview mode • Daily files and historical examples
           </p>
           <div className="mt-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 inline-block px-2 py-1 rounded">
-            Token filter (Free Tier: 8 tokens) — a small, representative subset for evaluation. See <Link to={createPageUrl('Data')} className="text-blue-400 hover:underline">Data Dictionary</Link> for symbol IDs.
+            Token filter (Free Tier: 8 tokens) — a small, representative subset for evaluation. Reach out to the team for the full symbol dictionary.
           </div>
         </div>
 
