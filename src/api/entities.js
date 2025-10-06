@@ -30,6 +30,10 @@ const wrapAuth = (auth) => ({
     wrapCall("Failed to sign up", () => auth.signUp(payload, options ?? {})),
   signIn: (payload, options) =>
     wrapCall("Failed to login", () => auth.signIn(payload, options ?? {})),
+  resetPassword: (email) =>
+    wrapCall("Failed to send password reset email", () => auth.resetPassword(email)),
+  updatePassword: (password) =>
+    wrapCall("Failed to update password", () => auth.updatePassword(password)),
   updateMyUserData: (updates, options) =>
     wrapCall("Failed to update user", () => auth.updateMyUserData(updates, options ?? {})),
   logout: (options) => wrapCall("Failed to logout", () => auth.logout(options ?? {})),

@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
         date: String(r.date ?? '').slice(0, 10),
         rate: coerceNumber(r['rolling_30d_hit_rate']),
       }))
-      .filter((r) => r.date);
+      .filter((r) => r.date && r.rate !== null && r.rate !== 0);
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.rate === 'number' ? r.rate : null));

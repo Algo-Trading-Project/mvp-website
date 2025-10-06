@@ -63,12 +63,18 @@ Deno.serve(async (req) => {
     mktAligned.unshift(0); mktAligned.pop();
 
     // Rolling alpha = mean(rs) - beta * mean(rm), beta = cov(rs,rm) / var(rm)
-    const alpha: number[] = []; const beta: number[] = [];
+    const alpha: Array<number | null> = [];
+    const beta: Array<number | null> = [];
     function mean(arr:number[], s:number, e:number){ let t=0,c=0; for(let i=s;i<=e;i++){t+=arr[i];c++;} return c? t/c : 0; }
     for (let i = 0; i < dates.length; i++) {
       const s = Math.max(0, i - (Number(window) - 1));
       const e = i;
-      const n = e - s + 1; if (n < Math.min(7, Number(window))) { alpha.push(NaN); beta.push(NaN); continue; }
+      const n = e - s + 1;
+      if (n < 7) {
+        alpha.push(null);
+        beta.push(null);
+        continue;
+      }
       const ms = mean(rStrat, s, e); const mm = mean(mktAligned, s, e);
       let cov=0, varM=0; for (let k=s;k<=e;k++){ const ds=rStrat[k]-ms; const dm=mktAligned[k]-mm; cov+=ds*dm; varM+=dm*dm; }
       cov/= (n-1 || 1); varM/= (n-1 || 1);
@@ -79,10 +85,14 @@ Deno.serve(async (req) => {
     const axisStart = dates.length ? dates[0] : String(start);
     const axisEnd = dates.length ? dates[dates.length-1] : String(end);
 
+    const slicedDates = dates.slice(7);
+    const slicedAlpha = alpha.slice(7);
+    const slicedBeta = beta.slice(7);
+
     const htmlAlpha = `<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id="chart"></div><script>
-const x=${JSON.stringify(dates)}, y=${JSON.stringify(alpha)};
+const x=${JSON.stringify(slicedDates)}, y=${JSON.stringify(slicedAlpha)};
 const data=[{x,y,type:'scatter',mode:'lines',line:{color:'#22c55e',width:2},hovertemplate:'%{x}<br>%{y:.4%}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},
   yaxis:{tickformat:'.2%',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},
@@ -95,7 +105,7 @@ Plotly.newPlot('chart',data,layout,config);window.addEventListener('resize',()=>
     const htmlBeta = `<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id="chart"></div><script>
-const x=${JSON.stringify(dates)}, y=${JSON.stringify(beta)};
+const x=${JSON.stringify(slicedDates)}, y=${JSON.stringify(slicedBeta)};
 const data=[{x,y,type:'scatter',mode:'lines',line:{color:'#f59e0b',width:2},hovertemplate:'%{x}<br>%{y:.2f}<extra></extra>'}];
 const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},
   yaxis:{tickformat:'.2f',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},

@@ -33,7 +33,15 @@ export default function MedianADVByDecile({ dateRange }) {
     const load = async () => {
       setLoading(true); setError(null);
       try {
-        const res = await advByDecilePlot({ start: dateRange.start, end: dateRange.end, window: 30 }, { signal: controller.signal });
+        const payload = {
+          start: dateRange.start,
+          end: dateRange.end,
+          start_date: dateRange.start,
+          end_date: dateRange.end,
+          window: 30,
+          window_days: 30,
+        };
+        const res = await advByDecilePlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
       } catch (e) {
@@ -66,4 +74,3 @@ export default function MedianADVByDecile({ dateRange }) {
     </div>
   );
 }
-

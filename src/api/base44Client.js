@@ -102,13 +102,28 @@ const authClient = {
     const redirectTo = typeof window !== 'undefined'
       ? `${window.location.origin}${createPageUrl('AuthCallback')}`
       : undefined;
+    const defaultMetadata = {
+      subscription_tier: "free",
+      subscription_status: "active",
+      current_period_end: "9999-12-31T00:00:00Z",
+    };
     const { data, error } = await client.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: redirectTo },
+      options: {
+        emailRedirectTo: redirectTo,
+        data: defaultMetadata,
+      },
     });
     if (error) {
       throw new ApiError(error.message || "Failed to sign up", { status: error.status, data: error });
+    }
+    if (data?.user) {
+      try {
+        await client.auth.updateUser({ data: defaultMetadata });
+      } catch (updateError) {
+        if (API_DEBUG) console.warn("Failed to set default metadata", updateError);
+      }
     }
     return data;
   },
@@ -118,6 +133,29 @@ const authClient = {
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) {
       throw new ApiError(error.message || "Failed to login", { status: error.status, data: error });
+    }
+    return data;
+  },
+  async resetPassword(email) {
+    if (!email) throw new ApiError("Email required for password reset");
+    const client = ensureClient();
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}${createPageUrl('AuthCallback')}`
+      : undefined;
+    const { data, error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    if (error) {
+      throw new ApiError(error.message || "Failed to send password reset email", { status: error.status, data: error });
+    }
+    return data;
+  },
+  async updatePassword(newPassword) {
+    if (!newPassword) throw new ApiError("Password required");
+    const client = ensureClient();
+    const { data, error } = await client.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw new ApiError(error.message || "Failed to update password", { status: error.status, data: error });
     }
     return data;
   },
@@ -180,3 +218,5 @@ export const base44 = {
 };
 
 export const apiRuntimeMode = "supabase";
+
+export const getSupabaseClient = () => ensureClient();

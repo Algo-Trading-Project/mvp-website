@@ -101,15 +101,15 @@ as $$
       symbol_id,
       avg(volume) over (partition by symbol_id order by date rows between 29 preceding and current row) as adv_30
     from ohlcv_1d
-    where volume is not null
-      and date between (start_date - interval '29 days')::date and end_date
+    where 
+      date between (start_date - interval '29 days')::date and end_date
   ),
   joined as (
     select p.cs_decile as decile, v.adv_30
-    from preds p
-    left join vols v on p.date = v.date and p.symbol_id = v.symbol_id
-    where v.adv_30 is not null
+    from preds p inner join vols v 
+    on p.date = v.date and p.symbol_id = v.symbol_id
   )
+  
   select decile,
          percentile_cont(0.5) within group (order by adv_30) as median_adv_30
   from joined

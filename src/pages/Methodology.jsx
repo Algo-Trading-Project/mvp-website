@@ -53,7 +53,10 @@ export default function Methodology() {
             Quant desks need audit-ready evidence. This page explains our datasets, how we compute each metric, and where to find change logs so you can diligence the signal stack before going live.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild variant="outline" className="border-slate-700 text-slate-200">
+            <Button
+              asChild
+              className="bg-white text-slate-900 border border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+            >
               <Link to={createPageUrl("Dashboard?tab=regression")}>View live dashboard</Link>
             </Button>
           </div>
