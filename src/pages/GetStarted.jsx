@@ -5,6 +5,14 @@ import { createPageUrl } from "@/utils";
 import { LogIn, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function GetStarted() {
   const [signUpForm, setSignUpForm] = React.useState({ email: "", password: "" });
@@ -14,6 +22,10 @@ export default function GetStarted() {
   const [signUpSuccess, setSignUpSuccess] = React.useState(false);
   const [loginLoading, setLoginLoading] = React.useState(false);
   const [loginError, setLoginError] = React.useState(null);
+  const [resetEmail, setResetEmail] = React.useState("");
+  const [resetLoading, setResetLoading] = React.useState(false);
+  const [resetError, setResetError] = React.useState(null);
+  const [resetSuccess, setResetSuccess] = React.useState(false);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
@@ -41,6 +53,21 @@ export default function GetStarted() {
       setLoginError(error?.message || "Unable to login");
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetError(null);
+    setResetSuccess(false);
+    try {
+      await User.resetPassword(resetEmail);
+      setResetSuccess(true);
+    } catch (error) {
+      setResetError(error?.message || "Unable to send reset email");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -112,7 +139,7 @@ export default function GetStarted() {
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
                 <LogIn className="w-4 h-4 text-emerald-400" />
-                Already verified?
+                Login
               </div>
             <form onSubmit={handleLogin} className="space-y-4">
               <Input
@@ -148,10 +175,42 @@ export default function GetStarted() {
                 {loginLoading ? "Signing in…" : "Log in"}
               </Button>
             </form>
-              <p className="text-xs text-slate-500">
-                Forgot your password? Email us at
-                <a href="mailto:team@quantpulse.ai" className="text-blue-400 hover:underline ml-1">team@quantpulse.ai</a>. We’ll get you reset while we finish the self-service flow.
-              </p>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="text-xs text-blue-400 hover:text-blue-300">Forgot Password?</button>
+                </DialogTrigger>
+                <DialogContent className="bg-slate-900 border border-slate-800 text-white">
+                  <DialogHeader>
+                    <DialogTitle>Reset your password</DialogTitle>
+                    <DialogDescription className="text-slate-400">
+                      Enter the email address associated with your account. We’ll send you a secure link to create a new password.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handlePasswordReset} className="space-y-4">
+                    <Input
+                      type="email"
+                      required
+                      placeholder="you@firm.com"
+                      value={resetEmail}
+                      onChange={(e) => {
+                        setResetEmail(e.target.value);
+                        setResetError(null);
+                        setResetSuccess(false);
+                      }}
+                      className="bg-slate-800 border border-slate-700"
+                    />
+                    {resetError ? <div className="text-xs text-red-400">{resetError}</div> : null}
+                    {resetSuccess ? <div className="text-xs text-emerald-300">Reset link sent. Check your inbox.</div> : null}
+                    <Button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="w-full bg-blue-600 hover:bg-blue-700 rounded-md"
+                    >
+                      {resetLoading ? "Sending…" : "Send reset link"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
