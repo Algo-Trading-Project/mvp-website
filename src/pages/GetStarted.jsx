@@ -36,7 +36,12 @@ export default function GetStarted() {
       setSignUpSuccess(true);
       setSignUpForm({ email: "", password: "" });
     } catch (error) {
-      setSignUpError(error?.message || "Unable to sign up");
+      const message = error?.message || "Unable to sign up";
+      if (message.toLowerCase().includes("already") || message.toLowerCase().includes("registered")) {
+        setSignUpError("An account with this email already exists. Please log in instead.");
+      } else {
+        setSignUpError(message);
+      }
     } finally {
       setSignUpLoading(false);
     }

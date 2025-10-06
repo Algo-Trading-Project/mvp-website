@@ -19,6 +19,109 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
     })
   : null;
 
+const FUNCTION_CACHE_PREFIX = "sb-fn-cache:";
+const TABLE_CACHE_PREFIX = "sb-table-cache:";
+const functionCacheMemory = new Map();
+const tableCacheMemory = new Map();
+
+const computeFunctionCacheKey = (name, payload) => {
+  return `${name}:${stableSerialize(payload)}`;
+};
+
+const getSessionStorage = () => {
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      return window.sessionStorage;
+    }
+  } catch (err) {
+    if (API_DEBUG) console.warn("SessionStorage unavailable", err);
+  }
+  return null;
+};
+
+const stableSerialize = (value) => {
+  if (value === undefined) return "undefined";
+  const sorter = (key, val) => {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      return Object.keys(val)
+        .sort()
+        .reduce((acc, current) => {
+          acc[current] = val[current];
+          return acc;
+        }, {});
+    }
+    return val;
+  };
+  return JSON.stringify(value, sorter);
+};
+
+const cloneData = (value) => {
+  if (value === null || value === undefined) return value;
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch (err) {
+      if (API_DEBUG) console.warn("structuredClone failed", err);
+    }
+  }
+  return JSON.parse(JSON.stringify(value));
+};
+
+const getCacheEntry = (memoryMap, storagePrefix, key) => {
+  if (!key) return null;
+  if (memoryMap.has(key)) {
+    return cloneData(memoryMap.get(key));
+  }
+  const storage = getSessionStorage();
+  if (!storage) return null;
+  const stored = storage.getItem(storagePrefix + key);
+  if (!stored) return null;
+  try {
+    const parsed = JSON.parse(stored);
+    memoryMap.set(key, parsed);
+    return cloneData(parsed);
+  } catch (err) {
+    if (API_DEBUG) console.warn("Failed to parse cache entry", err);
+    storage.removeItem(storagePrefix + key);
+  }
+  return null;
+};
+
+const setCacheEntry = (memoryMap, storagePrefix, key, value) => {
+  if (!key) return;
+  const cloned = cloneData(value);
+  memoryMap.set(key, cloned);
+  const storage = getSessionStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(storagePrefix + key, JSON.stringify(cloned));
+  } catch (err) {
+    if (API_DEBUG) console.warn("Failed to persist cache entry", err);
+  }
+};
+
+const clearTableCache = (table) => {
+  const pattern = `${table}:`;
+  for (const key of Array.from(tableCacheMemory.keys())) {
+    if (key.startsWith(pattern)) {
+      tableCacheMemory.delete(key);
+    }
+  }
+  const storage = getSessionStorage();
+  if (!storage) return;
+  const removal = [];
+  for (let i = 0; i < storage.length; i++) {
+    const storageKey = storage.key(i);
+    if (storageKey && storageKey.startsWith(TABLE_CACHE_PREFIX)) {
+      const raw = storageKey.slice(TABLE_CACHE_PREFIX.length);
+      if (raw.startsWith(pattern)) {
+        removal.push(storageKey);
+      }
+    }
+  }
+  removal.forEach((key) => storage.removeItem(key));
+};
+
 const ensureClient = () => {
   if (!supabase) {
     throw new ApiError("Supabase client is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
@@ -28,8 +131,19 @@ const ensureClient = () => {
 
 const invokeFunction = (name) => async (payload = {}, { signal } = {}) => {
   const client = ensureClient();
+  const shouldCache = payload.__cache !== false;
+  const { __cache, ...requestPayload } = payload || {};
+  const cacheKey = shouldCache ? computeFunctionCacheKey(name, requestPayload) : null;
+
+  if (shouldCache) {
+    const cached = getCacheEntry(functionCacheMemory, FUNCTION_CACHE_PREFIX, cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+  }
+
   const { data, error } = await client.functions.invoke(name, {
-    body: payload,
+    body: requestPayload && Object.keys(requestPayload).length ? requestPayload : {},
     signal,
   });
   if (error) {
@@ -38,22 +152,41 @@ const invokeFunction = (name) => async (payload = {}, { signal } = {}) => {
       data: error,
     });
   }
+  if (shouldCache && data !== undefined) {
+    setCacheEntry(functionCacheMemory, FUNCTION_CACHE_PREFIX, cacheKey, data);
+  }
   return data;
 };
 
 const createTableClient = (table) => ({
   async list({ select = "*", signal } = {}) {
     const client = ensureClient();
+    const cacheKey = !signal ? `${table}:list:${select}` : null;
+    if (cacheKey) {
+      const cached = getCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey);
+      if (cached !== null) return cached;
+    }
     let query = client.from(table).select(select);
     if (signal && query.abortSignal) query = query.abortSignal(signal);
     const { data, error } = await query;
     if (error) {
       throw new ApiError(`supabase.from(${table}).select failed`, { status: error.code, data: error });
     }
-    return data ?? [];
+    const result = data ?? [];
+    if (cacheKey) {
+      setCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey, result);
+    }
+    return result;
   },
   async filter(criteria = {}, sortKey, limit, { signal } = {}) {
     const client = ensureClient();
+    const cacheKey = !signal
+      ? `${table}:filter:${stableSerialize({ criteria, sortKey, limit })}`
+      : null;
+    if (cacheKey) {
+      const cached = getCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey);
+      if (cached !== null) return cached;
+    }
     let query = client.from(table).select("*");
     Object.entries(criteria || {}).forEach(([column, value]) => {
       if (value === undefined || value === null) return;
@@ -72,7 +205,11 @@ const createTableClient = (table) => ({
     if (error) {
       throw new ApiError(`supabase.from(${table}).filter failed`, { status: error.code, data: error });
     }
-    return data ?? [];
+    const result = data ?? [];
+    if (cacheKey) {
+      setCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey, result);
+    }
+    return result;
   },
   async create(payload, { signal } = {}) {
     const client = ensureClient();
@@ -82,6 +219,7 @@ const createTableClient = (table) => ({
     if (error) {
       throw new ApiError(`supabase.from(${table}).insert failed`, { status: error.code, data: error });
     }
+    clearTableCache(table);
     return Array.isArray(data) ? data : data ? [data] : [];
   },
 });
@@ -218,5 +356,12 @@ export const base44 = {
 };
 
 export const apiRuntimeMode = "supabase";
+
+export const getCachedFunctionResult = (name, payload = {}) => {
+  const sanitized = { ...payload };
+  delete sanitized.__cache;
+  const key = computeFunctionCacheKey(name, sanitized);
+  return getCacheEntry(functionCacheMemory, FUNCTION_CACHE_PREFIX, key);
+};
 
 export const getSupabaseClient = () => ensureClient();

@@ -1,5 +1,6 @@
 import React from "react";
 import { advByDecilePlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/base44Client";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
@@ -22,8 +23,20 @@ const InfoTooltip = ({ title, description }) => {
 };
 
 export default function MedianADVByDecile({ dateRange }) {
-  const [html, setHtml] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
+  const initialCache = React.useMemo(() => {
+    if (!dateRange?.start || !dateRange?.end) return null;
+    return getCachedFunctionResult("adv-by-decile-plot", {
+      start: dateRange.start,
+      end: dateRange.end,
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      window: 30,
+      window_days: 30,
+    });
+  }, [dateRange?.start, dateRange?.end]);
+
+  const [html, setHtml] = React.useState(initialCache?.html || null);
+  const [loading, setLoading] = React.useState(initialCache ? false : true);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -31,7 +44,7 @@ export default function MedianADVByDecile({ dateRange }) {
     const controller = new AbortController();
     let cancelled = false;
     const load = async () => {
-      setLoading(true); setError(null);
+      setError(null);
       try {
         const payload = {
           start: dateRange.start,
@@ -40,7 +53,17 @@ export default function MedianADVByDecile({ dateRange }) {
           end_date: dateRange.end,
           window: 30,
           window_days: 30,
+          __cache: true,
         };
+        const cached = getCachedFunctionResult("adv-by-decile-plot", payload);
+        if (cached) {
+          if (cancelled || controller.signal.aborted) return;
+          setHtml(cached?.html || null);
+          setLoading(false);
+          return;
+        }
+        const shouldShowLoader = !html;
+        if (shouldShowLoader) setLoading(true);
         const res = await advByDecilePlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);

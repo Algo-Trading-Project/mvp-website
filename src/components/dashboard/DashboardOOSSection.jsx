@@ -20,42 +20,98 @@ import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
 import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/base44Client";
 import MedianADVByDecile from "@/components/dashboard/MedianADVByDecile";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
 import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
 // removed Section + Export button + routing imports for compact headers
 
 export default function DashboardOOSSection() {
-  // Today in YYYY-MM-DD for clamping date inputs
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const storedDefaultRange = React.useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage?.getItem("dashboard-default-range");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed?.start && parsed?.end) return parsed;
+    } catch (err) {
+      console.warn("Failed to read dashboard default range cache", err);
+    }
+    return null;
+  }, []);
+
+  const cloneSummary = (summary) => ({
+    last: summary?.last ?? null,
+    last_date: summary?.last_date ?? null,
+    deltas: {
+      d1: summary?.deltas?.d1 ?? null,
+      d7: summary?.deltas?.d7 ?? null,
+      d30: summary?.deltas?.d30 ?? null,
+    },
+  });
+
+  const initialIcCache = React.useMemo(() => {
+    if (!storedDefaultRange) return null;
+    return getCachedFunctionResult("rolling-ic-plot", {
+      start: storedDefaultRange.start,
+      end: storedDefaultRange.end,
+    });
+  }, [storedDefaultRange]);
+
+  const initialSpreadCache = React.useMemo(() => {
+    if (!storedDefaultRange) return null;
+    return getCachedFunctionResult("rolling-spread-plot", {
+      start: storedDefaultRange.start,
+      end: storedDefaultRange.end,
+    });
+  }, [storedDefaultRange]);
+
+  const initialQuintileCache = React.useMemo(() => {
+    if (!storedDefaultRange) return null;
+    return getCachedFunctionResult("quintile-returns-plot", {
+      start: storedDefaultRange.start,
+      end: storedDefaultRange.end,
+    });
+  }, [storedDefaultRange]);
+
+  const initialHitCache = React.useMemo(() => {
+    if (!storedDefaultRange) return null;
+    return getCachedFunctionResult("rolling-hit-rate-plot", {
+      start: storedDefaultRange.start,
+      end: storedDefaultRange.end,
+      window: 30,
+    });
+  }, [storedDefaultRange]);
+
   const [allRows, setAllRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState({ start: "", end: "" });
-  const [availableRange, setAvailableRange] = useState({ start: "", end: "" });
+  const [loading, setLoading] = useState(storedDefaultRange ? false : true);
+  const [dateRange, setDateRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
+  const [availableRange, setAvailableRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
 
   const [monthlyRows, setMonthlyRows] = useState([]);
 
-  // New state for backend-rendered IC Plotly HTML (interactive)
-  const [icSvg, setIcSvg] = React.useState(null);
-  const [icSvgLoading, setIcSvgLoading] = React.useState(true);
+  const [icSvg, setIcSvg] = React.useState(initialIcCache?.html || null);
+  const [icSvgLoading, setIcSvgLoading] = React.useState(initialIcCache ? false : true);
   const [icError, setIcError] = React.useState(null);
-  const [icSeries, setIcSeries] = React.useState([]);
-  const [icSummary, setIcSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
+  const [icSeries, setIcSeries] = React.useState(Array.isArray(initialIcCache?.data) ? initialIcCache.data : []);
+  const [icSummary, setIcSummary] = React.useState(cloneSummary(initialIcCache?.summary));
 
-  // New state for backend-rendered Decile Spread Plotly HTML
-  const [spreadHtml, setSpreadHtml] = React.useState(null);
-  const [spreadLoading, setSpreadLoading] = React.useState(true);
+  const [spreadHtml, setSpreadHtml] = React.useState(initialSpreadCache?.html || null);
+  const [spreadLoading, setSpreadLoading] = React.useState(initialSpreadCache ? false : true);
   const [spreadError, setSpreadError] = React.useState(null);
-  const [spreadSeries, setSpreadSeries] = React.useState([]);
-  const [spreadSummary, setSpreadSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
-  // New plot states
-  const [quintileHtml, setQuintileHtml] = React.useState(null);
-  const [quintileLoading, setQuintileLoading] = React.useState(true);
+  const [spreadSeries, setSpreadSeries] = React.useState(Array.isArray(initialSpreadCache?.data) ? initialSpreadCache.data : []);
+  const [spreadSummary, setSpreadSummary] = React.useState(cloneSummary(initialSpreadCache?.summary));
+
+  const [quintileHtml, setQuintileHtml] = React.useState(initialQuintileCache?.html || null);
+  const [quintileLoading, setQuintileLoading] = React.useState(initialQuintileCache ? false : true);
   const [quintileError, setQuintileError] = React.useState(null);
-  const [hitHtml, setHitHtml] = React.useState(null);
-  const [hitLoading, setHitLoading] = React.useState(true);
+
+  const [hitHtml, setHitHtml] = React.useState(initialHitCache?.html || null);
+  const [hitLoading, setHitLoading] = React.useState(initialHitCache ? false : true);
   const [hitError, setHitError] = React.useState(null);
-  const [hitSummary, setHitSummary] = React.useState({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
+  const [hitSummary, setHitSummary] = React.useState(cloneSummary(initialHitCache?.summary));
 
 
   React.useEffect(() => {
@@ -115,6 +171,14 @@ export default function DashboardOOSSection() {
 
       setDateRange({ start: safeStart, end: defaultEnd });
 
+      if (typeof window !== "undefined") {
+        try {
+          window.sessionStorage?.setItem("dashboard-default-range", JSON.stringify({ start: safeStart, end: defaultEnd }));
+        } catch (err) {
+          console.warn("Failed to cache dashboard default range", err);
+        }
+      }
+
       setMonthlyRows(mRows);
 
       setLoading(false);
@@ -125,7 +189,6 @@ export default function DashboardOOSSection() {
   // New useEffect for loading the Plotly HTML for IC
   React.useEffect(() => {
     const load = async () => {
-      setIcSvgLoading(true);
       setIcError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
@@ -135,6 +198,16 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
+      const cached = getCachedFunctionResult("rolling-ic-plot", { start: fallbackStart, end: endDate });
+      if (cached) {
+        setIcSvg(cached?.html || null);
+        setIcSeries(Array.isArray(cached?.data) ? cached.data : []);
+        if (cached?.summary) setIcSummary(cached.summary);
+        setIcSvgLoading(false);
+        return;
+      }
+      const shouldShowLoader = !icSvg && !icSeries.length;
+      if (shouldShowLoader) setIcSvgLoading(true);
       try {
         const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
         setIcSvg(data?.html || null);
@@ -148,7 +221,7 @@ export default function DashboardOOSSection() {
         setIcSeries([]);
         setIcSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        setIcSvgLoading(false);
+        if (shouldShowLoader) setIcSvgLoading(false);
       }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
@@ -159,7 +232,6 @@ export default function DashboardOOSSection() {
   // Load Plotly HTML for Decile Spread
   React.useEffect(() => {
     const load = async () => {
-      setSpreadLoading(true);
       setSpreadError(null);
       const endDate = dateRange.end || (allRows.length ? allRows[allRows.length - 1].date : null);
       if (!endDate) {
@@ -169,6 +241,16 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
+      const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate });
+      if (cached) {
+        setSpreadHtml(cached?.html || null);
+        setSpreadSeries(Array.isArray(cached?.data) ? cached.data : []);
+        if (cached?.summary) setSpreadSummary(cached.summary);
+        setSpreadLoading(false);
+        return;
+      }
+      const shouldShowLoader = !spreadHtml && !spreadSeries.length;
+      if (shouldShowLoader) setSpreadLoading(true);
       try {
         const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
         setSpreadHtml(data?.html || null);
@@ -182,7 +264,7 @@ export default function DashboardOOSSection() {
         setSpreadSeries([]);
         setSpreadSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        setSpreadLoading(false);
+        if (shouldShowLoader) setSpreadLoading(false);
       }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
@@ -193,17 +275,25 @@ export default function DashboardOOSSection() {
   // Load Quintile Returns plot
   React.useEffect(() => {
     const load = async () => {
-      setQuintileLoading(true);
       setQuintileError(null);
       if (!dateRange.start || !dateRange.end) { setQuintileHtml(null); setQuintileLoading(false); return; }
+      const payload = { start: dateRange.start, end: dateRange.end };
+      const cached = getCachedFunctionResult("quintile-returns-plot", payload);
+      if (cached) {
+        setQuintileHtml(cached?.html || null);
+        setQuintileLoading(false);
+        return;
+      }
+      const shouldShowLoader = !quintileHtml;
+      if (shouldShowLoader) setQuintileLoading(true);
       try {
-        const data = await quintileReturnsPlot({ start: dateRange.start, end: dateRange.end });
+        const data = await quintileReturnsPlot(payload);
         setQuintileHtml(data?.html || null);
       } catch (e) {
         setQuintileHtml(null);
         setQuintileError(e?.message || 'Unable to load quintile returns plot');
       } finally {
-        setQuintileLoading(false);
+        if (shouldShowLoader) setQuintileLoading(false);
       }
     };
     load();
@@ -212,11 +302,20 @@ export default function DashboardOOSSection() {
   // Load Rolling Hit Rate plot
   React.useEffect(() => {
     const load = async () => {
-      setHitLoading(true);
       setHitError(null);
       if (!dateRange.start || !dateRange.end) { setHitHtml(null); setHitLoading(false); return; }
+      const payload = { start: dateRange.start, end: dateRange.end, window: 30 };
+      const cached = getCachedFunctionResult("rolling-hit-rate-plot", payload);
+      if (cached) {
+        setHitHtml(cached?.html || null);
+        if (cached?.summary) setHitSummary(cached.summary);
+        setHitLoading(false);
+        return;
+      }
+      const shouldShowLoader = !hitHtml;
+      if (shouldShowLoader) setHitLoading(true);
       try {
-        const data = await rollingHitRatePlot({ start: dateRange.start, end: dateRange.end, window: 30 });
+        const data = await rollingHitRatePlot(payload);
         setHitHtml(data?.html || null);
         if (data?.summary) setHitSummary(data.summary);
       } catch (e) {
@@ -224,7 +323,7 @@ export default function DashboardOOSSection() {
         setHitError(e?.message || 'Unable to load rolling hit rate plot');
         setHitSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        setHitLoading(false);
+        if (shouldShowLoader) setHitLoading(false);
       }
     };
     load();

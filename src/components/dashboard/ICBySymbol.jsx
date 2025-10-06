@@ -1,6 +1,7 @@
 
 import React from "react";
 import { icBySymbolPlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/base44Client";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
@@ -32,9 +33,21 @@ const InfoTooltip = ({ title, description }) => {
 };
 
 export default function ICBySymbol({ dateRange }) {
-  const [htmlTop, setHtmlTop] = React.useState(null);
-  const [htmlBottom, setHtmlBottom] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
+  const initialCache = React.useMemo(() => {
+    if (!dateRange?.start || !dateRange?.end) return null;
+    return getCachedFunctionResult("ic-by-symbol-plot", {
+      start: dateRange.start,
+      end: dateRange.end,
+      minPoints: 10,
+      topN: 20,
+      width: 980,
+      height: 420,
+    });
+  }, [dateRange?.start, dateRange?.end]);
+
+  const [htmlTop, setHtmlTop] = React.useState(initialCache?.html_top || null);
+  const [htmlBottom, setHtmlBottom] = React.useState(initialCache?.html_bottom || null);
+  const [loading, setLoading] = React.useState(initialCache ? false : true);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -48,20 +61,28 @@ export default function ICBySymbol({ dateRange }) {
     const controller = new AbortController();
     let cancelled = false;
     const load = async () => {
-      setLoading(true);
       setError(null);
+      const payload = {
+        start: dateRange.start,
+        end: dateRange.end,
+        minPoints: 10,
+        topN: 20,
+        width: 980,
+        height: 420,
+        __cache: true,
+      };
+      const cached = getCachedFunctionResult("ic-by-symbol-plot", payload);
+      if (cached) {
+        if (cancelled || controller.signal.aborted) return;
+        setHtmlTop(cached?.html_top || null);
+        setHtmlBottom(cached?.html_bottom || null);
+        setLoading(false);
+        return;
+      }
+      const shouldShowLoader = !htmlTop && !htmlBottom;
+      if (shouldShowLoader) setLoading(true);
       try {
-        const data = await icBySymbolPlot(
-          {
-            start: dateRange.start,
-            end: dateRange.end,
-            minPoints: 10,
-            topN: 20,
-            width: 980,
-            height: 420,
-          },
-          { signal: controller.signal }
-        );
+        const data = await icBySymbolPlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtmlTop(data?.html_top || null);
         setHtmlBottom(data?.html_bottom || null);
@@ -78,7 +99,7 @@ export default function ICBySymbol({ dateRange }) {
         });
       } finally {
         if (cancelled || controller.signal.aborted) return;
-        setLoading(false);
+        if (shouldShowLoader) setLoading(false);
       }
     };
     load();
