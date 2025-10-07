@@ -331,6 +331,7 @@ const functionMap = {
   backtestEquityCurvePlot: "backtest-equity-curve-plot",
   backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",
   backtestBootstrapRobustnessPlot: "backtest-bootstrap-robustness-plot",
+  checkEmailAvailability: "check-email-availability",
 };
 
 const functionsClient = Object.fromEntries(

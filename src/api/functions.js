@@ -73,6 +73,10 @@ export const bootstrapSpreadDistributionPlot = wrapCall(
   "Failed to load bootstrap spread distribution plot",
   base44.functions.bootstrapSpreadDistributionPlot
 );
+export const checkEmailAvailability = wrapCall(
+  "Failed to check email availability",
+  base44.functions.checkEmailAvailability
+);
 export const advByDecilePlot = wrapCall(
   "Failed to load ADV by decile plot",
   base44.functions.advByDecilePlot

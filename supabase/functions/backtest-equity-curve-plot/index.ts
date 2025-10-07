@@ -152,7 +152,15 @@ window.addEventListener('resize', () => Plotly.Plots.resize(document.getElementB
 </script></body></html>`;
 
     return json({ html, points: equity.length, params: { start, end, period, fees },
-      series: { dates: datesS, returns: retsNet, equity },
+      series: {
+        dates: datesS,
+        returns: retsNet,
+        equity,
+        drawdowns: dds,
+        btc_dates: btcDatesS,
+        btc_equity: btcEquity,
+        btc_drawdowns: btcDDs
+      },
       metrics: { total_return: totalReturn, max_drawdown: maxDrawdown, avg_drawdown: avgDrawdown, cagr, sharpe, sortino, calmar, periods_per_year: periodsPerYear },
       btc_metrics: { total_return: btcTotalReturn, max_drawdown: btcMaxDrawdown, avg_drawdown: btcAvgDrawdown, cagr: btcCagr, sharpe: btcSharpe, sortino: btcSortino, calmar: btcCalmar }
     });

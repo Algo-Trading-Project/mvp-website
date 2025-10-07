@@ -5,7 +5,7 @@ import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { backtestEquityCurvePlot, backtestRollingAlphaPlot, backtestBootstrapRobustnessPlot, predictionsCoverage } from "@/api/functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
 
 export default function Backtest() {
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -18,6 +18,7 @@ export default function Backtest() {
   const [equityError, setEquityError] = React.useState(null);
   const [metrics, setMetrics] = React.useState(null);
   const [btcMetrics, setBtcMetrics] = React.useState(null);
+  const [equitySeries, setEquitySeries] = React.useState(null);
 
   const [alphaHtml, setAlphaHtml] = React.useState(null);
   const [betaHtml, setBetaHtml] = React.useState(null);
@@ -51,13 +52,14 @@ export default function Backtest() {
 
   React.useEffect(() => {
     const load = async () => {
-      setEquityLoading(true); setEquityError(null);
+      setEquityLoading(true); setEquityError(null); setEquitySeries(null);
       try {
         const res = await backtestEquityCurvePlot({ start: dateRange.start, end: dateRange.end, period: '1d', fees: 0.003 });
         setEquityHtml(res?.html || null);
         setMetrics(res?.metrics || null);
         setBtcMetrics(res?.btc_metrics || null);
-      } catch (e) { setEquityError(e?.message || 'Unable to load equity curve'); setEquityHtml(null); }
+        setEquitySeries(res?.series || null);
+      } catch (e) { setEquityError(e?.message || 'Unable to load equity curve'); setEquityHtml(null); setEquitySeries(null); }
       finally { setEquityLoading(false); }
     };
     if (initialized) load();
@@ -155,6 +157,66 @@ export default function Backtest() {
     { key:'sortino', label:'Sortino', fmt:'ratio', info:'Return earned for downside bumps only (penalizes losses more).' },
     { key:'calmar', label:'Calmar', fmt:'ratio', info:'Yearly growth compared to the worst drop (higher is better).' },
   ];
+
+  const underwaterSeries = React.useMemo(() => {
+    if (!equitySeries) return null;
+    const strategyDates = Array.isArray(equitySeries.dates) ? equitySeries.dates : [];
+    const strategyDrawdowns = Array.isArray(equitySeries.drawdowns) ? equitySeries.drawdowns : [];
+    const btcDates = Array.isArray(equitySeries.btc_dates) ? equitySeries.btc_dates : [];
+    const btcDrawdowns = Array.isArray(equitySeries.btc_drawdowns) ? equitySeries.btc_drawdowns : [];
+
+    const strategyMap = new Map();
+    strategyDates.forEach((date, idx) => {
+      const raw = strategyDrawdowns[idx];
+      const value = typeof raw === 'number' ? raw : Number(raw);
+      if (typeof date === 'string' && Number.isFinite(value)) {
+        strategyMap.set(date, Number(value * 100));
+      }
+    });
+
+    const btcMap = new Map();
+    btcDates.forEach((date, idx) => {
+      const raw = btcDrawdowns[idx];
+      const value = typeof raw === 'number' ? raw : Number(raw);
+      if (typeof date === 'string' && Number.isFinite(value)) {
+        btcMap.set(date, Number(value * 100));
+      }
+    });
+
+    if (!strategyMap.size && !btcMap.size) return null;
+
+    const combinedDates = Array.from(new Set([...strategyMap.keys(), ...btcMap.keys()]));
+    combinedDates.sort();
+
+    const rows = combinedDates
+      .map((date) => {
+        const strategy = strategyMap.has(date) ? strategyMap.get(date) : null;
+        const btc = btcMap.has(date) ? btcMap.get(date) : null;
+        return {
+          date,
+          strategy: Number.isFinite(strategy) ? strategy : null,
+          btc: Number.isFinite(btc) ? btc : null,
+        };
+      })
+      .filter((row) => row.strategy !== null || row.btc !== null);
+
+    return rows.length ? rows : null;
+  }, [equitySeries]);
+
+  const drawdownTickFormatter = React.useCallback((value) => {
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) return '—';
+    const digits = Math.abs(num) < 10 ? 1 : 0;
+    return `${num.toFixed(digits)}%`;
+  }, []);
+
+  const drawdownTooltipFormatter = React.useCallback((value, name) => {
+    const num = typeof value === 'number' ? value : Number(value);
+    const formatted = Number.isFinite(num) ? `${num.toFixed(2)}%` : '—';
+    return [formatted, name === 'strategy' ? 'Strategy Drawdown' : 'BTC Drawdown'];
+  }, []);
+
+  const drawdownLegendFormatter = React.useCallback((value) => (value === 'strategy' ? 'Strategy' : 'BTC'), []);
 
   const HistogramTooltip = ({ active, payload, label, title, fmt, formatX }) => {
     if (!active || !payload || !payload.length) return null;
@@ -270,7 +332,7 @@ export default function Backtest() {
                 ))}
           </div>
 
-          {/* Main section: Equity curve only */}
+          {/* Main section: Equity curve and drawdowns */}
           <div className="grid md:grid-cols-1 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
@@ -285,6 +347,80 @@ export default function Backtest() {
                 <iframe srcDoc={equityHtml} title="Backtest Equity Curve" className="w-full rounded-md" style={{ height: 400, border: 'none', background: 'transparent' }} />
               ) : (
                 <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+              )}
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  <InfoTooltip
+                    title="Underwater Curve"
+                    description="Peak-to-trough drawdowns for the strategy and BTC. Values sit at 0% at new peaks and drop negative when the equity curve is below its prior high."
+                  />
+                  Underwater (Drawdown %)
+                </span>
+              </div>
+              {equityLoading ? <ChartCardSkeleton height={320} /> : equityError ? (
+                <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{equityError}</div>
+              ) : underwaterSeries?.length ? (
+                <div style={{ width: '100%', height: 320 }}>
+                  <ResponsiveContainer>
+                    <AreaChart data={underwaterSeries} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="strategy-dd-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05} />
+                        </linearGradient>
+                        <linearGradient id="btc-dd-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#334155" vertical={false} />
+                      <XAxis dataKey="date" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis
+                        stroke="#94a3b8"
+                        tick={{ fill: '#94a3b8', fontSize: 11 }}
+                        tickFormatter={drawdownTickFormatter}
+                        domain={['dataMin', 0]}
+                      />
+                      <RTooltip
+                        contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#1e293b', color: '#e2e8f0' }}
+                        formatter={drawdownTooltipFormatter}
+                        labelFormatter={(label) => `Date: ${label}`}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        height={28}
+                        wrapperStyle={{ color: '#cbd5e1' }}
+                        formatter={drawdownLegendFormatter}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="strategy"
+                        name="Strategy"
+                        stroke="#60a5fa"
+                        strokeWidth={2}
+                        fill="url(#strategy-dd-fill)"
+                        fillOpacity={1}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="btc"
+                        name="BTC"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        fill="url(#btc-dd-fill)"
+                        fillOpacity={1}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-slate-400 text-sm p-4 text-center">No drawdown data available for the selected range.</div>
               )}
             </div>
           </div>
