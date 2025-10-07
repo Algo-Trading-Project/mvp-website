@@ -678,7 +678,7 @@ export default function DashboardOOSSection() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Regression <span className="gradient-text">Performance</span></h1>
           <p className="text-slate-400 mt-2">
-            Out‑of‑sample rolling performance metrics for our 1‑day regression model. Data available starting from 2019-02-01.
+            Out‑of‑sample rolling performance metrics for our 1‑day regression model. Data available starting from 2020-01-01.
           </p>
         </div>
 
@@ -700,7 +700,12 @@ export default function DashboardOOSSection() {
             {/* Rolling IC chart with compact title inside card */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200">Rolling 30‑Day Information Coefficient (1d)</span>
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  <InfoTooltip
+                    title="Rolling Information Coefficient"
+                    description="30‑day average of the daily cross‑sectional Information Coefficient between predictions and next-day returns." />
+                  Rolling 30‑Day Information Coefficient (1d)
+                </span>
               </div>
               <div className="h-auto">
                 {icSvgLoading ? (
@@ -718,7 +723,12 @@ export default function DashboardOOSSection() {
             {/* Rolling decile spread chart with compact title inside card */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200">Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)</span>
+                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                  <InfoTooltip
+                    title="Rolling Decile Spread"
+                    description="30‑day average of the cross‑sectional top minus bottom decile performance (1‑day horizon)." />
+                  Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)
+                </span>
               </div>
               <div className="h-auto">
                 {spreadLoading ? (

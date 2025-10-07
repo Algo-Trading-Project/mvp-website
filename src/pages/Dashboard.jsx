@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPageUrl } from "@/utils";
 import { Download, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { fetchMetrics } from "@/api/functions";
 import { toast } from "sonner";
 
 import SignalHealthDisplay from "../components/dashboard/SignalHealthDisplay";
-import TopSignals from "../components/dashboard/TopSignals";
+import TopSignals, { TOP_SIGNALS_CACHE_KEY } from "../components/dashboard/TopSignals";
 
 // Import subpage components
 import DashboardOOSSection from "../components/dashboard/DashboardOOSSection";
@@ -18,17 +18,49 @@ import Backtest from "./Backtest";
 import DashboardOverviewSkeleton from "@/components/skeletons/DashboardOverviewSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 
+const DASHBOARD_CACHE_KEY = "dashboard-cache-v1";
+
+const loadDashboardCache = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(DASHBOARD_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("Failed to read dashboard cache", error);
+    return null;
+  }
+};
+
+const persistDashboardCache = (snapshot) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (snapshot) {
+      window.sessionStorage?.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(snapshot));
+    } else {
+      window.sessionStorage?.removeItem(DASHBOARD_CACHE_KEY);
+    }
+  } catch (error) {
+    console.warn("Failed to persist dashboard cache", error);
+  }
+};
+
 export default function Dashboard() {
   const MODEL_VERSION = "Model v1.3";
   const MODEL_RELEASED_AT = "Retrained 2025-08-22";
+  const cacheRef = useRef(loadDashboardCache());
+  const cached = cacheRef.current;
   const [activeTab, setActiveTab] = useState("regression"); // default to regression to avoid blank page
   const [user, setUser] = useState(null);
-  const [contentLoading, setContentLoading] = useState(true);
-  const [metricsRows, setMetricsRows] = useState([]);
-  const [metricsLoading, setMetricsLoading] = useState(true);
-  const [signalsLoading, setSignalsLoading] = useState(true);
+  const [contentLoading, setContentLoading] = useState(() => (cached ? false : true));
+  const [metricsRows, setMetricsRows] = useState(() => cached?.metricsRows ?? []);
+  const [metricsLoading, setMetricsLoading] = useState(() => (cached ? false : true));
+  const [signalsLoading, setSignalsLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.sessionStorage?.getItem(TOP_SIGNALS_CACHE_KEY) ? false : true;
+  });
   const [metricsError, setMetricsError] = useState(null);
-  const [latestSnapshot, setLatestSnapshot] = useState(null);
+  const [latestSnapshot, setLatestSnapshot] = useState(() => cached?.latestSnapshot ?? null);
   const { search } = useLocation();
 
   // Check for URL parameter to set active tab
@@ -58,7 +90,9 @@ export default function Dashboard() {
   // Load metrics data (no auth required)
   useEffect(() => {
     const loadMetrics = async () => {
-      setMetricsLoading(true);
+      if (!cacheRef.current) {
+        setMetricsLoading(true);
+      }
       setMetricsError(null);
       try {
         const data = await fetchMetrics({});
@@ -84,19 +118,30 @@ export default function Dashboard() {
         }));
 
         setMetricsRows(mapped);
-        setLatestSnapshot(
-          data?.latest
-            ? {
-                rolling_ic_30d: normalize(data.latest.rolling_30d_avg_ic),
-                top_bottom_spread_30d: normalize(data.latest.rolling_30d_avg_top_bottom_decile_spread),
-                hit_rate_30d: normalize(data.latest.rolling_30d_hit_rate),
-              }
-            : null
-        );
+        const snapshotLatest = data?.latest
+          ? {
+              rolling_ic_30d: normalize(data.latest.rolling_30d_avg_ic),
+              top_bottom_spread_30d: normalize(data.latest.rolling_30d_avg_top_bottom_decile_spread),
+              hit_rate_30d: normalize(data.latest.rolling_30d_hit_rate),
+            }
+          : null;
+        setLatestSnapshot(snapshotLatest);
+
+        cacheRef.current = {
+          metricsRows: mapped,
+          latestSnapshot: snapshotLatest,
+          fetchedAt: Date.now(),
+        };
+        persistDashboardCache(cacheRef.current);
       } catch (error) {
         console.error("Failed to fetch metrics:", error);
-        setMetricsRows([]); // Clear data on error
-        setLatestSnapshot(null);
+        if (!cacheRef.current) {
+          setMetricsRows([]); // Clear data on error when no cache
+          setLatestSnapshot(null);
+        } else {
+          setMetricsRows(cacheRef.current.metricsRows ?? []);
+          setLatestSnapshot(cacheRef.current.latestSnapshot ?? null);
+        }
         const message = error?.message || "Unable to load dashboard metrics.";
         setMetricsError(message);
         toast.error("Metrics data could not be loaded", {
@@ -111,15 +156,22 @@ export default function Dashboard() {
   }, []); // Remove dependency on auth status
 
   useEffect(() => {
+    if (cacheRef.current) {
+      setContentLoading(false);
+      return;
+    }
     const t = setTimeout(() => setContentLoading(false), 700);
     return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
-    setContentLoading(true);
-    const t = setTimeout(() => setContentLoading(false), 600);
-    return () => clearTimeout(t);
-  }, [activeTab]);
+    if (!cacheRef.current || metricsLoading) {
+      setContentLoading(true);
+      const t = setTimeout(() => setContentLoading(false), 600);
+      return () => clearTimeout(t);
+    }
+    setContentLoading(false);
+  }, [activeTab, metricsLoading]);
 
   // Horizon toggle removed (1d-only)
 

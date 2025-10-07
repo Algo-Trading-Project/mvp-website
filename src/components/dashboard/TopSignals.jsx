@@ -6,6 +6,33 @@ import { createPageUrl } from "@/utils";
 import { getLatestPredictions } from "@/api/functions";
 import { toast } from "sonner";
 
+export const TOP_SIGNALS_CACHE_KEY = "top-signals-cache-v1";
+
+const loadSignalsCache = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(TOP_SIGNALS_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("Failed to read top signals cache", error);
+    return null;
+  }
+};
+
+const persistSignalsCache = (snapshot) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (snapshot) {
+      window.sessionStorage?.setItem(TOP_SIGNALS_CACHE_KEY, JSON.stringify(snapshot));
+    } else {
+      window.sessionStorage?.removeItem(TOP_SIGNALS_CACHE_KEY);
+    }
+  } catch (error) {
+    console.warn("Failed to persist top signals cache", error);
+  }
+};
+
 // Loading skeleton for signals table
 const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
   <div className="bg-slate-900 border border-slate-800 rounded-md">
@@ -45,16 +72,23 @@ const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
 );
 
 export default function TopSignals({ subscription, loading = false, onLoadingChange = () => {} }) {
-  const [topSignals, setTopSignals] = React.useState([]);
-  const [bottomSignals, setBottomSignals] = React.useState([]);
-  const [internalLoading, setInternalLoading] = React.useState(true);
+  const cacheRef = React.useRef(loadSignalsCache());
+  const cached = cacheRef.current;
+
+  const [topSignals, setTopSignals] = React.useState(cached?.topSignals ?? []);
+  const [bottomSignals, setBottomSignals] = React.useState(cached?.bottomSignals ?? []);
+  const [internalLoading, setInternalLoading] = React.useState(cached ? false : true);
   const [error, setError] = React.useState(null);
 
   const loadSignals = React.useCallback(
-    async (abortSignal) => {
-      setInternalLoading(true);
-      setError(null);
-      onLoadingChange(true);
+    async (abortSignal, { suppressLoading = false } = {}) => {
+      if (!suppressLoading) {
+        setInternalLoading(true);
+        setError(null);
+        onLoadingChange(true);
+      } else {
+        onLoadingChange(false);
+      }
 
       try {
         const data = await getLatestPredictions({}, { signal: abortSignal });
@@ -108,26 +142,39 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
           rank: idx + 1,
         }));
 
-        setTopSignals(withStats.slice(0, 5));
+        const topFive = withStats.slice(0, 5);
+        setTopSignals(topFive);
         const bottom = [...withStats].slice(-5).map((r, i) => ({
           ...r,
           rank: n - 5 + i + 1,
         }));
         setBottomSignals(bottom);
+
+        const snapshot = {
+          topSignals: topFive,
+          bottomSignals: bottom,
+          lastUpdated: new Date().toISOString(),
+        };
+        cacheRef.current = snapshot;
+        persistSignalsCache(snapshot);
       } catch (err) {
         if (abortSignal?.aborted) return;
         console.error("Failed to load latest predictions", err);
         const message = err?.message || "Unable to load signals.";
         setError(message);
-        setTopSignals([]);
-        setBottomSignals([]);
+        if (!cacheRef.current) {
+          setTopSignals([]);
+          setBottomSignals([]);
+        }
         toast.error("Unable to load today’s signals", {
           id: "top-signals-error",
           description: message,
         });
       } finally {
         if (abortSignal?.aborted) return;
-        setInternalLoading(false);
+        if (!suppressLoading) {
+          setInternalLoading(false);
+        }
         onLoadingChange(false);
       }
     },
@@ -136,7 +183,8 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
 
   React.useEffect(() => {
     const controller = new AbortController();
-    loadSignals(controller.signal);
+    const hasCache = Boolean(cacheRef.current);
+    loadSignals(controller.signal, { suppressLoading: hasCache });
     return () => controller.abort();
   }, [loadSignals]);
 
@@ -156,7 +204,7 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
   const isLoading = loading || internalLoading;
 
   const handleRetry = () => {
-    loadSignals();
+    loadSignals(undefined, { suppressLoading: false });
   };
 
   const SignalTable = ({ signals, title, icon: Icon, iconColor }) => {

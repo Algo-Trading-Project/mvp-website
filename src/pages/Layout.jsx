@@ -70,6 +70,9 @@ export default function Layout({ children, currentPageName }) {
       try {
         window.sessionStorage?.removeItem("account-page-cache");
         window.sessionStorage?.removeItem("pricing-authed");
+        window.sessionStorage?.removeItem("dashboard-cache-v1");
+        window.sessionStorage?.removeItem("top-signals-cache-v1");
+        window.sessionStorage?.removeItem("backtest-cache-v1");
       } catch (error) {
         console.warn("Failed to clear account cache", error);
       }

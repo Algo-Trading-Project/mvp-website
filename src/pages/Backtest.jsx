@@ -7,29 +7,112 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Info } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
 
+const BACKTEST_CACHE_KEY = "backtest-cache-v1";
+
+const loadBacktestCache = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(BACKTEST_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("Failed to read backtest cache", error);
+    return null;
+  }
+};
+
+const persistBacktestCache = (snapshot) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (snapshot) {
+      window.sessionStorage?.setItem(BACKTEST_CACHE_KEY, JSON.stringify(snapshot));
+    } else {
+      window.sessionStorage?.removeItem(BACKTEST_CACHE_KEY);
+    }
+  } catch (error) {
+    console.warn("Failed to persist backtest cache", error);
+  }
+};
+
 export default function Backtest() {
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
   const MIN_BACKTEST_DATE = "2020-01-01";
-  const [dateRange, setDateRange] = React.useState({ start: MIN_BACKTEST_DATE, end: todayIso });
-  const [coverage, setCoverage] = React.useState(null);
-  const [initialized, setInitialized] = React.useState(false);
+  const cacheRef = React.useRef(loadBacktestCache());
+  const cached = cacheRef.current;
+  const initialDateRange = cached?.dateRange ?? { start: MIN_BACKTEST_DATE, end: todayIso };
+  const [dateRange, setDateRange] = React.useState(initialDateRange);
+  const [coverage, setCoverage] = React.useState(cached?.coverage ?? null);
+  const [initialized, setInitialized] = React.useState(Boolean(cached?.initialized));
 
-  const [equityHtml, setEquityHtml] = React.useState(null);
-  const [equityLoading, setEquityLoading] = React.useState(true);
+  const hasEquityCache = cached && cached.equityHtml && cached.dateRange?.start === initialDateRange.start && cached.dateRange?.end === initialDateRange.end;
+  const hasAlphaCache = cached && cached.alphaHtml && cached.dateRange?.start === initialDateRange.start && cached.dateRange?.end === initialDateRange.end;
+  const hasBootstrapCache = cached && cached.bootstrapHtml && cached.dateRange?.start === initialDateRange.start && cached.dateRange?.end === initialDateRange.end;
+
+  const [equityHtml, setEquityHtml] = React.useState(cached?.equityHtml ?? null);
+  const [equityLoading, setEquityLoading] = React.useState(hasEquityCache ? false : true);
   const [equityError, setEquityError] = React.useState(null);
-  const [metrics, setMetrics] = React.useState(null);
-  const [btcMetrics, setBtcMetrics] = React.useState(null);
-  const [equitySeries, setEquitySeries] = React.useState(null);
+  const [metrics, setMetrics] = React.useState(cached?.metrics ?? null);
+  const [btcMetrics, setBtcMetrics] = React.useState(cached?.btcMetrics ?? null);
+  const [equitySeries, setEquitySeries] = React.useState(cached?.equitySeries ?? null);
 
-  const [alphaHtml, setAlphaHtml] = React.useState(null);
-  const [betaHtml, setBetaHtml] = React.useState(null);
-  const [abLoading, setAbLoading] = React.useState(true);
+  const [alphaHtml, setAlphaHtml] = React.useState(cached?.alphaHtml ?? null);
+  const [betaHtml, setBetaHtml] = React.useState(cached?.betaHtml ?? null);
+  const [abLoading, setAbLoading] = React.useState(hasAlphaCache ? false : true);
   const [abError, setAbError] = React.useState(null);
 
-  const [bootstrapHtml, setBootstrapHtml] = React.useState(null);
-  const [bootstrapCharts, setBootstrapCharts] = React.useState(null);
-  const [bootstrapLoading, setBootstrapLoading] = React.useState(true);
+  const [bootstrapHtml, setBootstrapHtml] = React.useState(cached?.bootstrapHtml ?? null);
+  const [bootstrapCharts, setBootstrapCharts] = React.useState(cached?.bootstrapCharts ?? null);
+  const [bootstrapLoading, setBootstrapLoading] = React.useState(hasBootstrapCache ? false : true);
   const [bootstrapError, setBootstrapError] = React.useState(null);
+
+  const rangeMatchesCache = React.useCallback(() => {
+    const current = cacheRef.current;
+    if (!current || !current.dateRange) return false;
+    return current.dateRange.start === dateRange.start && current.dateRange.end === dateRange.end;
+  }, [dateRange.start, dateRange.end]);
+
+  React.useEffect(() => {
+    if (!dateRange?.start || !dateRange?.end) return;
+    if (
+      !metrics &&
+      !btcMetrics &&
+      !equityHtml &&
+      !equitySeries &&
+      !alphaHtml &&
+      !betaHtml &&
+      !bootstrapHtml &&
+      !bootstrapCharts &&
+      !coverage
+    ) {
+      return;
+    }
+    const snapshot = {
+      initialized: true,
+      dateRange,
+      coverage,
+      metrics,
+      btcMetrics,
+      equityHtml,
+      equitySeries,
+      alphaHtml,
+      betaHtml,
+      bootstrapHtml,
+      bootstrapCharts,
+    };
+    cacheRef.current = snapshot;
+    persistBacktestCache(snapshot);
+  }, [
+    dateRange,
+    coverage,
+    metrics,
+    btcMetrics,
+    equityHtml,
+    equitySeries,
+    alphaHtml,
+    betaHtml,
+    bootstrapHtml,
+    bootstrapCharts,
+  ]);
 
   // Initialize default range to 2020-01-01 -> latest predictions date
   React.useEffect(() => {
@@ -52,7 +135,12 @@ export default function Backtest() {
 
   React.useEffect(() => {
     const load = async () => {
-      setEquityLoading(true); setEquityError(null); setEquitySeries(null);
+      const hasCache = rangeMatchesCache() && (cacheRef.current?.equityHtml || cacheRef.current?.equitySeries);
+      if (!hasCache) {
+        setEquityLoading(true);
+        setEquitySeries(null);
+      }
+      setEquityError(null);
       try {
         const res = await backtestEquityCurvePlot({ start: dateRange.start, end: dateRange.end, period: '1d', fees: 0.003 });
         setEquityHtml(res?.html || null);
@@ -63,11 +151,15 @@ export default function Backtest() {
       finally { setEquityLoading(false); }
     };
     if (initialized) load();
-  }, [dateRange.start, dateRange.end, initialized]);
+  }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache]);
 
   React.useEffect(() => {
     const load = async () => {
-      setAbLoading(true); setAbError(null);
+      const hasCache = rangeMatchesCache() && (cacheRef.current?.alphaHtml || cacheRef.current?.betaHtml);
+      if (!hasCache) {
+        setAbLoading(true);
+      }
+      setAbError(null);
       try {
         const res = await backtestRollingAlphaPlot({ start: dateRange.start, end: dateRange.end, window: 30 });
         setAlphaHtml(res?.alpha || null);
@@ -76,13 +168,17 @@ export default function Backtest() {
       finally { setAbLoading(false); }
     };
     if (initialized) load();
-  }, [dateRange.start, dateRange.end, initialized]);
+  }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache]);
 
   // Removed OOS plots from Backtest per request
 
   React.useEffect(() => {
     const load = async () => {
-      setBootstrapLoading(true); setBootstrapError(null);
+      const hasCache = rangeMatchesCache() && (cacheRef.current?.bootstrapHtml || cacheRef.current?.bootstrapCharts);
+      if (!hasCache) {
+        setBootstrapLoading(true);
+      }
+      setBootstrapError(null);
       try {
         const res = await backtestBootstrapRobustnessPlot({ start: dateRange.start, end: dateRange.end, iterations: 10000, period: '1d', fees: 0.003 });
         setBootstrapHtml(res?.html || null);
@@ -91,7 +187,7 @@ export default function Backtest() {
       finally { setBootstrapLoading(false); }
     };
     if (initialized) load();
-  }, [dateRange.start, dateRange.end, initialized]);
+  }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache]);
 
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
