@@ -244,6 +244,10 @@ const authClient = {
       subscription_tier: "free",
       subscription_status: "active",
       current_period_end: "9999-12-31T00:00:00Z",
+      plan_started_at: "",
+      marketing_opt_in: false,
+      weekly_summary: false,
+      product_updates: false,
     };
     const { data, error } = await client.auth.signUp({
       email,

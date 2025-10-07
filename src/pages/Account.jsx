@@ -40,6 +40,18 @@ const persistAccountCache = (snapshot) => {
   }
 };
 
+const hashApiKey = async (key) => {
+  if (!key) throw new Error("Cannot hash an empty API key.");
+  if (typeof crypto === "undefined" || !crypto.subtle?.digest) {
+    throw new Error("Secure hashing is unavailable in this environment.");
+  }
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
 export default function Account() {
   const cacheRef = useRef(loadAccountCache());
   const [user, setUser] = useState(cacheRef.current?.user ?? null);
@@ -49,13 +61,24 @@ export default function Account() {
 
   // New states for preferences and API key
   const [marketingOptIn, setMarketingOptIn] = useState(cacheRef.current?.preferences?.marketingOptIn ?? false);
-  const [weeklySummary, setWeeklySummary] = useState(cacheRef.current?.preferences?.weeklySummary ?? true);
-  const [productUpdates, setProductUpdates] = useState(cacheRef.current?.preferences?.productUpdates ?? true);
+  const [weeklySummary, setWeeklySummary] = useState(cacheRef.current?.preferences?.weeklySummary ?? false);
+  const [productUpdates, setProductUpdates] = useState(cacheRef.current?.preferences?.productUpdates ?? false);
   const [apiKey, setApiKey] = useState(cacheRef.current?.apiKey ?? "");
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(cacheRef.current?.hasApiKeyHash ?? false);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(null);
   const [copyStatus, setCopyStatus] = useState("idle");
+  const [showPlainApiKey, setShowPlainApiKey] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
+  const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const saveBannerTimeout = useRef(null);
+
+  const initialPreferencesRef = useRef({
+    marketingOptIn: cacheRef.current?.preferences?.marketingOptIn ?? false,
+    weeklySummary: cacheRef.current?.preferences?.weeklySummary ?? false,
+    productUpdates: cacheRef.current?.preferences?.productUpdates ?? false,
+  });
 
   useEffect(() => {
     const checkUser = async () => {
@@ -66,6 +89,7 @@ export default function Account() {
           setUser(null);
           setSubscription(null);
           setApiKey("");
+          setHasStoredApiKey(false);
           setLoading(false);
           cacheRef.current = null;
           persistAccountCache(null);
@@ -74,10 +98,18 @@ export default function Account() {
 
         setUser(me);
         const meta = me?.raw_user_meta_data ?? me?.user_metadata ?? {};
-        setApiKey(meta?.api_key || "");
-        if (typeof meta.marketingOptIn === "boolean") setMarketingOptIn(meta.marketingOptIn);
-        if (typeof meta.weeklySummary === "boolean") setWeeklySummary(meta.weeklySummary);
-        if (typeof meta.productUpdates === "boolean") setProductUpdates(meta.productUpdates);
+        const cachedApiKey = cacheRef.current?.apiKey ?? "";
+        setApiKey(cachedApiKey || "");
+        setHasStoredApiKey(Boolean(meta?.api_key_hash));
+        const prefs = {
+          marketingOptIn: Boolean(meta.marketing_opt_in ?? meta.marketingOptIn ?? false),
+          weeklySummary: Boolean(meta.weekly_summary ?? meta.weeklySummary ?? false),
+          productUpdates: Boolean(meta.product_updates ?? meta.productUpdates ?? false),
+        };
+        initialPreferencesRef.current = prefs;
+        setMarketingOptIn(prefs.marketingOptIn);
+        setWeeklySummary(prefs.weeklySummary);
+        setProductUpdates(prefs.productUpdates);
         if (me?.subscription_level && me.subscription_level !== "free") {
           setSubscription({
             plan: me.subscription_level,
@@ -91,8 +123,17 @@ export default function Account() {
         setUser(null);
         setSubscription(null);
         setApiKey("");
+        setHasStoredApiKey(false);
         cacheRef.current = null;
         persistAccountCache(null);
+        initialPreferencesRef.current = {
+          marketingOptIn: false,
+          weeklySummary: false,
+          productUpdates: false,
+        };
+        setMarketingOptIn(false);
+        setWeeklySummary(false);
+        setProductUpdates(false);
       }
       setLoading(false);
     };
@@ -118,13 +159,19 @@ export default function Account() {
     setApiKeyError(null);
     try {
       const newKey = generateRandomKey();
-      await User.updateMyUserData({ api_key: newKey });
+      const hashedKey = await hashApiKey(newKey);
+      await User.updateMyUserData({ api_key: null, api_key_hash: hashedKey });
       setApiKey(newKey);
+      setHasStoredApiKey(true);
+      setShowPlainApiKey(true);
       setUser((prev) => {
         if (!prev) return prev;
+        const existingMeta = { ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}) };
+        delete existingMeta.api_key;
+        delete existingMeta.api_key_hash;
         const updatedMeta = {
-          ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}),
-          api_key: newKey,
+          ...existingMeta,
+          api_key_hash: hashedKey,
         };
         return {
           ...prev,
@@ -135,6 +182,7 @@ export default function Account() {
       setCopyStatus("idle");
       toast.success("API key generated");
       setApiKeyDialogOpen(false);
+      setShowPlainApiKey(true);
     } catch (error) {
       const message = error?.message || "Failed to generate API key.";
       setApiKeyError(message);
@@ -164,6 +212,7 @@ export default function Account() {
           user,
           subscription,
           apiKey,
+          hasApiKeyHash: hasStoredApiKey,
           preferences: {
             marketingOptIn,
             weeklySummary,
@@ -173,8 +222,78 @@ export default function Account() {
       : null;
     cacheRef.current = snapshot;
     persistAccountCache(snapshot);
-  }, [user, subscription, apiKey, marketingOptIn, weeklySummary, productUpdates]);
-  
+  }, [user, subscription, apiKey, hasStoredApiKey, marketingOptIn, weeklySummary, productUpdates]);
+
+  const preferencesChanged =
+    marketingOptIn !== initialPreferencesRef.current.marketingOptIn ||
+    weeklySummary !== initialPreferencesRef.current.weeklySummary ||
+    productUpdates !== initialPreferencesRef.current.productUpdates;
+
+  useEffect(() => {
+    return () => {
+      if (saveBannerTimeout.current) {
+        clearTimeout(saveBannerTimeout.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (preferencesChanged) {
+      if (saveBannerTimeout.current) {
+        clearTimeout(saveBannerTimeout.current);
+        saveBannerTimeout.current = null;
+      }
+      setPreferencesSaved(false);
+    }
+  }, [preferencesChanged]);
+
+  const handleSavePreferences = async () => {
+    if (preferencesSaving) return;
+    setPreferencesSaving(true);
+    try {
+      await User.updateMyUserData({
+        marketing_opt_in: marketingOptIn,
+        weekly_summary: weeklySummary,
+        product_updates: productUpdates,
+      });
+
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updatedMeta = {
+          ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}),
+          marketing_opt_in: marketingOptIn,
+          weekly_summary: weeklySummary,
+          product_updates: productUpdates,
+        };
+        return {
+          ...prev,
+          raw_user_meta_data: updatedMeta,
+          user_metadata: updatedMeta,
+        };
+      });
+
+      initialPreferencesRef.current = {
+        marketingOptIn,
+        weeklySummary,
+        productUpdates,
+      };
+      if (saveBannerTimeout.current) {
+        clearTimeout(saveBannerTimeout.current);
+      }
+      setPreferencesSaved(true);
+      saveBannerTimeout.current = setTimeout(() => {
+        setPreferencesSaved(false);
+        saveBannerTimeout.current = null;
+      }, 3000);
+    } catch (error) {
+      toast.error("Unable to save preferences", {
+        description: error?.message || "Please try again.",
+      });
+    } finally {
+      setPreferencesSaving(false);
+    }
+  };
+
   if (loading) {
     return <AccountPageSkeleton />;
   }
@@ -275,7 +394,13 @@ export default function Account() {
 
               <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
                 <span className="font-mono text-slate-200 break-all">
-                  {apiKey ? "••••••••••••••••••••••••••••••••" : "No key generated"}
+                  {apiKey
+                    ? showPlainApiKey
+                      ? apiKey
+                      : "••••••••••••••••••••••••••••••••"
+                    : hasStoredApiKey
+                      ? "••••••••••••••••••••••••••••••••"
+                      : "No key generated"}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -297,7 +422,7 @@ export default function Account() {
                         disabled={!canGenerateApiKey}
                         onClick={() => setApiKeyError(null)}
                       >
-                        {apiKey ? "Regenerate Key" : "Generate New Key"}
+                        {apiKey || hasStoredApiKey ? "Regenerate Key" : "Generate New Key"}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-slate-900 border border-slate-700 text-white">
@@ -388,6 +513,27 @@ export default function Account() {
           </div>
         </div>
       </div>
+      {preferencesChanged && (
+        <div className="fixed bottom-6 inset-x-0 flex justify-center pointer-events-none z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-full shadow-lg px-4 py-2 pointer-events-auto flex items-center gap-3">
+            <span className="text-sm text-slate-200">You have unsaved changes</span>
+            <Button
+              onClick={handleSavePreferences}
+              disabled={preferencesSaving}
+              className="bg-blue-600 hover:bg-blue-700 rounded-md"
+            >
+              {preferencesSaving ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      )}
+      {preferencesSaved && !preferencesChanged && (
+        <div className="fixed bottom-6 inset-x-0 flex justify-center pointer-events-none z-40">
+          <div className="bg-emerald-500/90 text-white px-4 py-2 rounded-full shadow-lg pointer-events-none text-sm font-medium">
+            Changes saved
+          </div>
+        </div>
+      )}
     </div>
   );
 }
