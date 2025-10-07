@@ -9,7 +9,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, 
 
 export default function Backtest() {
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [dateRange, setDateRange] = React.useState({ start: "2019-01-01", end: todayIso });
+  const MIN_BACKTEST_DATE = "2020-01-01";
+  const [dateRange, setDateRange] = React.useState({ start: MIN_BACKTEST_DATE, end: todayIso });
   const [coverage, setCoverage] = React.useState(null);
   const [initialized, setInitialized] = React.useState(false);
 
@@ -30,7 +31,7 @@ export default function Backtest() {
   const [bootstrapLoading, setBootstrapLoading] = React.useState(true);
   const [bootstrapError, setBootstrapError] = React.useState(null);
 
-  // Initialize default range to 2019-01-01 -> latest predictions date
+  // Initialize default range to 2020-01-01 -> latest predictions date
   React.useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -39,9 +40,8 @@ export default function Backtest() {
         if (cancelled) return;
         setCoverage(info || null);
         const latest = info?.latest_date || info?.max_date || todayIso;
-        const min = info?.min_date || '2019-01-01';
-        const start = ('2019-01-01' < min) ? min : '2019-01-01';
-        setDateRange({ start, end: latest });
+        const minCandidate = info?.min_date && info.min_date > MIN_BACKTEST_DATE ? info.min_date : MIN_BACKTEST_DATE;
+        setDateRange({ start: minCandidate, end: latest });
       } finally {
         if (!cancelled) setInitialized(true);
       }
@@ -97,9 +97,9 @@ export default function Backtest() {
     <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-2">
         <label className="text-xs text-slate-400">From</label>
-        <input type="date" value={dateRange.start} max={dateRange.end || todayIso} onChange={(e)=>setDateRange(r=>({...r,start:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
+        <input type="date" value={dateRange.start} min={MIN_BACKTEST_DATE} max={dateRange.end || todayIso} onChange={(e)=>setDateRange(r=>({...r,start:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
         <label className="text-xs text-slate-400 ml-2">To</label>
-        <input type="date" value={dateRange.end} max={todayIso} onChange={(e)=>setDateRange(r=>({...r,end:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
+        <input type="date" value={dateRange.end} min={MIN_BACKTEST_DATE} max={todayIso} onChange={(e)=>setDateRange(r=>({...r,end:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
       </div>
     </div>
   );
@@ -213,10 +213,10 @@ export default function Backtest() {
   const drawdownTooltipFormatter = React.useCallback((value, name) => {
     const num = typeof value === 'number' ? value : Number(value);
     const formatted = Number.isFinite(num) ? `${num.toFixed(2)}%` : '—';
-    return [formatted, name === 'strategy' ? 'Strategy Drawdown' : 'BTC Drawdown'];
+    return [formatted, name];
   }, []);
 
-  const drawdownLegendFormatter = React.useCallback((value) => (value === 'strategy' ? 'Strategy' : 'BTC'), []);
+  const drawdownLegendFormatter = React.useCallback((value) => value, []);
 
   const HistogramTooltip = ({ active, payload, label, title, fmt, formatX }) => {
     if (!active || !payload || !payload.length) return null;
@@ -397,7 +397,7 @@ export default function Backtest() {
                       <Area
                         type="monotone"
                         dataKey="strategy"
-                        name="Strategy"
+                        name="Strategy Drawdown"
                         stroke="#60a5fa"
                         strokeWidth={2}
                         fill="url(#strategy-dd-fill)"
@@ -408,7 +408,7 @@ export default function Backtest() {
                       <Area
                         type="monotone"
                         dataKey="btc"
-                        name="BTC"
+                        name="BTC Drawdown"
                         stroke="#ef4444"
                         strokeWidth={2}
                         fill="url(#btc-dd-fill)"

@@ -56,13 +56,20 @@ Deno.serve(async (req) => {
         date: String(r.date ?? '').slice(0, 10),
         rate: coerceNumber(r['rolling_30d_hit_rate']),
       }))
-      .filter((r) => r.date && r.rate !== null && r.rate !== 0);
+      .filter((r) => r.date && r.rate !== null);
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.rate === 'number' ? r.rate : null));
 
     const axisStart = rows.length ? rows[0].date : String(start);
     const axisEnd = rows.length ? rows[rows.length - 1].date : String(end);
+
+    const finiteRates = y.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const yMin = finiteRates.length ? Math.min(...finiteRates) : 0;
+    const yMax = finiteRates.length ? Math.max(...finiteRates) : 1;
+    const yPadding = finiteRates.length ? Math.max(0.005, (yMax - yMin) * 0.08) : 0;
+    const paddedMin = finiteRates.length ? Math.max(0, yMin - yPadding) : 0;
+    const paddedMax = finiteRates.length ? Math.min(1, yMax + yPadding) : 1;
 
     const html = `<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -73,7 +80,7 @@ Deno.serve(async (req) => {
 const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 2 }, hovertemplate: 'Date: %{x}<br>Hit Rate: %{y:.2%}<extra></extra>' }];
 const layout = {
   paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  yaxis: { tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [0, 1] },
+  yaxis: { tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [${paddedMin}, ${paddedMax}] },
   xaxis: { type: 'date', range: ['${axisStart}', '${axisEnd}'], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
   dragmode: 'zoom', autosize: true, height: ${height}
 };

@@ -196,6 +196,7 @@ export default function DashboardPerformanceSection() {
                 name="start"
                 className="bg-slate-800 border border-slate-700 px-2 py-1 rounded"
                 value={dateRange.start}
+                min="2020-01-01"
                 onChange={handleDateChange}
               />
             </div>
@@ -206,6 +207,7 @@ export default function DashboardPerformanceSection() {
                 name="end"
                 className="bg-slate-800 border border-slate-700 px-2 py-1 rounded"
                 value={dateRange.end}
+                min="2020-01-01"
                 onChange={handleDateChange}
               />
             </div>

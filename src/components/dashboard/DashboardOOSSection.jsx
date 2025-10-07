@@ -26,6 +26,8 @@ import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribut
 import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
 // removed Section + Export button + routing imports for compact headers
 
+const MIN_OOS_DATE = "2020-01-01";
+
 export default function DashboardOOSSection() {
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -35,7 +37,10 @@ export default function DashboardOOSSection() {
       const raw = window.sessionStorage?.getItem("dashboard-default-range");
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (parsed?.start && parsed?.end) return parsed;
+      if (parsed?.start && parsed?.end) {
+        const start = parsed.start < MIN_OOS_DATE ? MIN_OOS_DATE : parsed.start;
+        return { start, end: parsed.end };
+      }
     } catch (err) {
       console.warn("Failed to read dashboard default range cache", err);
     }
@@ -153,12 +158,14 @@ export default function DashboardOOSSection() {
       const earliestDate = rows.length ? rows[0].date : "";
       const latestDate = rows.length ? rows[rows.length - 1].date : "";
 
-      const coverageStart = coverageInfo?.min_date || earliestDate || '2019-01-01';
-      const coverageEnd = coverageInfo?.max_date || latestDate || coverageStart;
+      const rawCoverageStart = coverageInfo?.min_date || earliestDate || MIN_OOS_DATE;
+      const coverageStart = rawCoverageStart < MIN_OOS_DATE ? MIN_OOS_DATE : rawCoverageStart;
+      const rawCoverageEnd = coverageInfo?.max_date || latestDate || coverageStart;
+      const coverageEnd = rawCoverageEnd < MIN_OOS_DATE ? MIN_OOS_DATE : rawCoverageEnd;
 
-      // Default full coverage: 2019-01-01 -> latest predictions date
+      // Default full coverage: 2020-01-01 -> latest predictions date
       const defaultEnd = coverageInfo?.latest_date || coverageEnd;
-      const defaultStartTarget = '2019-01-01';
+      const defaultStartTarget = MIN_OOS_DATE;
       const clampedStart = coverageStart
         ? (defaultStartTarget < coverageStart ? coverageStart : defaultStartTarget)
         : defaultStartTarget;
@@ -392,6 +399,13 @@ export default function DashboardOOSSection() {
     };
   }, [monthlyRows]);
 
+  const minDateForInputs = React.useMemo(() => {
+    if (availableRange.start && availableRange.start > MIN_OOS_DATE) {
+      return availableRange.start;
+    }
+    return MIN_OOS_DATE;
+  }, [availableRange.start]);
+
   // NEW: top control bar (date pickers) - compact, right-aligned, no background
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
@@ -400,7 +414,7 @@ export default function DashboardOOSSection() {
         <input
           type="date"
           value={dateRange.start}
-          min={availableRange.start || '2019-01-01'}
+          min={minDateForInputs}
           max={dateRange.end || todayIso}
           onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
           disabled={loading}
@@ -410,7 +424,7 @@ export default function DashboardOOSSection() {
         <input
           type="date"
           value={dateRange.end}
-          min={availableRange.start || '2019-01-01'}
+          min={minDateForInputs}
           max={todayIso}
           onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
           disabled={loading}
@@ -485,8 +499,7 @@ export default function DashboardOOSSection() {
         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
           <InfoTooltip
             title="IC Information Ratio (annualized)"
-            description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)."
-          />
+            description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)." />
           ICIR (Annualized)
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.icirAnn != null ? globalStats.icirAnn.toFixed(2) : "—"}</div>
@@ -614,8 +627,7 @@ export default function DashboardOOSSection() {
         <h4 className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
           <InfoTooltip
             title="Rolling Hit Rate (30d avg)"
-            description="Share of days where prediction signs matched next‑day returns, averaged over the past 30 days."
-          />
+            description="Share of days where prediction signs matched next‑day returns, averaged over the past 30 days." />
           <span>Hit Rate (30d)</span>
         </h4>
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
@@ -727,8 +739,7 @@ export default function DashboardOOSSection() {
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Hit Rate"
-                    description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)."
-                  />
+                    description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)." />
                   Rolling 30‑Day Hit Rate
                 </span>
               </div>
@@ -754,8 +765,7 @@ export default function DashboardOOSSection() {
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
                     title="Quintile Returns"
-                    description="Per‑day, assets are binned into quintiles by predicted return. Bars show the average 1‑day forward return across days for each quintile."
-                  />
+                    description="Per‑day, assets are binned into quintiles by predicted return. Bars show the average 1‑day forward return across days for each quintile." />
                   Average Returns by Cross-Sectional Prediction Quintile
                 </span>
               </div>

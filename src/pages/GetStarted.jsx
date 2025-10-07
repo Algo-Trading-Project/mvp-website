@@ -1,7 +1,6 @@
 
 import React from "react";
 import { User } from "@/api/entities";
-import { checkEmailAvailability } from "@/api/functions";
 import { createPageUrl } from "@/utils";
 import { LogIn, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,72 +27,24 @@ export default function GetStarted() {
   const [resetError, setResetError] = React.useState(null);
   const [resetSuccess, setResetSuccess] = React.useState(false);
   const [emailExists, setEmailExists] = React.useState(null);
-  const [checkingEmail, setCheckingEmail] = React.useState(false);
-  const [emailCheckError, setEmailCheckError] = React.useState(null);
-
-  React.useEffect(() => {
-    const email = (signUpForm.email || "").trim().toLowerCase();
-    if (!email) {
-      setEmailExists(null);
-      setEmailCheckError(null);
-      setCheckingEmail(false);
-      return;
-    }
-
-    const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!pattern.test(email)) {
-      setEmailExists(null);
-      setEmailCheckError(null);
-      setCheckingEmail(false);
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
-    setEmailExists(null);
-    setEmailCheckError(null);
-    setCheckingEmail(true);
-
-    const timer = setTimeout(async () => {
-      try {
-        const result = await checkEmailAvailability(
-          { email, __cache: false },
-          { signal: controller.signal }
-        );
-        if (cancelled) return;
-        setEmailExists(Boolean(result?.exists));
-        setEmailCheckError(null);
-      } catch (error) {
-        if (cancelled) return;
-        const message = error?.message || "Unable to verify email";
-        setEmailExists(null);
-        setEmailCheckError(message);
-      } finally {
-        if (!cancelled) {
-          setCheckingEmail(false);
-        }
-      }
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearTimeout(timer);
-      setCheckingEmail(false);
-    };
-  }, [signUpForm.email]);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
     setSignUpLoading(true);
     setSignUpError(null);
+    setSignUpSuccess(false);
     try {
-      await User.signUp({ email: signUpForm.email, password: signUpForm.password });
+      const email = (signUpForm.email || "").trim().toLowerCase();
+      const password = signUpForm.password || "";
+      const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!pattern.test(email)) {
+        setSignUpError("Please enter a valid email address.");
+        return;
+      }
+      await User.signUp({ email, password });
       setSignUpSuccess(true);
       setSignUpForm({ email: "", password: "" });
       setEmailExists(null);
-      setEmailCheckError(null);
-      setCheckingEmail(false);
     } catch (error) {
       const message = error?.message || "Unable to sign up";
       if (message.toLowerCase().includes("already") || message.toLowerCase().includes("registered")) {
@@ -167,18 +118,11 @@ export default function GetStarted() {
                   setSignUpError(null);
                   setSignUpSuccess(false);
                   setEmailExists(null);
-                  setEmailCheckError(null);
                 }}
                 className="bg-slate-800 border border-slate-700"
               />
-              {checkingEmail ? (
-                <div className="text-xs text-slate-400">Checking availability…</div>
-              ) : emailCheckError ? (
-                <div className="text-xs text-red-400">{emailCheckError}</div>
-              ) : emailExists === true ? (
+              {emailExists === true ? (
                 <div className="text-xs text-amber-300">An account with this email already exists. Please log in instead.</div>
-              ) : emailExists === false ? (
-                <div className="text-xs text-emerald-300">Great — this email is available.</div>
               ) : null}
               <Input
                 type="password"
