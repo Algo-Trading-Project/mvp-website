@@ -182,8 +182,8 @@ export default function Backtest() {
     const formattedMean = formatX(mean);
     const ciLabel = `[${formatX(p005)}, ${formatX(p995)}]`;
     // Keep badges one line even with info icon: small, tight leading
-    const badgeTextClass = 'text-[11px] md:text-xs leading-tight whitespace-nowrap';
-    const badgePadClass = 'px-2 py-1.5';
+    const badgeTextClass = 'text-xs md:text-sm leading-tight whitespace-nowrap';
+    const badgePadClass = 'px-3 py-2';
     return (
       <div className="space-y-2">
         {/* Badges row (outside and above the plot card) */}
@@ -240,8 +240,8 @@ export default function Backtest() {
   };
 
   return (
-      <div className="min-h-screen py-6 bg-slate-950 text-white">
-        <div className="max-w-[1700px] mx-auto px-2 sm:px-3 lg:px-4">
+      <div className="min-h-screen py-8 lg:py-10 bg-slate-950 text-white">
+        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Backtest</h1>
             <p className="text-slate-400 mt-2">Run simple top-bottom decile strategy backtests and view OOS metrics.</p>

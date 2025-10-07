@@ -33,6 +33,12 @@ const InfoTooltip = ({ title, description }) => {
 };
 
 export default function ICBySymbol({ dateRange }) {
+  const storageBaseKey = React.useMemo(() => {
+    if (!dateRange?.start || !dateRange?.end || typeof window === "undefined") return null;
+    const cacheKey = `ic-by-symbol:${dateRange.start}:${dateRange.end}`;
+    return cacheKey;
+  }, [dateRange?.start, dateRange?.end]);
+
   const initialCache = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end) return null;
     return getCachedFunctionResult("ic-by-symbol-plot", {
@@ -45,9 +51,23 @@ export default function ICBySymbol({ dateRange }) {
     });
   }, [dateRange?.start, dateRange?.end]);
 
-  const [htmlTop, setHtmlTop] = React.useState(initialCache?.html_top || null);
-  const [htmlBottom, setHtmlBottom] = React.useState(initialCache?.html_bottom || null);
-  const [loading, setLoading] = React.useState(initialCache ? false : true);
+  const readSessionHtml = (key) => {
+    if (!key || typeof window === "undefined") return null;
+    try {
+      const value = window.sessionStorage?.getItem(key);
+      return value || null;
+    } catch (err) {
+      console.warn("Failed to read cached IC plot", err);
+      return null;
+    }
+  };
+
+  const initialTopHtml = storageBaseKey ? (readSessionHtml(`${storageBaseKey}:top`) || initialCache?.html_top || null) : (initialCache?.html_top || null);
+  const initialBottomHtml = storageBaseKey ? (readSessionHtml(`${storageBaseKey}:bottom`) || initialCache?.html_bottom || null) : (initialCache?.html_bottom || null);
+
+  const [htmlTop, setHtmlTop] = React.useState(initialTopHtml);
+  const [htmlBottom, setHtmlBottom] = React.useState(initialBottomHtml);
+  const [loading, setLoading] = React.useState(!(initialTopHtml && initialBottomHtml));
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -76,6 +96,12 @@ export default function ICBySymbol({ dateRange }) {
         if (cancelled || controller.signal.aborted) return;
         setHtmlTop(cached?.html_top || null);
         setHtmlBottom(cached?.html_bottom || null);
+        if (storageBaseKey && cached?.html_top) {
+          try { window.sessionStorage?.setItem(`${storageBaseKey}:top`, cached.html_top); } catch (err) { console.warn("Failed to persist IC top cache", err); }
+        }
+        if (storageBaseKey && cached?.html_bottom) {
+          try { window.sessionStorage?.setItem(`${storageBaseKey}:bottom`, cached.html_bottom); } catch (err) { console.warn("Failed to persist IC bottom cache", err); }
+        }
         setLoading(false);
         return;
       }
@@ -86,6 +112,12 @@ export default function ICBySymbol({ dateRange }) {
         if (cancelled || controller.signal.aborted) return;
         setHtmlTop(data?.html_top || null);
         setHtmlBottom(data?.html_bottom || null);
+        if (storageBaseKey && data?.html_top) {
+          try { window.sessionStorage?.setItem(`${storageBaseKey}:top`, data.html_top); } catch (err) { console.warn("Failed to persist IC top cache", err); }
+        }
+        if (storageBaseKey && data?.html_bottom) {
+          try { window.sessionStorage?.setItem(`${storageBaseKey}:bottom`, data.html_bottom); } catch (err) { console.warn("Failed to persist IC bottom cache", err); }
+        }
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         console.error("Failed to load IC by symbol", err);

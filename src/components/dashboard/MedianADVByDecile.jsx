@@ -23,6 +23,11 @@ const InfoTooltip = ({ title, description }) => {
 };
 
 export default function MedianADVByDecile({ dateRange }) {
+  const storageKey = React.useMemo(() => {
+    if (!dateRange?.start || !dateRange?.end || typeof window === "undefined") return null;
+    return `median-adv:${dateRange.start}:${dateRange.end}`;
+  }, [dateRange?.start, dateRange?.end]);
+
   const initialCache = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end) return null;
     return getCachedFunctionResult("adv-by-decile-plot", {
@@ -35,8 +40,21 @@ export default function MedianADVByDecile({ dateRange }) {
     });
   }, [dateRange?.start, dateRange?.end]);
 
-  const [html, setHtml] = React.useState(initialCache?.html || null);
-  const [loading, setLoading] = React.useState(initialCache ? false : true);
+  const readSession = () => {
+    if (!storageKey || typeof window === "undefined") return null;
+    try {
+      const value = window.sessionStorage?.getItem(storageKey);
+      return value || null;
+    } catch (err) {
+      console.warn("Failed to read cached ADV plot", err);
+      return null;
+    }
+  };
+
+  const initialHtml = storageKey ? (readSession() || initialCache?.html || null) : (initialCache?.html || null);
+
+  const [html, setHtml] = React.useState(initialHtml);
+  const [loading, setLoading] = React.useState(!initialHtml);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -59,6 +77,9 @@ export default function MedianADVByDecile({ dateRange }) {
         if (cached) {
           if (cancelled || controller.signal.aborted) return;
           setHtml(cached?.html || null);
+          if (storageKey && cached?.html) {
+            try { window.sessionStorage?.setItem(storageKey, cached.html); } catch (err) { console.warn("Failed to persist ADV cache", err); }
+          }
           setLoading(false);
           return;
         }
@@ -67,6 +88,9 @@ export default function MedianADVByDecile({ dateRange }) {
         const res = await advByDecilePlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
+        if (storageKey && res?.html) {
+          try { window.sessionStorage?.setItem(storageKey, res.html); } catch (err) { console.warn("Failed to persist ADV cache", err); }
+        }
       } catch (e) {
         if (cancelled || controller.signal.aborted) return;
         setError(e?.message || 'Unable to load median ADV by decile.');
