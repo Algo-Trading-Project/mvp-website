@@ -57,7 +57,7 @@ export default function Layout({ children, currentPageName }) {
       setAuthLoading(false);
     };
     checkUser();
-  }, [location.pathname]);
+  }, []);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -66,6 +66,14 @@ export default function Layout({ children, currentPageName }) {
   const handleLogout = async () => {
     await User.logout();
     setUser(null);
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage?.removeItem("account-page-cache");
+        window.sessionStorage?.removeItem("pricing-authed");
+      } catch (error) {
+        console.warn("Failed to clear account cache", error);
+      }
+    }
     // Force a redirect to Home so the user never remains on the current page
     window.location.href = createPageUrl("Home");
   };

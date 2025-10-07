@@ -1,31 +1,65 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Check, Crown, Zap, Building, Loader2, Database } from "lucide-react";
+import { Check, Crown, Zap, Building, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User } from "@/api/entities";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
+const AUTH_CACHE_KEY = "pricing-authed";
+
+const loadAuthCache = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(AUTH_CACHE_KEY);
+    if (raw === null) return null;
+    return raw === "true";
+  } catch (error) {
+    console.warn("Failed to read pricing auth cache", error);
+    return null;
+  }
+};
+
+const persistAuthCache = (value) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (value === null) {
+      window.sessionStorage?.removeItem(AUTH_CACHE_KEY);
+    } else {
+      window.sessionStorage?.setItem(AUTH_CACHE_KEY, value ? "true" : "false");
+    }
+  } catch (error) {
+    console.warn("Failed to persist pricing auth cache", error);
+  }
+};
+
 export default function Pricing() {
   const [billingCycle, setBillingCycle] = useState("monthly");
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  const authCacheRef = useRef(loadAuthCache());
+  const [isAuthed, setIsAuthed] = useState(authCacheRef.current ?? false);
+  const [authChecked, setAuthChecked] = useState(!!authCacheRef.current);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         await User.me();
         setIsAuthed(true);
+        authCacheRef.current = true;
+        persistAuthCache(true);
       } catch {
         setIsAuthed(false);
+        authCacheRef.current = false;
+        persistAuthCache(false);
       }
-      setAuthLoading(false);
+      setAuthChecked(true);
     };
-    checkAuth();
-  }, []);
+    if (!authChecked) {
+      checkAuth();
+    }
+  }, [authChecked]);
 
   // Stripe placeholders for some ML Signals tiers
   const stripeLinks = {
@@ -273,11 +307,7 @@ export default function Pricing() {
             </div>
             <div className="mt-auto">
               <p className="text-[11px] text-slate-500 mb-3">Delivery: daily @ 13:00 UTC · Schema docs & asset list included with every plan.</p>
-              {authLoading ? (
-                <Button disabled className="w-full py-3 text-sm font-semibold bg-slate-700 text-slate-400 rounded-md">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                </Button>
-              ) : plan.contact ? (
+              {plan.contact ? (
                 <Link to={createPageUrl("Contact")} className="block">
                   <Button className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
                     {plan.cta}

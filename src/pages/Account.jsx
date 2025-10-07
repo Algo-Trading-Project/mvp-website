@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert } from 'lucide-react';
@@ -8,29 +8,76 @@ import { Navigate, useNavigate, Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
+import { toast } from "sonner";
+
+const ACCOUNT_CACHE_KEY = "account-page-cache";
+
+const loadAccountCache = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(ACCOUNT_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("Failed to read account cache", error);
+    return null;
+  }
+};
+
+const persistAccountCache = (snapshot) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (snapshot) {
+      window.sessionStorage?.setItem(ACCOUNT_CACHE_KEY, JSON.stringify(snapshot));
+    } else {
+      window.sessionStorage?.removeItem(ACCOUNT_CACHE_KEY);
+    }
+  } catch (error) {
+    console.warn("Failed to persist account cache", error);
+  }
+};
 
 export default function Account() {
-  const [user, setUser] = useState(null);
-  const [subscription, setSubscription] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const cacheRef = useRef(loadAccountCache());
+  const [user, setUser] = useState(cacheRef.current?.user ?? null);
+  const [subscription, setSubscription] = useState(cacheRef.current?.subscription ?? null);
+  const [loading, setLoading] = useState(!cacheRef.current);
   const navigate = useNavigate();
 
   // New states for preferences and API key
-  const [marketingOptIn, setMarketingOptIn] = useState(false);
-  const [weeklySummary, setWeeklySummary] = useState(true);
-  const [productUpdates, setProductUpdates] = useState(true);
-  const [apiKey, setApiKey] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(cacheRef.current?.preferences?.marketingOptIn ?? false);
+  const [weeklySummary, setWeeklySummary] = useState(cacheRef.current?.preferences?.weeklySummary ?? true);
+  const [productUpdates, setProductUpdates] = useState(cacheRef.current?.preferences?.productUpdates ?? true);
+  const [apiKey, setApiKey] = useState(cacheRef.current?.apiKey ?? "");
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState(null);
+  const [copyStatus, setCopyStatus] = useState("idle");
 
   useEffect(() => {
     const checkUser = async () => {
-      setLoading(true);
+      if (!cacheRef.current) setLoading(true);
       try {
         const me = await User.me();
+        if (!me) {
+          setUser(null);
+          setSubscription(null);
+          setApiKey("");
+          setLoading(false);
+          cacheRef.current = null;
+          persistAccountCache(null);
+          return;
+        }
+
         setUser(me);
-        // derive subscription from user.subscription_level if available
+        const meta = me?.raw_user_meta_data ?? me?.user_metadata ?? {};
+        setApiKey(meta?.api_key || "");
+        if (typeof meta.marketingOptIn === "boolean") setMarketingOptIn(meta.marketingOptIn);
+        if (typeof meta.weeklySummary === "boolean") setWeeklySummary(meta.weeklySummary);
+        if (typeof meta.productUpdates === "boolean") setProductUpdates(meta.productUpdates);
         if (me?.subscription_level && me.subscription_level !== "free") {
           setSubscription({
             plan: me.subscription_level,
@@ -43,11 +90,90 @@ export default function Account() {
       } catch (e) {
         setUser(null);
         setSubscription(null);
+        setApiKey("");
+        cacheRef.current = null;
+        persistAccountCache(null);
       }
       setLoading(false);
     };
     checkUser();
   }, []);
+
+  const canGenerateApiKey = true;
+
+  const generateRandomKey = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    const hex = [];
+    for (let i = 0; i < 32; i++) {
+      hex.push(((Math.random() * 16) | 0).toString(16));
+    }
+    return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
+  };
+
+  const handleGenerateApiKey = async () => {
+    if (!canGenerateApiKey) return;
+    setApiKeyLoading(true);
+    setApiKeyError(null);
+    try {
+      const newKey = generateRandomKey();
+      await User.updateMyUserData({ api_key: newKey });
+      setApiKey(newKey);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updatedMeta = {
+          ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}),
+          api_key: newKey,
+        };
+        return {
+          ...prev,
+          raw_user_meta_data: updatedMeta,
+          user_metadata: updatedMeta,
+        };
+      });
+      setCopyStatus("idle");
+      toast.success("API key generated");
+      setApiKeyDialogOpen(false);
+    } catch (error) {
+      const message = error?.message || "Failed to generate API key.";
+      setApiKeyError(message);
+      toast.error("Unable to generate API key", { description: message });
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const handleCopyApiKey = async () => {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      setCopyStatus("copied");
+      toast.success("API key copied to clipboard");
+      setTimeout(() => setCopyStatus("idle"), 2000);
+    } catch (error) {
+      setCopyStatus("error");
+      toast.error("Unable to copy API key", { description: error?.message });
+      setTimeout(() => setCopyStatus("idle"), 2000);
+    }
+  };
+
+  useEffect(() => {
+    const snapshot = user
+      ? {
+          user,
+          subscription,
+          apiKey,
+          preferences: {
+            marketingOptIn,
+            weeklySummary,
+            productUpdates,
+          },
+        }
+      : null;
+    cacheRef.current = snapshot;
+    persistAccountCache(snapshot);
+  }, [user, subscription, apiKey, marketingOptIn, weeklySummary, productUpdates]);
   
   if (loading) {
     return <AccountPageSkeleton />;
@@ -147,30 +273,77 @@ export default function Account() {
                 API access is available on Pro and Desk plans. Use your key to download signals programmatically.
               </p>
 
-              <div className="p-3 bg-slate-950 rounded-md flex items-center justify-between border border-slate-700">
-                <span className="font-mono text-slate-500">
-                  {apiKey || "No key generated"}
+              <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
+                <span className="font-mono text-slate-200 break-all">
+                  {apiKey ? "••••••••••••••••••••••••••••••••" : "No key generated"}
                 </span>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
-                    >
-                      Generate New Key
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-slate-900 border border-slate-700 text-white">
-                    <DialogHeader>
-                      <DialogTitle>Generate a new API key</DialogTitle>
-                      <DialogDescription className="text-slate-400">
-                        API key generation will be available soon. Contact support if you need credentials provisioned.
-                      </DialogDescription>
-                    </DialogHeader>
-                  </DialogContent>
-                </Dialog>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
+                    onClick={handleCopyApiKey}
+                    disabled={!apiKey}
+                  >
+                    <Copy className="w-3 h-3 mr-2" />
+                    {copyStatus === "copied" ? "Copied" : "Copy"}
+                  </Button>
+                  <Dialog open={apiKeyDialogOpen} onOpenChange={(open) => { setApiKeyDialogOpen(open); if (!open) { setApiKeyError(null); setApiKeyLoading(false); } }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-md border-blue-500 text-blue-400 hover:bg-blue-500/10"
+                        disabled={!canGenerateApiKey}
+                        onClick={() => setApiKeyError(null)}
+                      >
+                        {apiKey ? "Regenerate Key" : "Generate New Key"}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-slate-900 border border-slate-700 text-white">
+                      <DialogHeader>
+                        <DialogTitle>{apiKey ? "Regenerate API key" : "Generate API key"}</DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                          Generating a new key revokes the previous one immediately. Store the new key securely—this is the only time it will be shown.
+                        </DialogDescription>
+                      </DialogHeader>
+                      {!canGenerateApiKey ? (
+                        <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
+                          Upgrade to a Pro plan to generate API credentials.
+                        </div>
+                      ) : null}
+                      {apiKeyError ? (
+                        <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                          {apiKeyError}
+                        </div>
+                      ) : null}
+                      <DialogFooter className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={() => setApiKeyDialogOpen(false)}
+                          disabled={apiKeyLoading}
+                          className="rounded-md"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleGenerateApiKey}
+                          disabled={apiKeyLoading || !canGenerateApiKey}
+                          className="bg-blue-600 hover:bg-blue-700 rounded-md"
+                        >
+                          {apiKeyLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          {apiKey ? "Regenerate" : "Generate"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
+              {!canGenerateApiKey ? (
+                <p className="text-xs text-amber-300">
+                  Upgrade to Pro or Desk to manage API credentials.
+                </p>
+              ) : null}
 
               <Link to={createPageUrl('Contact')} className="text-blue-400 hover:text-blue-300 text-sm">
                 Request API documentation
