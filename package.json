@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:api": "node scripts/api-smoke.mjs",
-    "test:supabase": "node scripts/test-supabase.mjs"
+    "test:supabase": "node scripts/test-supabase.mjs",
+    "test:rest": "node scripts/rest-api-tests.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.1.2",

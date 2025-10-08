@@ -19,23 +19,13 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
 
-    const { data, error } = await supabase
-      .from('predictions')
-      .select('symbol_id', { distinct: true })
-      .not('symbol_id', 'is', null)
-      .limit(200000);
-
+    const { data, error } = await supabase.rpc('api_prediction_universe');
     if (error) throw error;
 
-    const tokens = Array.from(
-      new Set(
-        (data ?? []).map((row: Record<string, unknown>) =>
-          String(row.symbol_id ?? '').trim().toUpperCase(),
-        ),
-      ),
-    ).filter(Boolean);
-
-    tokens.sort((a, b) => a.localeCompare(b));
+    const tokens = (Array.isArray(data) ? data : [])
+      .map((token) => String(token ?? '').trim().toUpperCase())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
 
     return json({
       count: tokens.length,
