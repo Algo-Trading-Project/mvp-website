@@ -53,13 +53,22 @@ export async function authenticateApiRequest(req: Request): Promise<ApiAuthResul
     }
 
     if (!data) {
-      return { ok: false, response: json({ error: 'Invalid API key' }, { status: 403 }) };
+      return {
+        ok: false,
+        response: json(
+          { error: 'Invalid API key', api_key_hash: keyHash, match: false },
+          { status: 403 },
+        ),
+      };
     }
 
     return { ok: true, user: data as ApiUser, keyHash };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('API key authentication failed', message);
-    return { ok: false, response: json({ error: 'Failed to authenticate request' }, { status: 401 }) };
+    return {
+      ok: false,
+      response: json({ error: 'Failed to authenticate request' }, { status: 401 }),
+    };
   }
 }

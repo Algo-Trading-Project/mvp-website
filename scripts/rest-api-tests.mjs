@@ -14,6 +14,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 const defaultEnvPath = resolve(process.cwd(), "supabase/.env.example");
 const envPath = process.env.REST_API_ENV_PATH || defaultEnvPath;
@@ -81,6 +82,17 @@ if (!functionAuthToken) {
   process.exit(1);
 }
 
+const expectedApiKeyHash = createHash("sha256").update(apiKey).digest("hex");
+
+const logApiKeyValidation = (label, metadata) => {
+  const hash = metadata?.api_key_hash ?? null;
+  const match = hash ? hash === expectedApiKeyHash : false;
+  console.log(
+    `[${label}] api_key_hash=${hash ?? "null"} match=${match ? "true" : "false"}`,
+  );
+  return { hash, match };
+};
+
 const results = [];
 
 const capture = async (label, fn) => {
@@ -143,11 +155,14 @@ await capture("GET /latest", async () => {
   if (json.rows.length === 0) {
     console.warn("Warning: /latest returned zero rows.");
   }
+  logApiKeyValidation("/latest", json.metadata);
   latestSnapshot = json;
   return {
     rows: json.rows.length,
     date: json.date ?? null,
     sampleSymbol: json.rows[0]?.symbol_id ?? null,
+    api_key_hash: json.metadata?.api_key_hash ?? null,
+    api_key_match: json.metadata?.api_key_hash === expectedApiKeyHash,
   };
 });
 
@@ -162,6 +177,7 @@ await capture("GET /universe", async () => {
   const rawTokens = json.tokens;
   const normalizedTokens = rawTokens.map((token) => String(token).trim().toUpperCase());
   universeTokens = normalizedTokens;
+  const validation = logApiKeyValidation("/universe", json.metadata);
   if (process.env.DEBUG_REST_TESTS && latestSnapshot?.rows?.length) {
     const expectedRaw = String(latestSnapshot.rows[0].symbol_id ?? "").trim();
     console.log("Universe contains raw expected:", rawTokens.includes(expectedRaw));
@@ -177,7 +193,11 @@ await capture("GET /universe", async () => {
       throw new Error(`Universe missing expected token ${firstSymbol}`);
     }
   }
-  return { tokens: json.tokens.length };
+  return {
+    tokens: json.tokens.length,
+    api_key_hash: validation.hash,
+    api_key_match: validation.match,
+  };
 });
 
 await capture("GET /predictions", async () => {
@@ -203,6 +223,7 @@ await capture("GET /predictions", async () => {
   if (!Array.isArray(json.rows)) {
     throw new Error("Expected rows array");
   }
+  const validation = logApiKeyValidation("/predictions", json.metadata);
   if (firstSymbol) {
     const hasSymbol = json.rows.some(
       (row) => String(row.symbol_id ?? '').trim().toUpperCase() === firstSymbol,
@@ -214,6 +235,8 @@ await capture("GET /predictions", async () => {
   return {
     rows: json.rows.length,
     range: json.range ?? null,
+    api_key_hash: validation.hash,
+    api_key_match: validation.match,
   };
 });
 
@@ -239,6 +262,7 @@ await capture("GET /ohlcv", async () => {
   if (!Array.isArray(json.rows)) {
     throw new Error("Expected rows array");
   }
+  const validation = logApiKeyValidation("/ohlcv", json.metadata);
   if (json.rows.length) {
     const first = json.rows[0];
     if (!["open", "high", "low", "close", "volume"].every((key) => key in first)) {
@@ -248,6 +272,8 @@ await capture("GET /ohlcv", async () => {
   return {
     rows: json.rows.length,
     token,
+    api_key_hash: validation.hash,
+    api_key_match: validation.match,
   };
 });
 

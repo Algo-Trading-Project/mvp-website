@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
 
   const auth = await authenticateApiRequest(req);
   if (!auth.ok) return auth.response;
-  const { user } = auth;
+  const { user, keyHash } = auth;
 
   try {
     const supabase = getServiceSupabaseClient();
@@ -33,6 +33,8 @@ Deno.serve(async (req) => {
       metadata: {
         user_id: user.user_id,
         subscription_tier: user.subscription_tier,
+        api_key_hash: keyHash,
+        api_key_valid: true,
       },
     });
   } catch (error) {
