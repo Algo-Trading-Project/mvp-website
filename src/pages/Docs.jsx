@@ -248,7 +248,7 @@ function CodeTabGroup({ endpointId }) {
           padding: "1rem",
           fontSize: "0.85rem",
           margin: 0,
-          marginTop: "0.75rem",
+          marginTop: "1.25rem",
         }}
         codeTagProps={{ style: { fontFamily: "var(--font-mono, 'Fira Code', monospace')" } }}
       >

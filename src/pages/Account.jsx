@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
 import { toast } from "sonner";
+import { SUPABASE_ANON_KEY } from "@/api/config";
 
 const ACCOUNT_CACHE_KEY = "account-page-cache";
 
@@ -70,6 +71,7 @@ export default function Account() {
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(null);
   const [copyStatus, setCopyStatus] = useState("idle");
+  const [anonCopyStatus, setAnonCopyStatus] = useState("idle");
   const [showPlainApiKey, setShowPlainApiKey] = useState(false);
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
@@ -235,6 +237,20 @@ export default function Account() {
       setCopyStatus("error");
       toast.error("Unable to copy API key", { description: error?.message });
       setTimeout(() => setCopyStatus("idle"), 2000);
+    }
+  };
+
+  const handleCopyAnonKey = async () => {
+    if (!SUPABASE_ANON_KEY) return;
+    try {
+      await navigator.clipboard.writeText(SUPABASE_ANON_KEY);
+      setAnonCopyStatus("copied");
+      toast.success("Anon key copied to clipboard");
+      setTimeout(() => setAnonCopyStatus("idle"), 2000);
+    } catch (error) {
+      setAnonCopyStatus("error");
+      toast.error("Unable to copy anon key", { description: error?.message });
+      setTimeout(() => setAnonCopyStatus("idle"), 2000);
     }
   };
 
@@ -559,9 +575,29 @@ export default function Account() {
                 </p>
               ) : null}
 
-              <Link to={createPageUrl('Contact')} className="text-blue-400 hover:text-blue-300 text-sm">
-                Request API documentation
-              </Link>
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Supabase anon key
+                </Label>
+                <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
+                  <span className="font-mono text-slate-200 break-all">
+                    {SUPABASE_ANON_KEY || "Not configured"}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
+                    onClick={handleCopyAnonKey}
+                    disabled={!SUPABASE_ANON_KEY}
+                  >
+                    <Copy className="w-3 h-3 mr-2" />
+                    {anonCopyStatus === "copied" ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Include this in every request as <code className="font-mono text-slate-200">Authorization: Bearer {SUPABASE_ANON_KEY ? "YOUR_SUPABASE_ANON_KEY" : "..."}</code>.
+                </p>
+              </div>
             </div>
           </div>
 
