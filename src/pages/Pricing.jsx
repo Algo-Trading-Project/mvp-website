@@ -7,7 +7,9 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User } from "@/api/entities";
+import { StripeApi } from "@/api/stripe";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 const AUTH_CACHE_KEY = "pricing-authed";
 
@@ -61,19 +63,7 @@ export default function Pricing() {
     }
   }, [authChecked]);
 
-  // Stripe placeholders for some ML Signals tiers
-  const stripeLinks = {
-    "Signals Pro": {
-      monthly: "https://buy.stripe.com/test_aFa9AS99J7Dnf3H2KI87K01",
-      annual: "https://buy.stripe.com/test_00wcN471B2j3f3H2KI87K04",
-    },
-    "Signals API": {
-      monthly: "https://buy.stripe.com/test_bJebJ03Ppg9T9Jn5WU87K00",
-      annual: "https://buy.stripe.com/test_7sY7sK85FcXH2gVbhe87K03",
-    },
-    // New plans would need their own Stripe links here if they are directly purchasable
-    // For now, if a plan name isn't in this map, it defaults to "Get Started" or "Contact Sales"
-  };
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
 
   // Plans grouped by tabs
   const signalsRaw = [
@@ -82,6 +72,7 @@ export default function Pricing() {
       icon: Zap,
       monthlyPrice: 59,
       description: "Top/bottom deciles for ~12 majors, 24h delay, email/Discord alerts, read‑only dashboard.",
+      slug: "signals_lite",
       features: [
         "Top & bottom deciles for ~12 majors (CSV)",
         "24‑hour delay on files",
@@ -96,6 +87,7 @@ export default function Pricing() {
       icon: Zap,
       monthlyPrice: 139,
       description: "Full daily ranks across ~391 assets, history downloads, fee‑adjusted deciles/turnover.",
+      slug: "signals_pro",
       features: [
         "Full daily ranks/scores across ~391 assets",
         "12–24 months history downloads (CSV)",
@@ -111,6 +103,7 @@ export default function Pricing() {
       icon: Crown,
       monthlyPrice: 449,
       description: "Programmatic ranks/scores + optional weights, PIT retrieval, higher limits, webhooks.",
+      slug: "signals_api",
       features: [
         "Programmatic ranks/scores + optional weights",
         "Point‑in‑time retrieval & historical archives",
@@ -249,6 +242,39 @@ export default function Pricing() {
   const getSavings = (plan) =>
     billingCycle === "annual" && plan.price ? plan.price.monthly * 12 - plan.price.annual : 0;
 
+  const startCheckout = async (plan) => {
+    if (!plan?.slug) {
+      toast.error("This plan is not available for self-serve checkout yet.");
+      return;
+    }
+
+    const cycle = billingCycle === "annual" ? "annual" : "monthly";
+    const key = `${plan.slug}:${cycle}`;
+    setCheckoutLoading(key);
+
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+      const successUrl = `${origin}${createPageUrl("Pricing")}?status=success`;
+      const cancelUrl = `${origin}${createPageUrl("Pricing")}?status=cancel`;
+
+      const { url } = await StripeApi.createCheckoutSession({
+        plan_slug: plan.slug,
+        billing_cycle: cycle,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+
+      if (typeof window !== "undefined") {
+        window.location.href = url;
+      }
+    } catch (error) {
+      const description = error?.message || error?.cause?.message || "Please try again or contact support.";
+      toast.error("Unable to start checkout", { description });
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
   // Card renderer (shared)
   // Change grid columns dynamically so bundles (3 items) are centered
   const PlanGrid = ({ plans }) => {
@@ -313,17 +339,14 @@ export default function Pricing() {
                     {plan.cta}
                   </Button>
                 </Link>
-              ) : isAuthed && stripeLinks[plan.name]?.[billingCycle] ? (
-                <a
-                  href={stripeLinks[plan.name][billingCycle]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
+              ) : plan.slug && isAuthed ? (
+                <Button
+                  className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+                  onClick={() => startCheckout(plan)}
+                  disabled={checkoutLoading === `${plan.slug}:${billingCycle}`}
                 >
-                  <Button className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
-                    Subscribe
-                  </Button>
-                </a>
+                  {checkoutLoading === `${plan.slug}:${billingCycle}` ? "Redirecting…" : "Subscribe"}
+                </Button>
               ) : (
                 <Link to={createPageUrl("GetStarted")} className="block">
                   <Button className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
