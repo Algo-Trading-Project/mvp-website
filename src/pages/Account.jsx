@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert } from 'lucide-react';
+import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert, ShieldOff } from 'lucide-react';
 import { User } from '@/api/entities';
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -66,6 +66,7 @@ export default function Account() {
   const [apiKey, setApiKey] = useState(cacheRef.current?.apiKey ?? "");
   const [hasStoredApiKey, setHasStoredApiKey] = useState(cacheRef.current?.hasApiKeyHash ?? false);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(null);
   const [copyStatus, setCopyStatus] = useState("idle");
@@ -187,6 +188,37 @@ export default function Account() {
       const message = error?.message || "Failed to generate API key.";
       setApiKeyError(message);
       toast.error("Unable to generate API key", { description: message });
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    if (!apiKey && !hasStoredApiKey) return;
+    setApiKeyLoading(true);
+    setApiKeyError(null);
+    try {
+      await User.updateMyUserData({ api_key: null, api_key_hash: null });
+      setApiKey("");
+      setHasStoredApiKey(false);
+      setShowPlainApiKey(false);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const existingMeta = { ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}) };
+        delete existingMeta.api_key;
+        delete existingMeta.api_key_hash;
+        return {
+          ...prev,
+          raw_user_meta_data: existingMeta,
+          user_metadata: existingMeta,
+        };
+      });
+      toast.success("API key revoked");
+      setRevokeDialogOpen(false);
+    } catch (error) {
+      const message = error?.message || "Failed to revoke API key.";
+      setApiKeyError(message);
+      toast.error("Unable to revoke API key", { description: message });
     } finally {
       setApiKeyLoading(false);
     }
@@ -462,6 +494,63 @@ export default function Account() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+                  {(apiKey || hasStoredApiKey) && (
+                    <Dialog
+                      open={revokeDialogOpen}
+                      onOpenChange={(open) => {
+                        setRevokeDialogOpen(open);
+                        if (!open) {
+                          setApiKeyError(null);
+                        }
+                      }}
+                    >
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-md border-red-500 text-red-400 hover:bg-red-500/10"
+                          onClick={() => setApiKeyError(null)}
+                          disabled={apiKeyLoading}
+                        >
+                          <ShieldOff className="w-3 h-3 mr-2" />
+                          Revoke Key
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-slate-900 border border-slate-700 text-white">
+                        <DialogHeader>
+                          <DialogTitle>Revoke API key</DialogTitle>
+                          <DialogDescription className="text-slate-400">
+                            This will permanently invalidate your current key. Any clients using it will stop working until a new key is generated.
+                          </DialogDescription>
+                        </DialogHeader>
+                        {apiKeyError ? (
+                          <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                            {apiKeyError}
+                          </div>
+                        ) : null}
+                        <DialogFooter className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            onClick={() => setRevokeDialogOpen(false)}
+                            disabled={apiKeyLoading}
+                            className="rounded-md"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleRevokeApiKey}
+                            disabled={apiKeyLoading}
+                            className="bg-red-600 hover:bg-red-700 rounded-md"
+                          >
+                            {apiKeyLoading ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : null}
+                            Revoke
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </div>
               {!canGenerateApiKey ? (

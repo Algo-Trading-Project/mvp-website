@@ -56,8 +56,6 @@ const apiKey =
 const functionAuthToken =
   process.env.REST_API_AUTH_TOKEN ||
   process.env.SUPABASE_FUNCTION_BEARER ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   null;
 
@@ -71,13 +69,6 @@ if (!baseUrl) {
 if (!apiKey) {
   console.error(
     "Missing product API key. Set TEST_API_KEY or QUANTPULSE_TEST_API_KEY (populate supabase/.env.example).",
-  );
-  process.exit(1);
-}
-
-if (!functionAuthToken) {
-  console.error(
-    "Missing Supabase authorization token. Set REST_API_AUTH_TOKEN or SUPABASE_SERVICE_ROLE_KEY in supabase/.env.example.",
   );
   process.exit(1);
 }
@@ -114,12 +105,16 @@ const requestJson = async (path, params = {}) => {
     }
   }
 
+const headers = {
+  "x-api-key": apiKey,
+};
+if (functionAuthToken) {
+  headers.Authorization = `Bearer ${functionAuthToken}`;
+}
+
   const response = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      "x-api-key": apiKey,
-      Authorization: `Bearer ${functionAuthToken}`,
-    },
+    headers,
   });
 
   const text = await response.text();

@@ -1,29 +1,17 @@
 import Layout from "./Layout.jsx";
-
 import Pricing from "./Pricing";
-
 import Dashboard from "./Dashboard";
-
 import Downloads from "./Downloads";
-
-
 import Methodology from "./Methodology";
-
 import Home from "./Home";
-
 import Account from "./Account";
-
 import GetStarted from "./GetStarted";
-
 import About from "./About";
-
 import Contact from "./Contact";
-
 import Signals from "./Signals";
-
 import AuthCallback from "./AuthCallback";
-
 import WhatsNew from "./WhatsNew";
+import Docs from "./Docs";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -41,6 +29,7 @@ const PAGES = {
     Signals: Signals,
     AuthCallback: AuthCallback,
     WhatsNew: WhatsNew,
+    Docs: Docs,
 }
 
 function _getCurrentPage(url) {
@@ -91,6 +80,8 @@ function PagesContent() {
                 <Route path="/authcallback" element={<AuthCallback />} />
                 
                 <Route path="/whatsnew" element={<WhatsNew />} />
+                
+                <Route path="/docs" element={<Docs />} />
                 
             </Routes>
         </Layout>
