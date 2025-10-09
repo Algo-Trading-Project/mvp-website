@@ -4,7 +4,7 @@ import "swagger-ui-react/swagger-ui.css";
 import "./docs.css";
 import { createPageUrl } from "@/utils";
 import spec from "@/docs/quantpulseOpenApi.js";
-import { Shield, KeyRound, Globe, BookOpen, ArrowUpRight } from "lucide-react";
+import { KeyRound, Globe, BookOpen, ArrowUpRight } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import atomDark from "react-syntax-highlighter/dist/esm/styles/prism/atom-dark";
 
@@ -13,15 +13,8 @@ const HERO_STEPS = [
     icon: KeyRound,
     title: "QuantPulse API Key",
     description:
-      "Generate from Account → API Access. This key maps directly to your QuantPulse subscription tier.",
-    badge: "x-api-key header",
-  },
-  {
-    icon: Shield,
-    title: "Supabase Anon Key",
-    description:
-      "Sent as `Authorization: Bearer <SUPABASE_ANON_KEY>`. The anon key is shared in onboarding and safe for public clients.",
-    badge: "Authorization header",
+      "Generate from Account → API Access. Every request includes this value as `x-api-key`.",
+    badge: "Header",
   },
   {
     icon: Globe,
@@ -34,8 +27,7 @@ const HERO_STEPS = [
 
 const sampleCurl = `curl -s --request GET \\
   --url "https://inqzohpvxfidvcphjnzf.supabase.co/functions/v1/latest" \\
-  --header "x-api-key: YOUR_PRODUCT_API_KEY" \\
-  --header "Authorization: Bearer YOUR_SUPABASE_ANON_KEY"`;
+  --header "x-api-key: YOUR_PRODUCT_API_KEY"`;
 
 const ENDPOINT_SAMPLE_CONFIG = [
   {
@@ -71,12 +63,10 @@ const ENDPOINT_SAMPLE_CONFIG = [
 const buildCodeSamples = () => {
   const baseUrl = "https://inqzohpvxfidvcphjnzf.supabase.co/functions/v1";
   const pythonBaseHeaders = `headers = {
-    "x-api-key": "YOUR_PRODUCT_API_KEY",
-    "Authorization": "Bearer YOUR_SUPABASE_ANON_KEY"
+    "x-api-key": "YOUR_PRODUCT_API_KEY"
 }`;
   const jsHeaders = `const headers = {
-  "x-api-key": "YOUR_PRODUCT_API_KEY",
-  "Authorization": "Bearer YOUR_SUPABASE_ANON_KEY"
+  "x-api-key": "YOUR_PRODUCT_API_KEY"
 };`;
 
   const samples = {};
@@ -88,7 +78,6 @@ const buildCodeSamples = () => {
       `curl -s --request ${endpoint.method}`,
       `  --url "${url}${endpoint.queryHint}"`,
       `  --header "x-api-key: YOUR_PRODUCT_API_KEY"`,
-      `  --header "Authorization: Bearer YOUR_SUPABASE_ANON_KEY"`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -329,8 +318,8 @@ export default function Docs() {
             </div>
             <h2 className="text-2xl font-semibold text-white">Quick examples by endpoint</h2>
             <p className="text-sm text-slate-400 max-w-3xl">
-              Choose your preferred runtime—cURL, Python requests, or native fetch. The placeholders
-              mirror the headers required by the live API.
+              Choose your preferred runtime—cURL, Python requests, or native fetch. Each snippet uses the
+              single required header (`x-api-key`).
             </p>
           </div>
           <div className="grid gap-6">

@@ -1,7 +1,7 @@
 import { authenticateApiRequest } from '../_shared/api_key.ts';
-import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 import { internalError, json, methodNotAllowed } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
+import { createAuthedClient } from '../_shared/jwt.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   const { user, keyHash } = auth;
 
   try {
-    const supabase = getServiceSupabaseClient();
+    const { client: supabase } = await createAuthedClient(user.user_id);
 
     const { data, error } = await supabase.rpc('api_prediction_universe');
     if (error) throw error;

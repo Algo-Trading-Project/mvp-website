@@ -8,7 +8,7 @@ const spec = {
     version: "1.0.0",
     description:
       "Programmatic access to QuantPulse predictions, historical signals, OHLCV reference data and the supported universe. " +
-      "All requests require both the QuantPulse product API key (`x-api-key`) and the Supabase anon key supplied as a bearer token.",
+      "All requests require a QuantPulse product API key supplied as the `x-api-key` header. Tokens are scoped to the user and enforce plan entitlements.",
     contact: {
       name: "QuantPulse Support",
       email: "support@quantpulse.ai",
@@ -40,7 +40,7 @@ const spec = {
     description: "QuantPulse product documentation",
     url: "https://quantpulse.ai",
   },
-  security: [{ QuantPulseApiKey: [], SupabaseAnonKey: [] }],
+  security: [{ QuantPulseApiKey: [] }],
   components: {
     securitySchemes: {
       QuantPulseApiKey: {
@@ -49,13 +49,6 @@ const spec = {
         name: "x-api-key",
         description:
           "Per-user QuantPulse product API key. Generate and manage from Account → API Access.",
-      },
-      SupabaseAnonKey: {
-        type: "apiKey",
-        in: "header",
-        name: "Authorization",
-        description:
-          "Supabase anon key sent as `Authorization: Bearer <SUPABASE_ANON_KEY>`. The anon key is public and included in onboarding materials.",
       },
     },
     schemas: {
@@ -225,12 +218,12 @@ const spec = {
               },
             },
           },
-          401: {
-            description: "Missing Supabase bearer header.",
-            content: {
-              "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
-            },
-          },
+      401: {
+        description: "Missing or invalid QuantPulse API key.",
+        content: {
+          "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        },
+      },
           403: {
             description: "Invalid QuantPulse API key.",
             content: {
@@ -238,7 +231,7 @@ const spec = {
             },
           },
         },
-        security: [{ QuantPulseApiKey: [], SupabaseAnonKey: [] }],
+        security: [{ QuantPulseApiKey: [] }],
       },
     },
     "/predictions": {
@@ -268,12 +261,12 @@ const spec = {
               "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
             },
           },
-          401: {
-            description: "Missing Supabase bearer header.",
-            content: {
-              "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
-            },
-          },
+      401: {
+        description: "Missing or invalid QuantPulse API key.",
+        content: {
+          "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        },
+      },
           403: {
             description: "Invalid QuantPulse API key.",
             content: {
@@ -281,7 +274,7 @@ const spec = {
             },
           },
         },
-        security: [{ QuantPulseApiKey: [], SupabaseAnonKey: [] }],
+        security: [{ QuantPulseApiKey: [] }],
       },
     },
     "/ohlcv": {
@@ -309,12 +302,12 @@ const spec = {
               "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
             },
           },
-          401: {
-            description: "Missing Supabase bearer header.",
-            content: {
-              "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
-            },
-          },
+      401: {
+        description: "Missing or invalid QuantPulse API key.",
+        content: {
+          "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        },
+      },
           403: {
             description: "Invalid QuantPulse API key.",
             content: {
@@ -322,7 +315,7 @@ const spec = {
             },
           },
         },
-        security: [{ QuantPulseApiKey: [], SupabaseAnonKey: [] }],
+        security: [{ QuantPulseApiKey: [] }],
       },
     },
     "/universe": {
@@ -339,12 +332,12 @@ const spec = {
               },
             },
           },
-          401: {
-            description: "Missing Supabase bearer header.",
-            content: {
-              "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
-            },
-          },
+      401: {
+        description: "Missing or invalid QuantPulse API key.",
+        content: {
+          "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        },
+      },
           403: {
             description: "Invalid QuantPulse API key.",
             content: {
@@ -352,7 +345,7 @@ const spec = {
             },
           },
         },
-        security: [{ QuantPulseApiKey: [], SupabaseAnonKey: [] }],
+        security: [{ QuantPulseApiKey: [] }],
       },
     },
   },

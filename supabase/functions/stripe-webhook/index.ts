@@ -186,13 +186,8 @@ Deno.serve(async (req) => {
 
   const payload = await req.text();
 
-  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(payload, signature, STRIPE_WEBHOOK_SECRET);
-  } catch (error) {
-    console.error("Webhook signature verification failed", error);
-    return json({ error: "Invalid signature" }, { status: 400 });
-  }
+    const event = await stripe.webhooks.constructEventAsync(payload, signature, STRIPE_WEBHOOK_SECRET);
 
   try {
     switch (event.type) {
@@ -215,5 +210,9 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Stripe webhook processing failed", error);
     return internalError(error);
+  }
+  } catch (error) {
+    console.error("Webhook signature verification failed", error);
+    return json({ error: "Invalid signature" }, { status: 400 });
   }
 });

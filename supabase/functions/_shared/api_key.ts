@@ -8,6 +8,9 @@ export interface ApiUser {
   subscription_status: string | null;
   current_period_end: string | null;
   plan_started_at: string | null;
+  billing_cycle: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
 }
 
 const encoder = new TextEncoder();
@@ -42,7 +45,7 @@ export async function authenticateApiRequest(req: Request): Promise<ApiAuthResul
     const { data, error } = await supabase
       .from('users')
       .select(
-        'user_id, email, subscription_tier, subscription_status, current_period_end, plan_started_at',
+        'user_id, email, subscription_tier, subscription_status, current_period_end, plan_started_at, billing_cycle, stripe_customer_id, stripe_subscription_id',
       )
       .eq('api_key_hash', keyHash)
       .maybeSingle();

@@ -28,4 +28,30 @@ export const StripeApi = {
       throw new ApiError("Unable to create checkout session", { cause: error });
     }
   },
+  async createBillingPortalSession(payload = {}) {
+    try {
+      const client = getSupabaseClient();
+      const { data, error } = await client.functions.invoke("create-billing-portal-session", {
+        body: payload,
+      });
+
+      if (error) {
+        throw new ApiError(error.message || "Failed to create billing portal session", {
+          status: error.status ?? 400,
+          data: error,
+        });
+      }
+
+      if (!data?.url) {
+        throw new ApiError("Billing portal session did not return a redirect URL.");
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError("Unable to launch billing portal", { cause: error });
+    }
+  },
 };

@@ -56,7 +56,6 @@ const apiKey =
 const functionAuthToken =
   process.env.REST_API_AUTH_TOKEN ||
   process.env.SUPABASE_FUNCTION_BEARER ||
-  process.env.SUPABASE_ANON_KEY ||
   null;
 
 if (!baseUrl) {

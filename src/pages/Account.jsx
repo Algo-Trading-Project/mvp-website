@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert, ShieldOff } from 'lucide-react';
@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
 import { toast } from "sonner";
-import { SUPABASE_ANON_KEY } from "@/api/config";
 
 const ACCOUNT_CACHE_KEY = "account-page-cache";
 
@@ -71,10 +70,15 @@ export default function Account() {
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(null);
   const [copyStatus, setCopyStatus] = useState("idle");
-  const [anonCopyStatus, setAnonCopyStatus] = useState("idle");
   const [showPlainApiKey, setShowPlainApiKey] = useState(false);
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [subscriptionTier, setSubscriptionTier] = useState(cacheRef.current?.subscriptionTier ?? "free");
+  const [subscriptionStatus, setSubscriptionStatus] = useState(cacheRef.current?.subscriptionStatus ?? "trial");
+  const [billingCycleLabel, setBillingCycleLabel] = useState(cacheRef.current?.billingCycle ?? "monthly");
+  const [currentPeriodEnd, setCurrentPeriodEnd] = useState(cacheRef.current?.currentPeriodEnd ?? null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
   const saveBannerTimeout = useRef(null);
 
   const initialPreferencesRef = useRef({
@@ -104,6 +108,10 @@ export default function Account() {
         const cachedApiKey = cacheRef.current?.apiKey ?? "";
         setApiKey(cachedApiKey || "");
         setHasStoredApiKey(Boolean(meta?.api_key_hash));
+        setSubscriptionTier(String(meta?.subscription_tier ?? me?.subscription_level ?? "free"));
+        setSubscriptionStatus(String(meta?.subscription_status ?? "trial"));
+        setBillingCycleLabel(String(meta?.billing_cycle ?? "monthly"));
+        setCurrentPeriodEnd(meta?.current_period_end ?? null);
         const prefs = {
           marketingOptIn: Boolean(meta.marketing_opt_in ?? meta.marketingOptIn ?? false),
           weeklySummary: Boolean(meta.weekly_summary ?? meta.weeklySummary ?? false),
@@ -137,6 +145,10 @@ export default function Account() {
         setMarketingOptIn(false);
         setWeeklySummary(false);
         setProductUpdates(false);
+        setSubscriptionTier("free");
+        setSubscriptionStatus("trial");
+        setBillingCycleLabel("monthly");
+        setCurrentPeriodEnd(null);
       }
       setLoading(false);
     };
@@ -226,33 +238,75 @@ export default function Account() {
     }
   };
 
-  const handleCopyApiKey = async () => {
-    if (!apiKey) return;
-    try {
-      await navigator.clipboard.writeText(apiKey);
-      setCopyStatus("copied");
+const handleCopyApiKey = async () => {
+  if (!apiKey) return;
+  try {
+    await navigator.clipboard.writeText(apiKey);
+    setCopyStatus("copied");
       toast.success("API key copied to clipboard");
       setTimeout(() => setCopyStatus("idle"), 2000);
     } catch (error) {
       setCopyStatus("error");
       toast.error("Unable to copy API key", { description: error?.message });
-      setTimeout(() => setCopyStatus("idle"), 2000);
-    }
-  };
+    setTimeout(() => setCopyStatus("idle"), 2000);
+  }
+};
 
-  const handleCopyAnonKey = async () => {
-    if (!SUPABASE_ANON_KEY) return;
-    try {
-      await navigator.clipboard.writeText(SUPABASE_ANON_KEY);
-      setAnonCopyStatus("copied");
-      toast.success("Anon key copied to clipboard");
-      setTimeout(() => setAnonCopyStatus("idle"), 2000);
-    } catch (error) {
-      setAnonCopyStatus("error");
-      toast.error("Unable to copy anon key", { description: error?.message });
-      setTimeout(() => setAnonCopyStatus("idle"), 2000);
+const planSlugForTier = (tier) => {
+  if (!tier) return null;
+  const normalized = tier.toLowerCase();
+  if (normalized.includes("api")) return "signals_api";
+  if (normalized.includes("pro")) return "signals_pro";
+  if (normalized.includes("lite")) return "signals_lite";
+  return null;
+};
+
+  const [portalError, setPortalError] = useState(null);
+  const accountPlanSlug = useMemo(() => planSlugForTier(subscriptionTier), [subscriptionTier]);
+
+const handleOpenBillingPortal = async () => {
+  setPortalError(null);
+  setPortalLoading(true);
+  try {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+    const { url } = await StripeApi.createBillingPortalSession({
+      return_url: `${origin}${createPageUrl("Account")}`,
+    });
+    if (typeof window !== "undefined") {
+      window.location.href = url;
     }
-  };
+  } catch (error) {
+    const message = error?.message || error?.cause?.message || "Unable to open billing portal.";
+    setPortalError(message);
+    toast.error("Billing portal unavailable", { description: message });
+  } finally {
+    setPortalLoading(false);
+  }
+};
+
+const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly") => {
+  setPortalError(null);
+  setCheckoutLoading(`${planSlug}:${cycle}`);
+  try {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+    const { url } = await StripeApi.createCheckoutSession({
+      plan_slug: planSlug,
+      billing_cycle: cycle,
+      success_url: `${origin}${createPageUrl("Account")}?status=success`,
+      cancel_url: `${origin}${createPageUrl("Account")}?status=cancel`,
+    });
+    if (typeof window !== "undefined") {
+      window.location.href = url;
+    }
+  } catch (error) {
+    const message = error?.message || error?.cause?.message || "Unable to start checkout.";
+    setPortalError(message);
+    toast.error("Unable to change plan", { description: message });
+  } finally {
+    setCheckoutLoading(null);
+  }
+};
+
 
   useEffect(() => {
     const snapshot = user
@@ -261,6 +315,10 @@ export default function Account() {
           subscription,
           apiKey,
           hasApiKeyHash: hasStoredApiKey,
+          subscriptionTier,
+          subscriptionStatus,
+          billingCycle: billingCycleLabel,
+          currentPeriodEnd,
           preferences: {
             marketingOptIn,
             weeklySummary,
@@ -270,7 +328,19 @@ export default function Account() {
       : null;
     cacheRef.current = snapshot;
     persistAccountCache(snapshot);
-  }, [user, subscription, apiKey, hasStoredApiKey, marketingOptIn, weeklySummary, productUpdates]);
+  }, [
+    user,
+    subscription,
+    apiKey,
+    hasStoredApiKey,
+    subscriptionTier,
+    subscriptionStatus,
+    billingCycleLabel,
+    currentPeriodEnd,
+    marketingOptIn,
+    weeklySummary,
+    productUpdates,
+  ]);
 
   const preferencesChanged =
     marketingOptIn !== initialPreferencesRef.current.marketingOptIn ||
@@ -575,33 +645,86 @@ export default function Account() {
                 </p>
               ) : null}
 
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Supabase anon key
-                </Label>
-                <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
-                  <span className="font-mono text-slate-200 break-all">
-                    {SUPABASE_ANON_KEY || "Not configured"}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
-                    onClick={handleCopyAnonKey}
-                    disabled={!SUPABASE_ANON_KEY}
-                  >
-                    <Copy className="w-3 h-3 mr-2" />
-                    {anonCopyStatus === "copied" ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Include this in every request as <code className="font-mono text-slate-200">Authorization: Bearer {SUPABASE_ANON_KEY ? "YOUR_SUPABASE_ANON_KEY" : "..."}</code>.
+          </div>
+        </div>
+
+        {/* Subscription summary */}
+        <div className="bg-slate-900 border border-slate-800 rounded-md md:col-span-2">
+          <div className="p-6 border-b border-slate-800">
+            <h3 className="flex items-center space-x-2 font-semibold">
+              <ShieldAlert className="w-5 h-5 text-emerald-400" />
+              <span>Subscription</span>
+            </h3>
+          </div>
+          <div className="p-6 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Tier</Label>
+                <p className="text-lg font-semibold text-white capitalize">{subscriptionTier || "free"}</p>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Status</Label>
+                <p className="text-lg font-semibold text-emerald-400 capitalize">{subscriptionStatus || "trial"}</p>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Billing cycle</Label>
+                <p className="text-lg font-semibold text-white capitalize">{billingCycleLabel || "monthly"}</p>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Current period end</Label>
+                <p className="text-lg font-semibold text-white">
+                  {currentPeriodEnd ? new Date(currentPeriodEnd).toLocaleDateString() : "–"}
                 </p>
               </div>
             </div>
+            {portalError ? (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                {portalError}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={handleOpenBillingPortal}
+                disabled={portalLoading}
+                className="bg-indigo-600 hover:bg-indigo-700 rounded-md"
+              >
+                {portalLoading ? "Opening portal…" : "Manage billing"}
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-md border-slate-700 text-slate-200"
+                onClick={() => navigate(createPageUrl("Pricing"))}
+              >
+                View pricing
+              </Button>
+              {accountPlanSlug !== "signals_pro" && (
+                <Button
+                  variant="outline"
+                  className="rounded-md border-slate-700 text-slate-200"
+                  onClick={() => handlePlanChange("signals_pro", billingCycleLabel)}
+                  disabled={checkoutLoading === `signals_pro:${billingCycleLabel}`}
+                >
+                  {checkoutLoading === `signals_pro:${billingCycleLabel}` ? "Redirecting…" : "Switch to Signals Pro"}
+                </Button>
+              )}
+              {accountPlanSlug !== "signals_api" && (
+                <Button
+                  variant="outline"
+                  className="rounded-md border-slate-700 text-slate-200"
+                  onClick={() => handlePlanChange("signals_api", billingCycleLabel)}
+                  disabled={checkoutLoading === `signals_api:${billingCycleLabel}`}
+                >
+                  {checkoutLoading === `signals_api:${billingCycleLabel}` ? "Redirecting…" : "Switch to Signals API"}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              The billing portal lets you upgrade, downgrade, or cancel immediately. Plan changes also reflect in your profile metadata as soon as Stripe notifies QuantPulse.
+            </p>
           </div>
+        </div>
 
-          {/* Preferences */}
+        {/* Preferences */}
           <div className="bg-slate-900 border border-slate-800 rounded-md md:col-span-2">
             <div className="p-6 border-b border-slate-800">
               <h3 className="font-semibold">Preferences</h3>
