@@ -58,6 +58,15 @@ Set the following secrets on your Supabase project (using the dashboard or CLI).
 - `SUPABASE_SERVICE_ROLE_KEY`: Service role key for server-side auth checks.
 - `SUPABASE_DB_URL`: Full Postgres connection string with SSL enabled. Use the pooled connection URL (append `?sslmode=require&pgbouncer=true`).
 - `SUPABASE_DB_POOL_SIZE` *(optional)*: Override the default pool size (4) used by the edge runtime.
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` *(optional)*: Stripe billing portal configuration id (if omitted, the helper will create a default configuration in the current mode using the Stripe price ids listed below).
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and the plan price IDs (e.g. `STRIPE_PRICE_SIGNALS_PRO_MONTHLY`) so billing portal sessions and webhook fan-out can sync Supabase auth metadata.
+
+### Stripe billing helpers
+
+- `supabase/functions/create-billing-portal-session` now provisions a Stripe customer automatically (if one does not exist), refreshes the latest subscription metadata, and returns the hosted portal URL. Deploy this function whenever billing logic changes. The helper also auto-creates a default Stripe billing-portal configuration when an explicit `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` is not supplied; the configuration enables price changes across every Stripe product referenced by the supplied price ids and allows immediate cancels.
+- `supabase/functions/manage-subscription` exposes a JSON API for in-app plan changes (`change_plan`) and cancellation/resume actions. The helper updates the active Stripe subscription in-place and syncs Supabase auth metadata so the Account screen stays in lockstep without visiting the Stripe portal.
+- `supabase/functions/stripe-webhook` reuses the shared subscription helper to mirror plan tier, billing cadence, and Stripe identifiers back into `auth.users` and the public `users` table so the Account page reflects portal changes automatically.
+- When iterating locally, run `supabase functions serve create-billing-portal-session --env-file supabase/.env.dev` (and similarly for `stripe-webhook`) to exercise the authenticated flows against test keys. The first call in a new environment creates (and caches) a minimal portal configuration if Stripe does not already have one saved for that mode.
 
 Example with the Supabase CLI:
 

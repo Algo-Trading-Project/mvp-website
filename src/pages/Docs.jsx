@@ -266,26 +266,26 @@ export default function Docs() {
                 panel below includes every endpoint, parameter, schema, and response code—mirroring the
                 interface you would expect from SwaggerUI / OpenAPI tooling.
               </p>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {HERO_STEPS.map((step) => {
-                const Icon = step.icon;
-                return (
-                  <div
-                    key={step.title}
-                    className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-3 shadow-lg shadow-slate-950/40"
-                  >
-                    <div className="flex items-center justify-between">
-                      <Icon className="w-5 h-5 text-blue-300" />
-                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/80">
-                        {step.badge}
-                      </span>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {HERO_STEPS.map((step) => {
+                  const Icon = step.icon;
+                  return (
+                    <div
+                      key={step.title}
+                      className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-2 shadow-lg shadow-slate-950/40"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-5 h-5 text-blue-300" />
+                        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/80">
+                          {step.badge}
+                        </span>
+                      </div>
+                      <h2 className="text-base font-semibold text-white">{step.title}</h2>
+                      <p className="text-sm text-slate-400 leading-relaxed">{step.description}</p>
                     </div>
-                    <h2 className="text-lg font-semibold text-white">{step.title}</h2>
-                    <p className="text-sm text-slate-400 leading-relaxed">{step.description}</p>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
             <div className="space-y-3">
               <p className="text-sm text-slate-400">

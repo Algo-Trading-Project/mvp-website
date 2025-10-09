@@ -1,7 +1,7 @@
 import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { json, methodNotAllowed, internalError } from "../_shared/http.ts";
 import { corsHeaders } from "../_shared/middleware.ts";
-import { getServiceSupabaseClient } from "../_shared/supabase.ts";
+import { derivePlanInfoFromSubscription, updateUserFromSubscription } from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -14,66 +14,12 @@ const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
   : null;
 
-const PLAN_TIER_MAP: Record<string, string> = {
-  signals_pro: "pro",
-  signals_api: "api",
-  signals_lite: "lite",
+const stripeCustomerIdFromSubscription = (subscription: Stripe.Subscription | null | undefined) => {
+  if (!subscription) return null;
+  const customer = subscription.customer;
+  if (!customer) return null;
+  return typeof customer === "string" ? customer : customer.id;
 };
-
-const defaultOrigin = Deno.env.get("SITE_URL") ?? "https://quantpulse.ai";
-
-async function updateUserFromSubscription(options: {
-  userId: string;
-  planSlug?: string | null;
-  billingCycle?: string | null;
-  subscription?: Stripe.Subscription | null;
-  statusOverride?: string | null;
-}) {
-  const supabase = getServiceSupabaseClient();
-  const { userId, planSlug, billingCycle, subscription, statusOverride } = options;
-
-  const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
-  if (userError || !userData?.user) {
-    console.error("Unable to fetch user for subscription update", userError);
-    return;
-  }
-
-  const existingMeta =
-    (userData.user.user_metadata as Record<string, unknown> | undefined) ??
-    (userData.user.raw_user_meta_data as Record<string, unknown> | undefined) ??
-    {};
-
-  const subscriptionStatus = statusOverride ?? subscription?.status ?? "active";
-
-  const updates: Record<string, unknown> = {
-    subscription_status: subscriptionStatus,
-  };
-
-  if (planSlug) {
-    updates.subscription_tier = PLAN_TIER_MAP[planSlug] ?? planSlug;
-  }
-
-  if (billingCycle) {
-    updates.billing_cycle = billingCycle;
-  }
-
-  if (subscription) {
-    updates.plan_started_at = new Date(subscription.current_period_start * 1000).toISOString();
-    updates.current_period_end = new Date(subscription.current_period_end * 1000).toISOString();
-    updates.stripe_subscription_id = subscription.id;
-    updates.stripe_customer_id = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id ?? null;
-  }
-
-  const newMetadata = { ...existingMeta, ...updates };
-
-  const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
-    user_metadata: newMetadata,
-  });
-
-  if (updateError) {
-    console.error("Failed to persist subscription metadata", updateError, updates);
-  }
-}
 
 async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.user_id;
@@ -110,10 +56,7 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
 }
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
-  const planSlug = subscription.metadata?.plan_slug ??
-    (subscription.items?.data?.[0]?.price?.metadata?.plan_slug as string | undefined);
-  const billingCycle = subscription.metadata?.billing_cycle ??
-    subscription.items?.data?.[0]?.price?.recurring?.interval ?? undefined;
+  const inferred = derivePlanInfoFromSubscription(subscription);
   const userId = subscription.metadata?.user_id;
 
   if (!userId) {
@@ -123,18 +66,15 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
 
   await updateUserFromSubscription({
     userId,
-    planSlug,
-    billingCycle,
+    planSlug: inferred.planSlug ?? undefined,
+    billingCycle: inferred.billingCycle ?? undefined,
     subscription,
     statusOverride: subscription.status,
   });
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  const planSlug = subscription.metadata?.plan_slug ??
-    (subscription.items?.data?.[0]?.price?.metadata?.plan_slug as string | undefined);
-  const billingCycle = subscription.metadata?.billing_cycle ??
-    subscription.items?.data?.[0]?.price?.recurring?.interval ?? undefined;
+  const inferred = derivePlanInfoFromSubscription(subscription);
   const userId = subscription.metadata?.user_id;
 
   if (!userId) {
@@ -144,8 +84,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   await updateUserFromSubscription({
     userId,
-    planSlug,
-    billingCycle,
+    planSlug: inferred.planSlug ?? undefined,
+    billingCycle: inferred.billingCycle ?? undefined,
     subscription,
   });
 }
@@ -186,8 +126,13 @@ Deno.serve(async (req) => {
 
   const payload = await req.text();
 
+  let event: Stripe.Event;
   try {
-    const event = await stripe.webhooks.constructEventAsync(payload, signature, STRIPE_WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(payload, signature, STRIPE_WEBHOOK_SECRET);
+  } catch (error) {
+    console.error("Webhook signature verification failed", error);
+    return json({ error: "Invalid signature" }, { status: 400 });
+  }
 
   try {
     switch (event.type) {
@@ -210,9 +155,5 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Stripe webhook processing failed", error);
     return internalError(error);
-  }
-  } catch (error) {
-    console.error("Webhook signature verification failed", error);
-    return json({ error: "Invalid signature" }, { status: 400 });
   }
 });

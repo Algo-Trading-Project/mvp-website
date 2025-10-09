@@ -1,17 +1,18 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { User as UserIcon, KeyRound, CreditCard, LogIn, Loader2, Copy, ShieldAlert, ShieldOff } from 'lucide-react';
+import { User as UserIcon, KeyRound, CreditCard, Loader2, Copy, ShieldOff, Check } from 'lucide-react';
 import { User } from '@/api/entities';
-import { Navigate, useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
 import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
 import { toast } from "sonner";
+import { StripeApi } from "@/api/stripe";
 
 const ACCOUNT_CACHE_KEY = "account-page-cache";
 
@@ -52,12 +53,103 @@ const hashApiKey = async (key) => {
   return hashArray.map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
+const PLAN_CATALOG = [
+  {
+    slug: "free",
+    tier: "free",
+    name: "Free",
+    description: "Explore public dashboards and saved preferences without billing.",
+    monthlyPrice: 0,
+  },
+  {
+    slug: "signals_lite",
+    tier: "lite",
+    name: "Signals Lite",
+    description: "Top/bottom deciles for majors with a 24h delay.",
+    monthlyPrice: 59,
+  },
+  {
+    slug: "signals_pro",
+    tier: "pro",
+    name: "Signals Pro",
+    description: "Full daily ranks, history exports, and OOS analytics.",
+    monthlyPrice: 139,
+  },
+  {
+    slug: "signals_api",
+    tier: "api",
+    name: "Signals API",
+    description: "Programmatic ranks, PIT retrieval, and higher limits.",
+    monthlyPrice: 449,
+  },
+];
+
+const BILLING_CYCLE_OPTIONS = [
+  { key: "monthly", label: "Monthly" },
+  { key: "annual", label: "Annual (save 15%)" },
+];
+
+const tierToPlanSlug = {
+  free: "free",
+  lite: "signals_lite",
+  pro: "signals_pro",
+  api: "signals_api",
+};
+
+const planSlugToTier = {
+  free: "free",
+  signals_lite: "lite",
+  signals_pro: "pro",
+  signals_api: "api",
+};
+
+const normalizeKey = (value) => String(value ?? "").toLowerCase();
+const planSlugForTier = (tier) => tierToPlanSlug[normalizeKey(tier)] ?? "free";
+const tierFromPlanSlug = (slug) => planSlugToTier[normalizeKey(slug)] ?? slug;
+
+const formatRenewalDate = (isoValue) => {
+  if (!isoValue) return "N/A";
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) return "N/A";
+  const year = date.getUTCFullYear();
+  if (year >= 9999) return "N/A";
+  return date.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+};
+
+const isPaidPlanSlug = (slug) => slug && normalizeKey(slug) !== "free";
+
+const formatUSD = (value) => {
+  if (value === null || value === undefined) return "Custom";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch (error) {
+    console.warn("Failed to format currency", error);
+    return `$${value}`;
+  }
+};
+
+const deriveAnnualPrice = (monthlyPrice) => {
+  if (!monthlyPrice) return null;
+  return Math.round(monthlyPrice * 12 * 0.85);
+};
+
+const getPlanPrice = (plan, billingCycle) => {
+  if (!plan) return null;
+  if (billingCycle === "annual") {
+    return deriveAnnualPrice(plan.monthlyPrice);
+  }
+  return plan.monthlyPrice;
+};
+
 export default function Account() {
   const cacheRef = useRef(loadAccountCache());
   const [user, setUser] = useState(cacheRef.current?.user ?? null);
   const [subscription, setSubscription] = useState(cacheRef.current?.subscription ?? null);
   const [loading, setLoading] = useState(!cacheRef.current);
-  const navigate = useNavigate();
 
   // New states for preferences and API key
   const [marketingOptIn, setMarketingOptIn] = useState(cacheRef.current?.preferences?.marketingOptIn ?? false);
@@ -77,9 +169,56 @@ export default function Account() {
   const [subscriptionStatus, setSubscriptionStatus] = useState(cacheRef.current?.subscriptionStatus ?? "trial");
   const [billingCycleLabel, setBillingCycleLabel] = useState(cacheRef.current?.billingCycle ?? "monthly");
   const [currentPeriodEnd, setCurrentPeriodEnd] = useState(cacheRef.current?.currentPeriodEnd ?? null);
+  const [subscriptionCancelAtPeriodEnd, setSubscriptionCancelAtPeriodEnd] = useState(
+    cacheRef.current?.subscriptionCancelAtPeriodEnd ?? false,
+  );
+  const [planChangeLoading, setPlanChangeLoading] = useState(false);
+  const [planChangeError, setPlanChangeError] = useState(null);
+  const [planChangeSuccess, setPlanChangeSuccess] = useState(null);
+  const [planSelectionCycle, setPlanSelectionCycle] = useState(() => normalizeKey(cacheRef.current?.billingCycle ?? "monthly"));
+  const [planSelectionSlug, setPlanSelectionSlug] = useState(() => cacheRef.current?.planSlug ?? planSlugForTier(cacheRef.current?.subscriptionTier ?? "free"));
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [portalError, setPortalError] = useState(null);
+  const [planHighlight, setPlanHighlight] = useState(false);
   const saveBannerTimeout = useRef(null);
+  const planManagerRef = useRef(null);
+  const metadataSnapshot = useMemo(() => {
+    if (!user) return {};
+    return user.raw_user_meta_data ?? user.user_metadata ?? {};
+  }, [user]);
+
+  const applySubscriptionSnapshot = (snapshot) => {
+    if (!snapshot) return;
+    if (snapshot.plan_slug) {
+      const normalized = normalizeKey(snapshot.plan_slug);
+      setPlanSelectionSlug(normalized);
+      setSubscriptionTier(tierFromPlanSlug(normalized));
+    }
+    if (snapshot.billing_cycle) {
+      const normalizedCycle = normalizeKey(snapshot.billing_cycle);
+      setBillingCycleLabel(normalizedCycle);
+      setPlanSelectionCycle(normalizedCycle);
+    }
+    if (snapshot.status) {
+      setSubscriptionStatus(snapshot.status);
+    }
+    if (typeof snapshot.cancel_at_period_end === "boolean") {
+      setSubscriptionCancelAtPeriodEnd(snapshot.cancel_at_period_end);
+    }
+    if (snapshot.current_period_end) {
+      const iso = typeof snapshot.current_period_end === "number"
+        ? new Date(snapshot.current_period_end).toISOString()
+        : (() => {
+            const parsed = Date.parse(snapshot.current_period_end);
+            return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+          })();
+      if (iso) {
+        setCurrentPeriodEnd(iso);
+      }
+    }
+  };
 
   const initialPreferencesRef = useRef({
     marketingOptIn: cacheRef.current?.preferences?.marketingOptIn ?? false,
@@ -108,10 +247,16 @@ export default function Account() {
         const cachedApiKey = cacheRef.current?.apiKey ?? "";
         setApiKey(cachedApiKey || "");
         setHasStoredApiKey(Boolean(meta?.api_key_hash));
-        setSubscriptionTier(String(meta?.subscription_tier ?? me?.subscription_level ?? "free"));
+        const resolvedTier = String(meta?.subscription_tier ?? me?.subscription_level ?? "free");
+        const resolvedCycle = String(meta?.billing_cycle ?? "monthly").toLowerCase();
+        const resolvedPlanSlug = String(meta?.plan_slug ?? planSlugForTier(resolvedTier)).toLowerCase();
+        setSubscriptionTier(resolvedTier);
         setSubscriptionStatus(String(meta?.subscription_status ?? "trial"));
-        setBillingCycleLabel(String(meta?.billing_cycle ?? "monthly"));
+        setBillingCycleLabel(resolvedCycle);
         setCurrentPeriodEnd(meta?.current_period_end ?? null);
+        setSubscriptionCancelAtPeriodEnd(Boolean(meta?.subscription_cancel_at_period_end ?? false));
+        setPlanSelectionCycle(resolvedCycle);
+        setPlanSelectionSlug(resolvedPlanSlug);
         const prefs = {
           marketingOptIn: Boolean(meta.marketing_opt_in ?? meta.marketingOptIn ?? false),
           weeklySummary: Boolean(meta.weekly_summary ?? meta.weeklySummary ?? false),
@@ -130,7 +275,8 @@ export default function Account() {
         } else {
           setSubscription(null);
         }
-      } catch (e) {
+      } catch (error) {
+        console.error("Failed to load account details", error);
         setUser(null);
         setSubscription(null);
         setApiKey("");
@@ -154,6 +300,14 @@ export default function Account() {
     };
     checkUser();
   }, []);
+
+  useEffect(() => {
+    setPlanSelectionSlug(planSlugForTier(subscriptionTier));
+  }, [subscriptionTier]);
+
+  useEffect(() => {
+    setPlanSelectionCycle(String(billingCycleLabel ?? "monthly").toLowerCase());
+  }, [billingCycleLabel]);
 
   const canGenerateApiKey = true;
 
@@ -237,75 +391,215 @@ export default function Account() {
       setApiKeyLoading(false);
     }
   };
-
-const handleCopyApiKey = async () => {
-  if (!apiKey) return;
-  try {
-    await navigator.clipboard.writeText(apiKey);
-    setCopyStatus("copied");
+  const handleCopyApiKey = async () => {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      setCopyStatus("copied");
       toast.success("API key copied to clipboard");
       setTimeout(() => setCopyStatus("idle"), 2000);
     } catch (error) {
       setCopyStatus("error");
       toast.error("Unable to copy API key", { description: error?.message });
-    setTimeout(() => setCopyStatus("idle"), 2000);
-  }
-};
-
-const planSlugForTier = (tier) => {
-  if (!tier) return null;
-  const normalized = tier.toLowerCase();
-  if (normalized.includes("api")) return "signals_api";
-  if (normalized.includes("pro")) return "signals_pro";
-  if (normalized.includes("lite")) return "signals_lite";
-  return null;
-};
-
-  const [portalError, setPortalError] = useState(null);
-  const accountPlanSlug = useMemo(() => planSlugForTier(subscriptionTier), [subscriptionTier]);
-
-const handleOpenBillingPortal = async () => {
-  setPortalError(null);
-  setPortalLoading(true);
-  try {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
-    const { url } = await StripeApi.createBillingPortalSession({
-      return_url: `${origin}${createPageUrl("Account")}`,
-    });
-    if (typeof window !== "undefined") {
-      window.location.href = url;
+      setTimeout(() => setCopyStatus("idle"), 2000);
     }
-  } catch (error) {
-    const message = error?.message || error?.cause?.message || "Unable to open billing portal.";
-    setPortalError(message);
-    toast.error("Billing portal unavailable", { description: message });
-  } finally {
-    setPortalLoading(false);
-  }
-};
+  };
 
-const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly") => {
-  setPortalError(null);
-  setCheckoutLoading(`${planSlug}:${cycle}`);
-  try {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
-    const { url } = await StripeApi.createCheckoutSession({
-      plan_slug: planSlug,
-      billing_cycle: cycle,
-      success_url: `${origin}${createPageUrl("Account")}?status=success`,
-      cancel_url: `${origin}${createPageUrl("Account")}?status=cancel`,
-    });
-    if (typeof window !== "undefined") {
-      window.location.href = url;
+
+  const applySubscriptionResponse = (subscriptionPayload, message) => {
+    if (subscriptionPayload) {
+      applySubscriptionSnapshot(subscriptionPayload);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const existingMeta = { ...(prev.raw_user_meta_data ?? prev.user_metadata ?? {}) };
+        const nextMeta = {
+          ...existingMeta,
+          subscription_tier: tierFromPlanSlug(subscriptionPayload.plan_slug ?? existingMeta.subscription_tier),
+          billing_cycle: subscriptionPayload.billing_cycle ?? existingMeta.billing_cycle,
+          subscription_status: subscriptionPayload.status ?? existingMeta.subscription_status,
+          current_period_end: subscriptionPayload.current_period_end
+            ? new Date(subscriptionPayload.current_period_end).toISOString()
+            : existingMeta.current_period_end,
+          subscription_cancel_at_period_end: subscriptionPayload.cancel_at_period_end ?? existingMeta.subscription_cancel_at_period_end,
+          plan_slug: subscriptionPayload.plan_slug ?? existingMeta.plan_slug,
+        };
+        return {
+          ...prev,
+          raw_user_meta_data: nextMeta,
+          user_metadata: nextMeta,
+        };
+      });
     }
-  } catch (error) {
-    const message = error?.message || error?.cause?.message || "Unable to start checkout.";
-    setPortalError(message);
-    toast.error("Unable to change plan", { description: message });
-  } finally {
-    setCheckoutLoading(null);
-  }
-};
+    setPlanChangeError(null);
+    if (message) {
+      setPlanChangeSuccess(message);
+      setTimeout(() => setPlanChangeSuccess(null), 3500);
+    }
+  };
+
+  const handlePlanChange = async () => {
+    if (!planSelectionSlug) {
+      setPlanChangeError("Select a plan to continue.");
+      return;
+    }
+    const normalizedSelection = normalizeKey(planSelectionSlug);
+    const selectionIsPaid = isPaidPlanSlug(normalizedSelection);
+    const sameSelection = normalizedSelection === currentPlanSlug && planSelectionCycle === normalizedCurrentCycle;
+
+    if (!selectionIsPaid && !hasActiveSubscription) {
+      setPlanChangeError("You're already on the Free tier.");
+      return;
+    }
+    if (sameSelection) {
+      setPlanChangeError("You're already on this plan.");
+      return;
+    }
+
+    if (!hasActiveSubscription && selectionIsPaid) {
+      setPlanChangeLoading(true);
+      try {
+        const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+        const successUrl = `${origin}${createPageUrl("Account")}?status=success`;
+        const cancelUrl = `${origin}${createPageUrl("Account")}?status=cancel`;
+        const { url } = await StripeApi.createCheckoutSession({
+          plan_slug: normalizedSelection,
+          billing_cycle: planSelectionCycle,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        });
+        if (typeof window !== "undefined" && url) {
+          window.location.href = url;
+        }
+      } catch (error) {
+        const message = error?.message || error?.cause?.message || "Unable to start checkout.";
+        setPlanChangeError(message);
+        toast.error("Checkout unavailable", { description: message });
+      } finally {
+        setPlanChangeLoading(false);
+      }
+      return;
+    }
+
+    if (hasActiveSubscription && !selectionIsPaid) {
+      setPlanChangeLoading(true);
+      try {
+        const result = await StripeApi.cancelSubscription({ cancel_now: false });
+        applySubscriptionResponse(result?.subscription, "Subscription will cancel at period end.");
+        toast.success("Cancellation scheduled");
+      } catch (error) {
+        const message = error?.message || error?.cause?.message || "Unable to schedule cancellation.";
+        setPlanChangeError(message);
+        toast.error("Cancel failed", { description: message });
+      } finally {
+        setPlanChangeLoading(false);
+      }
+      return;
+    }
+
+    setPlanChangeLoading(true);
+    try {
+      const result = await StripeApi.changeSubscriptionPlan({
+        plan_slug: normalizedSelection,
+        billing_cycle: planSelectionCycle,
+      });
+      applySubscriptionResponse(result?.subscription, "Subscription updated.");
+      toast.success("Subscription updated");
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to update subscription.";
+      setPlanChangeError(message);
+      toast.error("Plan update failed", { description: message });
+    } finally {
+      setPlanChangeLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!hasActiveSubscription) {
+      toast.error("No active subscription to cancel.");
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const result = await StripeApi.cancelSubscription({ cancel_now: false });
+      applySubscriptionResponse(result?.subscription, "Subscription will cancel at period end.");
+      toast.success("Cancellation scheduled");
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to cancel subscription.";
+      toast.error("Cancel failed", { description: message });
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    if (!hasActiveSubscription) {
+      toast.error("No active subscription to resume.");
+      return;
+    }
+    setResumeLoading(true);
+    try {
+      const result = await StripeApi.resumeSubscription();
+      applySubscriptionResponse(result?.subscription, "Subscription resumed.");
+      toast.success("Subscription resumed");
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to resume subscription.";
+      toast.error("Resume failed", { description: message });
+    } finally {
+      setResumeLoading(false);
+    }
+  };
+
+  const handleOpenBillingPortal = async () => {
+    if (!hasActiveSubscription) {
+      toast.error("Billing portal unavailable", { description: "Upgrade to a paid plan to manage billing in Stripe." });
+      return;
+    }
+    setPortalError(null);
+    setPortalLoading(true);
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+      const { url } = await StripeApi.createBillingPortalSession({
+        return_url: `${origin}${createPageUrl("Account")}`,
+      });
+      if (typeof window !== "undefined" && url) {
+        window.location.href = url;
+      }
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to open billing portal.";
+      setPortalError(message);
+      toast.error("Billing portal unavailable", { description: message });
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const handleManageBillingClick = () => {
+    setPlanChangeError(null);
+    setPlanChangeSuccess(null);
+    planManagerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setPlanHighlight(true);
+    window.setTimeout(() => setPlanHighlight(false), 1800);
+  };
+
+  const currentPlanSlug = planSlugForTier(subscriptionTier);
+  const isFreeTier = normalizeKey(subscriptionTier) === "free";
+  const nextRenewalLabel = isFreeTier ? "N/A" : formatRenewalDate(currentPeriodEnd);
+  const normalizedCurrentCycle = normalizeKey(billingCycleLabel);
+  const activeSubscriptionId =
+    metadataSnapshot?.stripe_subscription_id ?? subscription?.stripe_subscription_id ?? null;
+  const hasActiveSubscription = Boolean(activeSubscriptionId);
+  const selectionIsPaidPlan = isPaidPlanSlug(planSelectionSlug);
+  const samePlanSelected = planSelectionSlug === currentPlanSlug && planSelectionCycle === normalizedCurrentCycle;
+  const planChangeButtonLabel =
+    !hasActiveSubscription && selectionIsPaidPlan ? "Start paid plan" : selectionIsPaidPlan ? "Update subscription" : "Schedule cancellation";
+  const planChangeDisabled =
+    planChangeLoading ||
+    samePlanSelected ||
+    (!hasActiveSubscription && !selectionIsPaidPlan);
+  const cancelActionsDisabled = cancelLoading || !hasActiveSubscription || subscriptionCancelAtPeriodEnd;
+  const resumeActionsDisabled = resumeLoading || !hasActiveSubscription || !subscriptionCancelAtPeriodEnd;
+  const portalDisabled = !hasActiveSubscription || portalLoading;
+
 
 
   useEffect(() => {
@@ -319,6 +613,8 @@ const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly"
           subscriptionStatus,
           billingCycle: billingCycleLabel,
           currentPeriodEnd,
+          subscriptionCancelAtPeriodEnd,
+          planSlug: planSelectionSlug,
           preferences: {
             marketingOptIn,
             weeklySummary,
@@ -337,6 +633,8 @@ const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly"
     subscriptionStatus,
     billingCycleLabel,
     currentPeriodEnd,
+    subscriptionCancelAtPeriodEnd,
+    planSelectionSlug,
     marketingOptIn,
     weeklySummary,
     productUpdates,
@@ -364,6 +662,11 @@ const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly"
       setPreferencesSaved(false);
     }
   }, [preferencesChanged]);
+
+  useEffect(() => {
+    setPlanChangeError(null);
+    setPlanChangeSuccess(null);
+  }, [planSelectionSlug, planSelectionCycle]);
 
   const handleSavePreferences = async () => {
     if (preferencesSaving) return;
@@ -469,31 +772,34 @@ const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly"
                 <span>Subscription</span>
               </h3>
             </div>
-            <div className="p-6">
-              {subscription ? (
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-sm text-slate-400">Plan</Label>
-                    <p className="font-semibold text-lg capitalize">{subscription.plan}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm text-slate-400">Status</Label>
-                    <p className="font-semibold text-emerald-400 capitalize">{subscription.status}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm text-slate-400">Next Renewal</Label>
-                    <p className="font-semibold">{new Date(subscription.current_period_end).toLocaleDateString()}</p>
-                  </div>
-                  <Button className="bg-blue-600 hover:bg-blue-700 mt-2 rounded-md" onClick={() => navigate(createPageUrl('Pricing'))}>
-                    Manage Billing
-                  </Button>
+            <div className="p-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label className="text-sm text-slate-400">Plan</Label>
+                  <p className="font-semibold text-lg capitalize">{subscriptionTier || "free"}</p>
                 </div>
-              ) : (
-                 <div className="text-center">
-                    <p className="text-slate-400 mb-4">You don't have an active subscription.</p>
-                    <Button onClick={() => navigate(createPageUrl('Pricing'))} className="rounded-md">View Plans</Button>
-                 </div>
-              )}
+                <div>
+                  <Label className="text-sm text-slate-400">Status</Label>
+                  <p className="font-semibold text-emerald-400 capitalize">{subscriptionStatus || "trial"}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-slate-400">Billing cycle</Label>
+                  <p className="font-semibold text-lg capitalize">{billingCycleLabel || "monthly"}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-slate-400">Next renewal</Label>
+                  <p className="font-semibold">{nextRenewalLabel}</p>
+                </div>
+              </div>
+              <Button
+                className="bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                onClick={handleManageBillingClick}
+              >
+                Manage billing
+              </Button>
+              <p className="text-xs text-slate-500">
+                Manage your subscription below without leaving the app. Changes sync with Stripe automatically.
+              </p>
             </div>
           </div>
 
@@ -648,79 +954,150 @@ const handlePlanChange = async (planSlug, cycle = billingCycleLabel || "monthly"
           </div>
         </div>
 
-        {/* Subscription summary */}
-        <div className="bg-slate-900 border border-slate-800 rounded-md md:col-span-2">
-          <div className="p-6 border-b border-slate-800">
-            <h3 className="flex items-center space-x-2 font-semibold">
-              <ShieldAlert className="w-5 h-5 text-emerald-400" />
-              <span>Subscription</span>
-            </h3>
+        {/* Subscription controls */}
+        <div
+          ref={planManagerRef}
+          className={cn(
+            "bg-slate-900 border border-slate-800 rounded-md md:col-span-2",
+            planHighlight && "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-950",
+          )}
+        >
+          <div className="p-6 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="flex items-center space-x-2 font-semibold">
+                <CreditCard className="w-5 h-5 text-indigo-400" />
+                <span>Manage subscription</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Update plans or schedule cancellations without leaving the app.</p>
+            </div>
+            <div className="flex gap-2">
+              {BILLING_CYCLE_OPTIONS.map((option) => {
+                const active = planSelectionCycle === option.key;
+                return (
+                  <Button
+                    key={option.key}
+                    variant={active ? "default" : "outline"}
+                    className={cn(
+                      "rounded-md text-xs",
+                      active ? "bg-indigo-600 hover:bg-indigo-500" : "border-slate-700 text-slate-300",
+                    )}
+                    onClick={() => setPlanSelectionCycle(option.key)}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
           <div className="p-6 space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Tier</Label>
-                <p className="text-lg font-semibold text-white capitalize">{subscriptionTier || "free"}</p>
+            <RadioGroup value={planSelectionSlug} onValueChange={setPlanSelectionSlug} className="grid gap-3 md:grid-cols-4">
+              {PLAN_CATALOG.map((plan) => {
+                const isSelected = planSelectionSlug === plan.slug;
+                const isCurrent =
+                  currentPlanSlug === plan.slug && (plan.slug === "free" || normalizedCurrentCycle === planSelectionCycle);
+                const price = getPlanPrice(plan, planSelectionCycle);
+                const inputId = `plan-${plan.slug}-${planSelectionCycle}`;
+                const priceLabel =
+                  price === null ? "Contact sales" : price === 0 ? "Free" : `${formatUSD(price)} / ${planSelectionCycle === "annual" ? "year" : "month"}`;
+                return (
+                  <div key={plan.slug}>
+                    <RadioGroupItem value={plan.slug} id={inputId} className="peer sr-only" />
+                    <label
+                      htmlFor={inputId}
+                      className={cn(
+                        "block rounded-md border px-4 py-3 text-left transition-all cursor-pointer bg-slate-950",
+                        isSelected
+                          ? "border-indigo-500 shadow-[0_0_0_1px_rgba(99,102,241,0.4)]"
+                          : "border-slate-800 hover:border-slate-700",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-100">{plan.name}</p>
+                          <p className="text-xs text-slate-400">{plan.description}</p>
+                        </div>
+                        <div
+                          className={cn(
+                            "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
+                            isSelected ? "border-indigo-400 bg-indigo-500/20" : "border-slate-600",
+                          )}
+                        >
+                          {isSelected ? <Check className="h-3 w-3 text-indigo-300" /> : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-sm">
+                        <span className="font-semibold text-slate-100">{priceLabel}</span>
+                        {isCurrent ? (
+                          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Current</span>
+                        ) : null}
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
+            </RadioGroup>
+            {planChangeError ? (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                {planChangeError}
               </div>
-              <div>
-                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Status</Label>
-                <p className="text-lg font-semibold text-emerald-400 capitalize">{subscriptionStatus || "trial"}</p>
+            ) : null}
+            {planChangeSuccess ? (
+              <div className="text-sm text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                {planChangeSuccess}
               </div>
-              <div>
-                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Billing cycle</Label>
-                <p className="text-lg font-semibold text-white capitalize">{billingCycleLabel || "monthly"}</p>
-              </div>
-              <div>
-                <Label className="text-xs uppercase tracking-[0.2em] text-slate-500">Current period end</Label>
-                <p className="text-lg font-semibold text-white">
-                  {currentPeriodEnd ? new Date(currentPeriodEnd).toLocaleDateString() : "–"}
-                </p>
-              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={handlePlanChange}
+                disabled={planChangeDisabled}
+                className="bg-indigo-600 hover:bg-indigo-500 rounded-md"
+              >
+                {planChangeLoading ? "Working…" : planChangeButtonLabel}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleOpenBillingPortal}
+                disabled={portalDisabled}
+                className="rounded-md border-slate-700 text-slate-200"
+              >
+                {portalLoading ? "Opening…" : "Open Stripe portal"}
+              </Button>
             </div>
             {portalError ? (
               <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
                 {portalError}
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-3">
-              <Button
-                onClick={handleOpenBillingPortal}
-                disabled={portalLoading}
-                className="bg-indigo-600 hover:bg-indigo-700 rounded-md"
-              >
-                {portalLoading ? "Opening portal…" : "Manage billing"}
-              </Button>
-              <Button
-                variant="outline"
-                className="rounded-md border-slate-700 text-slate-200"
-                onClick={() => navigate(createPageUrl("Pricing"))}
-              >
-                View pricing
-              </Button>
-              {accountPlanSlug !== "signals_pro" && (
+            {!hasActiveSubscription ? (
+              <div className="text-xs text-slate-500">
+                You’re on the Free tier. Select a paid plan and click “Start paid plan” to launch Stripe checkout.
+              </div>
+            ) : null}
+            <div className="border-t border-slate-800 pt-4 space-y-3">
+              <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
                   className="rounded-md border-slate-700 text-slate-200"
-                  onClick={() => handlePlanChange("signals_pro", billingCycleLabel)}
-                  disabled={checkoutLoading === `signals_pro:${billingCycleLabel}`}
+                  onClick={handleCancelSubscription}
+                  disabled={cancelActionsDisabled || subscriptionStatus === "canceled" || subscriptionCancelAtPeriodEnd}
                 >
-                  {checkoutLoading === `signals_pro:${billingCycleLabel}` ? "Redirecting…" : "Switch to Signals Pro"}
+                  {cancelLoading ? "Working…" : "Cancel subscription"}
                 </Button>
-              )}
-              {accountPlanSlug !== "signals_api" && (
-                <Button
-                  variant="outline"
-                  className="rounded-md border-slate-700 text-slate-200"
-                  onClick={() => handlePlanChange("signals_api", billingCycleLabel)}
-                  disabled={checkoutLoading === `signals_api:${billingCycleLabel}`}
-                >
-                  {checkoutLoading === `signals_api:${billingCycleLabel}` ? "Redirecting…" : "Switch to Signals API"}
-                </Button>
-              )}
+                {subscriptionCancelAtPeriodEnd && (
+                  <Button
+                    variant="outline"
+                    className="rounded-md border-slate-700 text-slate-200"
+                    onClick={handleResumeSubscription}
+                    disabled={resumeActionsDisabled}
+                  >
+                    {resumeLoading ? "Resuming…" : "Resume subscription"}
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Plan updates apply instantly for active subscriptions. Cancelling keeps access until your billing period ends, then returns you to Free.
+              </p>
             </div>
-            <p className="text-xs text-slate-500">
-              The billing portal lets you upgrade, downgrade, or cancel immediately. Plan changes also reflect in your profile metadata as soon as Stripe notifies QuantPulse.
-            </p>
           </div>
         </div>
 
