@@ -763,13 +763,16 @@ export default function Account() {
     : formatRenewalDate(currentPeriodEnd);
   const nextRenewalLabel = isFreeTier ? "N/A" : cancellationRenewalLabel;
   const normalizedCurrentCycle = normalizeKey(billingCycleLabel);
+  const normalizedSelectionCycle = normalizeKey(planSelectionCycle);
   const normalizedPendingPlanSlug = pendingPlanSlug ? normalizeKey(pendingPlanSlug) : null;
   const normalizedPendingCycle = pendingBillingCycle ? normalizeKey(pendingBillingCycle) : null;
   const activeSubscriptionId =
     metadataSnapshot?.stripe_subscription_id ?? subscription?.stripe_subscription_id ?? null;
   const hasActiveSubscription = Boolean(activeSubscriptionId);
   const selectionIsPaidPlan = isPaidPlanSlug(planSelectionSlug);
-  const samePlanSelected = planSelectionSlug === currentPlanSlug && planSelectionCycle === normalizedCurrentCycle;
+  const samePlanSelected =
+    normalizeKey(planSelectionSlug) === normalizeKey(currentPlanSlug) &&
+    normalizedSelectionCycle === normalizedCurrentCycle;
   const currentComparablePrice = getComparablePrice(currentPlan, normalizedCurrentCycle);
   const targetComparablePrice = getComparablePrice(targetPlan, planSelectionCycle);
   const isUpgrade = hasActiveSubscription && selectionIsPaidPlan && targetComparablePrice > currentComparablePrice;
@@ -777,8 +780,8 @@ export default function Account() {
   const hasPendingChange = Boolean(normalizedPendingPlanSlug);
   const pendingMatchesSelection =
     hasPendingChange &&
-    normalizedPendingPlanSlug === planSelectionSlug &&
-    (normalizedPendingCycle ?? "monthly") === planSelectionCycle;
+    normalizedPendingPlanSlug === normalizeKey(planSelectionSlug) &&
+    normalizedPendingCycle === normalizedSelectionCycle;
   const pendingPlan = hasPendingChange ? getPlanBySlug(normalizedPendingPlanSlug) : null;
   const pendingEffectiveLabel = pendingEffectiveDate ? formatRenewalDate(pendingEffectiveDate) : null;
   const pendingBillingLabel = hasPendingChange && normalizedPendingCycle ? normalizedPendingCycle : null;
@@ -802,18 +805,14 @@ export default function Account() {
         : `${formatUSD(scheduledDowngradePriceValue)} / ${scheduledDowngradeCycle === "annual" ? "year" : "month"}`
     : null;
   const planChangeButtonLabel = (() => {
-    if (hasPendingChange) {
-      if (pendingMatchesSelection) return "Scheduled";
-    }
+    if (pendingMatchesSelection) return "Scheduled";
     if (!selectionIsPaidPlan) {
       if (!hasActiveSubscription) return "Already on Free";
       if (subscriptionCancelAtPeriodEnd) return "Cancellation scheduled";
-      return hasPendingChange ? "Reschedule cancellation" : "Downgrade to Free";
+      return "Update subscription";
     }
     if (!hasActiveSubscription) return "Start paid plan";
-    if (isUpgrade) return hasPendingChange ? "Reschedule upgrade" : "Upgrade subscription";
-    if (isDowngrade) return hasPendingChange ? "Reschedule downgrade" : "Schedule downgrade";
-    return hasPendingChange ? "Reschedule update" : "Update subscription";
+    return "Update subscription";
   })();
   const planChangeDisabled =
     planChangeLoading ||
@@ -1201,15 +1200,18 @@ export default function Account() {
             <div className="flex gap-2">
               {BILLING_CYCLE_OPTIONS.map((option) => {
                 const active = planSelectionCycle === option.key;
+                const isAnnual = option.key === "annual";
                 return (
                   <Button
                     key={option.key}
                     variant={active ? "default" : "outline"}
                     className={cn(
-                      "rounded-md text-xs",
-                      active ? "bg-indigo-600 hover:bg-indigo-500" : "border-slate-700",
-                      !active && option.key !== "annual" ? "text-slate-300" : "",
-                      option.key === "annual" && "text-black",
+                      "rounded-md text-xs transition-colors w-full border",
+                      active
+                        ? "bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500"
+                        : "bg-transparent text-black border-slate-700",
+                      !active && isAnnual ? "bg-white" : "",
+                      !active && !isAnnual ? "bg-white" : "",
                     )}
                     onClick={() => setPlanSelectionCycle(option.key)}
                   >
@@ -1225,18 +1227,27 @@ export default function Account() {
                 const isSelected = planSelectionSlug === plan.slug;
                 const isCurrent =
                   currentPlanSlug === plan.slug && (plan.slug === "free" || normalizedCurrentCycle === planSelectionCycle);
-                const isScheduled = hasPendingChange && normalizedPendingPlanSlug === plan.slug;
+                const isScheduled =
+                  hasPendingChange &&
+                  normalizedPendingPlanSlug === plan.slug &&
+                  normalizedPendingCycle === normalizedSelectionCycle;
                 const price = getPlanPrice(plan, planSelectionCycle);
                 const inputId = `plan-${plan.slug}-${planSelectionCycle}`;
                 const priceLabel =
-                  price === null ? "Contact sales" : price === 0 ? "Free" : `${formatUSD(price)} / ${planSelectionCycle === "annual" ? "year" : "month"}`;
+                  plan.slug === "free"
+                    ? "Free"
+                    : price === null
+                      ? "Contact sales"
+                      : price === 0
+                        ? "Free"
+                        : `${formatUSD(price)} / ${planSelectionCycle === "annual" ? "year" : "month"}`;
                 return (
-                  <div key={plan.slug}>
+                  <div key={plan.slug} className="h-full">
                     <RadioGroupItem value={plan.slug} id={inputId} className="peer sr-only" />
                     <label
                       htmlFor={inputId}
                       className={cn(
-                        "block rounded-md border px-4 py-3 text-left transition-all cursor-pointer bg-slate-950",
+                        "flex h-full min-h-[110px] max-h-[110px] flex-col justify-between overflow-hidden rounded-md border px-4 py-3 text-left transition-all cursor-pointer bg-slate-950",
                         isSelected
                           ? "border-indigo-500 shadow-[0_0_0_1px_rgba(99,102,241,0.4)]"
                           : "border-slate-800 hover:border-slate-700",
@@ -1247,31 +1258,29 @@ export default function Account() {
                           <p className="text-sm font-semibold text-slate-100">{plan.name}</p>
                           <p className="text-xs text-slate-400">{plan.description}</p>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="flex gap-2">
-                            {isScheduled ? (
-                              <span className="inline-flex items-center rounded-sm border border-amber-300 bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
-                                Scheduled
-                              </span>
-                            ) : null}
-                            {isCurrent ? (
-                              <span className="inline-flex items-center rounded-sm border border-emerald-400 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
-                                Current
-                              </span>
-                            ) : null}
-                          </div>
-                          <div
-                            className={cn(
-                              "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
-                              isSelected ? "border-indigo-400 bg-indigo-500/20" : "border-slate-600",
-                            )}
-                          >
-                            {isSelected ? <Check className="h-3 w-3 text-indigo-300" /> : null}
-                          </div>
+                        <div
+                          className={cn(
+                            "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
+                            isSelected ? "border-indigo-400 bg-indigo-500/20" : "border-slate-600",
+                          )}
+                        >
+                          {isSelected ? <Check className="h-3 w-3 text-indigo-300" /> : null}
                         </div>
                       </div>
                       <div className="mt-3 flex items-center justify-between text-sm">
                         <span className="font-semibold text-slate-100">{priceLabel}</span>
+                        <div className="flex items-center gap-2 min-h-[18px]">
+                          {isScheduled ? (
+                            <span className="inline-flex items-center rounded-sm border border-amber-300 bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                              Scheduled
+                            </span>
+                          ) : null}
+                          {isCurrent ? (
+                            <span className="inline-flex items-center rounded-sm border border-emerald-400 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </label>
                   </div>
