@@ -14,11 +14,34 @@ const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
   : null;
 
-const stripeCustomerIdFromSubscription = (subscription: Stripe.Subscription | null | undefined) => {
-  if (!subscription) return null;
-  const customer = subscription.customer;
-  if (!customer) return null;
-  return typeof customer === "string" ? customer : customer.id;
+const subscriptionExpand = ["items.data.price", "items.data.price.product"];
+
+const ensureSubscriptionMetadata = async (
+  subscription: Stripe.Subscription,
+  overrides: Record<string, string | null | undefined>,
+) => {
+  if (!stripe) return subscription;
+  const metadata = { ...(subscription.metadata ?? {}) };
+  let changed = false;
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (value === null) {
+      if (metadata[key] !== undefined) {
+        delete metadata[key];
+        changed = true;
+      }
+      continue;
+    }
+    if (metadata[key] !== value) {
+      metadata[key] = value;
+      changed = true;
+    }
+  }
+  if (!changed) return subscription;
+  await stripe.subscriptions.update(subscription.id, { metadata });
+  return await stripe.subscriptions.retrieve(subscription.id, { expand: subscriptionExpand });
 };
 
 async function handleCheckoutSession(session: Stripe.Checkout.Session) {
@@ -40,7 +63,14 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   if (session.subscription) {
     try {
       const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-      subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      subscription = await stripe.subscriptions.retrieve(subscriptionId, { expand: subscriptionExpand });
+      subscription = await ensureSubscriptionMetadata(subscription, {
+        user_id: userId,
+        plan_slug: planSlug ?? subscription.metadata?.plan_slug,
+        billing_cycle: billingCycle ?? subscription.metadata?.billing_cycle,
+        pending_plan_slug: null,
+        pending_billing_cycle: null,
+      });
     } catch (error) {
       console.error("Failed to retrieve subscription", error);
     }
@@ -64,11 +94,22 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
     return;
   }
 
+  let workingSubscription = subscription;
+  if (stripe) {
+    workingSubscription = await ensureSubscriptionMetadata(subscription, {
+      user_id: userId,
+      plan_slug: inferred.planSlug ?? subscription.metadata?.plan_slug,
+      billing_cycle: inferred.billingCycle ?? subscription.metadata?.billing_cycle,
+      pending_plan_slug: null,
+      pending_billing_cycle: null,
+    });
+  }
+
   await updateUserFromSubscription({
     userId,
     planSlug: inferred.planSlug ?? undefined,
     billingCycle: inferred.billingCycle ?? undefined,
-    subscription,
+    subscription: workingSubscription,
     statusOverride: subscription.status,
   });
 }
@@ -82,11 +123,22 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     return;
   }
 
+  let workingSubscription = subscription;
+  if (stripe) {
+    workingSubscription = await ensureSubscriptionMetadata(subscription, {
+      user_id: userId,
+      plan_slug: inferred.planSlug ?? subscription.metadata?.plan_slug,
+      billing_cycle: inferred.billingCycle ?? subscription.metadata?.billing_cycle,
+      pending_plan_slug: null,
+      pending_billing_cycle: null,
+    });
+  }
+
   await updateUserFromSubscription({
     userId,
     planSlug: inferred.planSlug ?? undefined,
     billingCycle: inferred.billingCycle ?? undefined,
-    subscription,
+    subscription: workingSubscription,
   });
 }
 
@@ -96,7 +148,6 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     console.warn("Subscription delete missing user metadata", subscription.id);
     return;
   }
-
   await updateUserFromSubscription({
     userId,
     planSlug: "free",

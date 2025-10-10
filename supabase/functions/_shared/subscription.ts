@@ -52,6 +52,12 @@ export const normalizeBillingCycle = (billingCycle?: string | null) => {
   return billingCycle.toLowerCase();
 };
 
+const metadataStringOrNull = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
 export const derivePlanInfoFromSubscription = (subscription: Stripe.Subscription) => {
   let planSlug =
     normalizePlanSlug(subscription.metadata?.plan_slug) ??
@@ -147,9 +153,21 @@ export const updateUserFromSubscription = async (options: UpdateUserFromSubscrip
       typeof subscription.customer === "string"
         ? subscription.customer
         : subscription.customer?.id ?? existingMeta.stripe_customer_id ?? null;
+    const pendingPlan = metadataStringOrNull(subscription.metadata?.pending_plan_slug);
+    const pendingBilling = metadataStringOrNull(subscription.metadata?.pending_billing_cycle);
+    const pendingEffectiveRaw = metadataStringOrNull(subscription.metadata?.pending_effective_date);
+    const pendingScheduleId = metadataStringOrNull(subscription.metadata?.pending_schedule_id);
+    updates.subscription_pending_plan_slug = pendingPlan ?? null;
+    updates.subscription_pending_billing_cycle = pendingBilling ?? null;
+    updates.subscription_pending_effective_date = pendingEffectiveRaw ? toIsoString(pendingEffectiveRaw) : null;
+    updates.subscription_pending_schedule_id = pendingScheduleId ?? null;
   } else if (statusOverride) {
     updates.stripe_subscription_id = null;
     updates.current_period_end = new Date().toISOString();
+    updates.subscription_pending_plan_slug = null;
+    updates.subscription_pending_billing_cycle = null;
+    updates.subscription_pending_effective_date = null;
+    updates.subscription_pending_schedule_id = null;
   }
 
   const mergedMetadata = { ...existingMeta, ...updates };
@@ -173,6 +191,10 @@ export const updateUserFromSubscription = async (options: UpdateUserFromSubscrip
       billing_cycle: mergedMetadata.billing_cycle ?? null,
       stripe_customer_id: mergedMetadata.stripe_customer_id ?? null,
       stripe_subscription_id: mergedMetadata.stripe_subscription_id ?? null,
+      subscription_pending_plan_slug: mergedMetadata.subscription_pending_plan_slug ?? null,
+      subscription_pending_billing_cycle: mergedMetadata.subscription_pending_billing_cycle ?? null,
+      subscription_pending_effective_date: mergedMetadata.subscription_pending_effective_date ?? null,
+      subscription_pending_schedule_id: mergedMetadata.subscription_pending_schedule_id ?? null,
     };
 
     const { error: upsertError } = await supabase.from("users").upsert(upsertPayload, {

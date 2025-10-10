@@ -113,10 +113,16 @@ const formatRenewalDate = (isoValue) => {
   if (Number.isNaN(date.getTime())) return "N/A";
   const year = date.getUTCFullYear();
   if (year >= 9999) return "N/A";
-  return date.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 const isPaidPlanSlug = (slug) => slug && normalizeKey(slug) !== "free";
+
+const getPlanBySlug = (slug) => PLAN_CATALOG.find((plan) => plan.slug === slug) ?? null;
 
 const formatUSD = (value) => {
   if (value === null || value === undefined) return "Custom";
@@ -143,6 +149,15 @@ const getPlanPrice = (plan, billingCycle) => {
     return deriveAnnualPrice(plan.monthlyPrice);
   }
   return plan.monthlyPrice;
+};
+
+const getComparablePrice = (plan, billingCycle) => {
+  if (!plan) return 0;
+  if (billingCycle === "annual") {
+    const annual = deriveAnnualPrice(plan.monthlyPrice);
+    return annual !== null ? annual / 12 : 0;
+  }
+  return plan.monthlyPrice ?? 0;
 };
 
 export default function Account() {
@@ -178,12 +193,15 @@ export default function Account() {
   const [planSelectionCycle, setPlanSelectionCycle] = useState(() => normalizeKey(cacheRef.current?.billingCycle ?? "monthly"));
   const [planSelectionSlug, setPlanSelectionSlug] = useState(() => cacheRef.current?.planSlug ?? planSlugForTier(cacheRef.current?.subscriptionTier ?? "free"));
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [portalError, setPortalError] = useState(null);
-  const [planHighlight, setPlanHighlight] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduledDowngradeTarget, setScheduledDowngradeTarget] = useState(null);
+  const [pendingPlanSlug, setPendingPlanSlug] = useState(cacheRef.current?.pendingPlanSlug ?? null);
+  const [pendingBillingCycle, setPendingBillingCycle] = useState(cacheRef.current?.pendingBillingCycle ?? null);
+  const [pendingEffectiveDate, setPendingEffectiveDate] = useState(cacheRef.current?.pendingEffectiveDate ?? null);
+  const [cancelScheduledChangeLoading, setCancelScheduledChangeLoading] = useState(false);
   const saveBannerTimeout = useRef(null);
-  const planManagerRef = useRef(null);
   const metadataSnapshot = useMemo(() => {
     if (!user) return {};
     return user.raw_user_meta_data ?? user.user_metadata ?? {};
@@ -217,6 +235,20 @@ export default function Account() {
       if (iso) {
         setCurrentPeriodEnd(iso);
       }
+    }
+    if (snapshot.pending_plan_slug !== undefined) {
+      const nextPending = snapshot.pending_plan_slug ? normalizeKey(snapshot.pending_plan_slug) : null;
+      setPendingPlanSlug(nextPending);
+    }
+    if (snapshot.pending_billing_cycle !== undefined) {
+      const nextPendingCycle = snapshot.pending_billing_cycle ? normalizeKey(snapshot.pending_billing_cycle) : null;
+      setPendingBillingCycle(nextPendingCycle);
+    }
+    if (snapshot.pending_effective_date !== undefined) {
+      const iso = snapshot.pending_effective_date
+        ? new Date(snapshot.pending_effective_date).toISOString()
+        : null;
+      setPendingEffectiveDate(iso);
     }
   };
 
@@ -255,6 +287,12 @@ export default function Account() {
         setBillingCycleLabel(resolvedCycle);
         setCurrentPeriodEnd(meta?.current_period_end ?? null);
         setSubscriptionCancelAtPeriodEnd(Boolean(meta?.subscription_cancel_at_period_end ?? false));
+        const pendingPlanMeta = meta?.subscription_pending_plan_slug ?? null;
+        setPendingPlanSlug(pendingPlanMeta ? normalizeKey(pendingPlanMeta) : null);
+        const pendingCycleMeta = meta?.subscription_pending_billing_cycle ?? null;
+        setPendingBillingCycle(pendingCycleMeta ? normalizeKey(pendingCycleMeta) : null);
+        const pendingEffectiveMeta = meta?.subscription_pending_effective_date ?? null;
+        setPendingEffectiveDate(pendingEffectiveMeta ? new Date(pendingEffectiveMeta).toISOString() : null);
         setPlanSelectionCycle(resolvedCycle);
         setPlanSelectionSlug(resolvedPlanSlug);
         const prefs = {
@@ -405,6 +443,75 @@ export default function Account() {
     }
   };
 
+  const cancelScheduledChangeRequest = async ({ silent = false } = {}) => {
+    try {
+      const result = await StripeApi.cancelScheduledChange();
+      applySubscriptionResponse(result?.subscription, silent ? null : "Scheduled change canceled.");
+      if (!silent) {
+        toast.success("Scheduled change canceled");
+      }
+      return result;
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to cancel scheduled change.";
+      if (!silent) {
+        toast.error("Cancel failed", { description: message });
+      }
+      throw error;
+    }
+  };
+
+  const cancelPendingChangeSilently = async () => {
+    if (!pendingPlanSlug) return;
+    await cancelScheduledChangeRequest({ silent: true });
+  };
+
+  const handleCancelScheduledChange = async () => {
+    setPlanChangeError(null);
+    setPlanChangeSuccess(null);
+    setCancelScheduledChangeLoading(true);
+    try {
+      await cancelScheduledChangeRequest({ silent: false });
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to cancel scheduled change.";
+      setPlanChangeError(message);
+    } finally {
+      setCancelScheduledChangeLoading(false);
+    }
+  };
+
+  const handleConfirmScheduledDowngrade = async () => {
+    if (!scheduledDowngradeTarget) {
+      setScheduleDialogOpen(false);
+      return;
+    }
+    setPlanChangeLoading(true);
+    try {
+      if (pendingPlanSlug) {
+        await cancelPendingChangeSilently();
+      }
+      const result = await StripeApi.scheduleDowngrade({
+        plan_slug: scheduledDowngradeTarget.plan_slug,
+        billing_cycle: scheduledDowngradeTarget.billing_cycle,
+      });
+      applySubscriptionResponse(result?.subscription, "Downgrade scheduled for the next billing period.");
+      toast.success("Downgrade scheduled");
+      setScheduleDialogOpen(false);
+      setScheduledDowngradeTarget(null);
+    } catch (error) {
+      const message = error?.message || error?.cause?.message || "Unable to schedule downgrade.";
+      setPlanChangeError(message);
+      toast.error("Downgrade failed", { description: message });
+    } finally {
+      setPlanChangeLoading(false);
+    }
+  };
+
+  const handleDismissScheduleDialog = () => {
+    if (planChangeLoading) return;
+    setScheduleDialogOpen(false);
+    setScheduledDowngradeTarget(null);
+  };
+
 
   const applySubscriptionResponse = (subscriptionPayload, message) => {
     if (subscriptionPayload) {
@@ -420,8 +527,15 @@ export default function Account() {
           current_period_end: subscriptionPayload.current_period_end
             ? new Date(subscriptionPayload.current_period_end).toISOString()
             : existingMeta.current_period_end,
-          subscription_cancel_at_period_end: subscriptionPayload.cancel_at_period_end ?? existingMeta.subscription_cancel_at_period_end,
+          subscription_cancel_at_period_end:
+            subscriptionPayload.cancel_at_period_end ?? existingMeta.subscription_cancel_at_period_end ?? false,
           plan_slug: subscriptionPayload.plan_slug ?? existingMeta.plan_slug,
+          subscription_pending_plan_slug: subscriptionPayload.pending_plan_slug ?? null,
+          subscription_pending_billing_cycle: subscriptionPayload.pending_billing_cycle ?? null,
+          subscription_pending_effective_date: subscriptionPayload.pending_effective_date
+            ? new Date(subscriptionPayload.pending_effective_date).toISOString()
+            : null,
+          subscription_pending_schedule_id: subscriptionPayload.pending_schedule_id ?? null,
         };
         return {
           ...prev,
@@ -442,27 +556,55 @@ export default function Account() {
       setPlanChangeError("Select a plan to continue.");
       return;
     }
-    const normalizedSelection = normalizeKey(planSelectionSlug);
-    const selectionIsPaid = isPaidPlanSlug(normalizedSelection);
-    const sameSelection = normalizedSelection === currentPlanSlug && planSelectionCycle === normalizedCurrentCycle;
-
-    if (!selectionIsPaid && !hasActiveSubscription) {
-      setPlanChangeError("You're already on the Free tier.");
-      return;
-    }
-    if (sameSelection) {
+    if (samePlanSelected) {
       setPlanChangeError("You're already on this plan.");
       return;
     }
+    if (!targetPlan) {
+      setPlanChangeError("Unsupported plan selection.");
+      return;
+    }
+    const normalizedPendingPlanSlug = pendingPlanSlug ? normalizeKey(pendingPlanSlug) : null;
+    const normalizedPendingCycle = pendingBillingCycle ? normalizeKey(pendingBillingCycle) : "monthly";
+    const hasPendingChange = Boolean(normalizedPendingPlanSlug);
+    const pendingMatchesSelection =
+      hasPendingChange &&
+      normalizedPendingPlanSlug === planSelectionSlug &&
+      normalizeKey(normalizedPendingCycle) === planSelectionCycle;
 
-    if (!hasActiveSubscription && selectionIsPaid) {
+    if (pendingMatchesSelection) {
+      setPlanChangeError("This change is already scheduled.");
+      return;
+    }
+
+    if (!selectionIsPaidPlan) {
+      if (!hasActiveSubscription) {
+        setPlanChangeError("You're already on the Free tier.");
+        return;
+      }
+      try {
+        if (hasPendingChange) {
+          await cancelPendingChangeSilently();
+        }
+      } catch (error) {
+        const message = error?.message || error?.cause?.message || "Unable to cancel scheduled change.";
+        setPlanChangeError(message);
+        return;
+      }
+      await executeCancelSubscription();
+      return;
+    }
+    if (!hasActiveSubscription) {
       setPlanChangeLoading(true);
       try {
+        if (hasPendingChange) {
+          await cancelPendingChangeSilently();
+        }
         const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
         const successUrl = `${origin}${createPageUrl("Account")}?status=success`;
         const cancelUrl = `${origin}${createPageUrl("Account")}?status=cancel`;
         const { url } = await StripeApi.createCheckoutSession({
-          plan_slug: normalizedSelection,
+          plan_slug: planSelectionSlug,
           billing_cycle: planSelectionCycle,
           success_url: successUrl,
           cancel_url: cancelUrl,
@@ -479,27 +621,62 @@ export default function Account() {
       }
       return;
     }
-
-    if (hasActiveSubscription && !selectionIsPaid) {
+    if (isUpgrade) {
       setPlanChangeLoading(true);
       try {
-        const result = await StripeApi.cancelSubscription({ cancel_now: false });
-        applySubscriptionResponse(result?.subscription, "Subscription will cancel at period end.");
-        toast.success("Cancellation scheduled");
+        if (hasPendingChange) {
+          await cancelPendingChangeSilently();
+        }
+        const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+        const returnUrl = `${origin}${createPageUrl("Account")}?status=upgrade`;
+        const cancelUrl = `${origin}${createPageUrl("Account")}?status=upgrade-cancel`;
+        const result = await StripeApi.changeSubscriptionPlan({
+          plan_slug: planSelectionSlug,
+          billing_cycle: planSelectionCycle,
+          upgrade_return_url: returnUrl,
+          success_url: returnUrl,
+          cancel_url: cancelUrl,
+        });
+        if (result?.redirect_url) {
+          toast.success("Redirecting to Stripe", {
+            description: "Confirm payment in Stripe to finish your upgrade.",
+          });
+          if (typeof window !== "undefined") {
+            window.location.href = result.redirect_url;
+          }
+        } else {
+          setPlanChangeSuccess("Complete the upgrade in Stripe to finish billing.");
+          toast.info("Complete upgrade in Stripe", {
+            description: "Follow the Stripe prompt to finalize your new plan.",
+          });
+        }
       } catch (error) {
-        const message = error?.message || error?.cause?.message || "Unable to schedule cancellation.";
+        const message = error?.message || error?.cause?.message || "Unable to start upgrade checkout.";
         setPlanChangeError(message);
-        toast.error("Cancel failed", { description: message });
+        toast.error("Upgrade unavailable", { description: message });
       } finally {
         setPlanChangeLoading(false);
       }
       return;
     }
-
+    if (isDowngrade) {
+      setPlanChangeError(null);
+      setPlanChangeSuccess(null);
+      setScheduledDowngradeTarget({
+        plan_slug: planSelectionSlug,
+        billing_cycle: planSelectionCycle,
+        plan_name: targetPlan?.name ?? planSelectionSlug,
+      });
+      setScheduleDialogOpen(true);
+      return;
+    }
     setPlanChangeLoading(true);
     try {
+      if (hasPendingChange) {
+        await cancelPendingChangeSilently();
+      }
       const result = await StripeApi.changeSubscriptionPlan({
-        plan_slug: normalizedSelection,
+        plan_slug: planSelectionSlug,
         billing_cycle: planSelectionCycle,
       });
       applySubscriptionResponse(result?.subscription, "Subscription updated.");
@@ -513,27 +690,53 @@ export default function Account() {
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (!hasActiveSubscription) {
-      toast.error("No active subscription to cancel.");
+  const executeCancelSubscription = async () => {
+    if (!hasActiveSubscription || subscriptionCancelAtPeriodEnd) {
+      if (!hasActiveSubscription) {
+        toast.error("No active subscription to cancel.");
+      } else {
+        toast.error("Cancellation already scheduled.");
+      }
       return;
     }
     setCancelLoading(true);
     try {
       const result = await StripeApi.cancelSubscription({ cancel_now: false });
       applySubscriptionResponse(result?.subscription, "Subscription will cancel at period end.");
-      toast.success("Cancellation scheduled");
+      setPlanSelectionSlug("free");
+      setPlanSelectionCycle("monthly");
+      const effectiveEnd = result?.subscription?.current_period_end
+        ? formatRenewalDate(result.subscription.current_period_end)
+        : formatRenewalDate(currentPeriodEnd);
+      toast.success("Cancellation scheduled", {
+        description: effectiveEnd && effectiveEnd !== "N/A"
+          ? `You'll keep access until ${effectiveEnd}.`
+          : undefined,
+      });
     } catch (error) {
       const message = error?.message || error?.cause?.message || "Unable to cancel subscription.";
       toast.error("Cancel failed", { description: message });
     } finally {
       setCancelLoading(false);
+      setCancelDialogOpen(false);
     }
   };
 
-  const handleResumeSubscription = async () => {
+  const handleCancelSubscription = () => {
     if (!hasActiveSubscription) {
-      toast.error("No active subscription to resume.");
+      toast.error("No active subscription to cancel.");
+      return;
+    }
+    if (subscriptionCancelAtPeriodEnd) {
+      toast.error("Cancellation already scheduled.");
+      return;
+    }
+    setCancelDialogOpen(true);
+  };
+
+  const handleResumeSubscription = async () => {
+    if (!hasActiveSubscription || !subscriptionCancelAtPeriodEnd) {
+      toast.error("No pending cancellation to resume.");
       return;
     }
     setResumeLoading(true);
@@ -549,59 +752,78 @@ export default function Account() {
     }
   };
 
-  const handleOpenBillingPortal = async () => {
-    if (!hasActiveSubscription) {
-      toast.error("Billing portal unavailable", { description: "Upgrade to a paid plan to manage billing in Stripe." });
-      return;
-    }
-    setPortalError(null);
-    setPortalLoading(true);
-    try {
-      const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
-      const { url } = await StripeApi.createBillingPortalSession({
-        return_url: `${origin}${createPageUrl("Account")}`,
-      });
-      if (typeof window !== "undefined" && url) {
-        window.location.href = url;
-      }
-    } catch (error) {
-      const message = error?.message || error?.cause?.message || "Unable to open billing portal.";
-      setPortalError(message);
-      toast.error("Billing portal unavailable", { description: message });
-    } finally {
-      setPortalLoading(false);
-    }
-  };
-
-  const handleManageBillingClick = () => {
-    setPlanChangeError(null);
-    setPlanChangeSuccess(null);
-    planManagerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setPlanHighlight(true);
-    window.setTimeout(() => setPlanHighlight(false), 1800);
-  };
-
   const currentPlanSlug = planSlugForTier(subscriptionTier);
+  const currentPlan = getPlanBySlug(currentPlanSlug);
+  const targetPlan = getPlanBySlug(planSelectionSlug);
   const isFreeTier = normalizeKey(subscriptionTier) === "free";
-  const nextRenewalLabel = isFreeTier ? "N/A" : formatRenewalDate(currentPeriodEnd);
+  const cancellationRenewalLabel = subscriptionCancelAtPeriodEnd
+    ? currentPeriodEnd
+      ? `Cancels ${formatRenewalDate(currentPeriodEnd)}`
+      : "Cancellation scheduled"
+    : formatRenewalDate(currentPeriodEnd);
+  const nextRenewalLabel = isFreeTier ? "N/A" : cancellationRenewalLabel;
   const normalizedCurrentCycle = normalizeKey(billingCycleLabel);
+  const normalizedPendingPlanSlug = pendingPlanSlug ? normalizeKey(pendingPlanSlug) : null;
+  const normalizedPendingCycle = pendingBillingCycle ? normalizeKey(pendingBillingCycle) : null;
   const activeSubscriptionId =
     metadataSnapshot?.stripe_subscription_id ?? subscription?.stripe_subscription_id ?? null;
   const hasActiveSubscription = Boolean(activeSubscriptionId);
   const selectionIsPaidPlan = isPaidPlanSlug(planSelectionSlug);
   const samePlanSelected = planSelectionSlug === currentPlanSlug && planSelectionCycle === normalizedCurrentCycle;
-  const planChangeButtonLabel =
-    !hasActiveSubscription && selectionIsPaidPlan ? "Start paid plan" : selectionIsPaidPlan ? "Update subscription" : "Schedule cancellation";
+  const currentComparablePrice = getComparablePrice(currentPlan, normalizedCurrentCycle);
+  const targetComparablePrice = getComparablePrice(targetPlan, planSelectionCycle);
+  const isUpgrade = hasActiveSubscription && selectionIsPaidPlan && targetComparablePrice > currentComparablePrice;
+  const isDowngrade = hasActiveSubscription && selectionIsPaidPlan && targetComparablePrice < currentComparablePrice;
+  const hasPendingChange = Boolean(normalizedPendingPlanSlug);
+  const pendingMatchesSelection =
+    hasPendingChange &&
+    normalizedPendingPlanSlug === planSelectionSlug &&
+    (normalizedPendingCycle ?? "monthly") === planSelectionCycle;
+  const pendingPlan = hasPendingChange ? getPlanBySlug(normalizedPendingPlanSlug) : null;
+  const pendingEffectiveLabel = pendingEffectiveDate ? formatRenewalDate(pendingEffectiveDate) : null;
+  const pendingBillingLabel = hasPendingChange && normalizedPendingCycle ? normalizedPendingCycle : null;
+  const pendingBillingDisplay = pendingBillingLabel
+    ? pendingBillingLabel.charAt(0).toUpperCase() + pendingBillingLabel.slice(1)
+    : null;
+  const scheduledDowngradePlan = scheduledDowngradeTarget ? getPlanBySlug(scheduledDowngradeTarget.plan_slug) : null;
+  const scheduledDowngradeCycle = scheduledDowngradeTarget?.billing_cycle ?? planSelectionCycle;
+  const scheduledDowngradeCycleDisplay = scheduledDowngradeCycle
+    ? scheduledDowngradeCycle.charAt(0).toUpperCase() + scheduledDowngradeCycle.slice(1)
+    : null;
+  const scheduledDowngradeEffectiveLabel = currentPeriodEnd ? formatRenewalDate(currentPeriodEnd) : null;
+  const scheduledDowngradePriceValue = scheduledDowngradePlan
+    ? getPlanPrice(scheduledDowngradePlan, scheduledDowngradeCycle)
+    : null;
+  const scheduledDowngradePriceLabel = scheduledDowngradePlan
+    ? scheduledDowngradePriceValue === null
+      ? "Contact sales"
+      : scheduledDowngradePriceValue === 0
+        ? "Free"
+        : `${formatUSD(scheduledDowngradePriceValue)} / ${scheduledDowngradeCycle === "annual" ? "year" : "month"}`
+    : null;
+  const planChangeButtonLabel = (() => {
+    if (hasPendingChange) {
+      if (pendingMatchesSelection) return "Scheduled";
+    }
+    if (!selectionIsPaidPlan) {
+      if (!hasActiveSubscription) return "Already on Free";
+      if (subscriptionCancelAtPeriodEnd) return "Cancellation scheduled";
+      return hasPendingChange ? "Reschedule cancellation" : "Downgrade to Free";
+    }
+    if (!hasActiveSubscription) return "Start paid plan";
+    if (isUpgrade) return hasPendingChange ? "Reschedule upgrade" : "Upgrade subscription";
+    if (isDowngrade) return hasPendingChange ? "Reschedule downgrade" : "Schedule downgrade";
+    return hasPendingChange ? "Reschedule update" : "Update subscription";
+  })();
   const planChangeDisabled =
     planChangeLoading ||
+    cancelScheduledChangeLoading ||
     samePlanSelected ||
-    (!hasActiveSubscription && !selectionIsPaidPlan);
+    pendingMatchesSelection ||
+    (!selectionIsPaidPlan && (!hasActiveSubscription || subscriptionCancelAtPeriodEnd)) ||
+    (selectionIsPaidPlan && (!targetPlan || (isDowngrade && !hasActiveSubscription)));
   const cancelActionsDisabled = cancelLoading || !hasActiveSubscription || subscriptionCancelAtPeriodEnd;
   const resumeActionsDisabled = resumeLoading || !hasActiveSubscription || !subscriptionCancelAtPeriodEnd;
-  const portalDisabled = !hasActiveSubscription || portalLoading;
-
-
-
   useEffect(() => {
     const snapshot = user
       ? {
@@ -615,6 +837,9 @@ export default function Account() {
           currentPeriodEnd,
           subscriptionCancelAtPeriodEnd,
           planSlug: planSelectionSlug,
+          pendingPlanSlug,
+          pendingBillingCycle,
+          pendingEffectiveDate,
           preferences: {
             marketingOptIn,
             weeklySummary,
@@ -635,6 +860,9 @@ export default function Account() {
     currentPeriodEnd,
     subscriptionCancelAtPeriodEnd,
     planSelectionSlug,
+    pendingPlanSlug,
+    pendingBillingCycle,
+    pendingEffectiveDate,
     marketingOptIn,
     weeklySummary,
     productUpdates,
@@ -789,17 +1017,23 @@ export default function Account() {
                 <div>
                   <Label className="text-sm text-slate-400">Next renewal</Label>
                   <p className="font-semibold">{nextRenewalLabel}</p>
+                  {subscriptionCancelAtPeriodEnd ? (
+                    <p className="text-xs text-amber-300 mt-1">Cancellation is scheduled at period end.</p>
+                  ) : null}
                 </div>
+                {hasPendingChange ? (
+                  <div>
+                    <Label className="text-sm text-slate-400">Scheduled change</Label>
+                    <p className="font-semibold text-amber-200">
+                      {(pendingPlan?.name ?? pendingPlanSlug) || "Pending update"}
+                      {pendingBillingDisplay ? ` (${pendingBillingDisplay})` : ""}
+                    </p>
+                    <p className="text-xs text-amber-200">
+                      {pendingEffectiveLabel ? `Effective ${pendingEffectiveLabel}` : "Applies at the next billing cycle"}
+                    </p>
+                  </div>
+                ) : null}
               </div>
-              <Button
-                className="bg-indigo-600 hover:bg-indigo-700 rounded-md"
-                onClick={handleManageBillingClick}
-              >
-                Manage billing
-              </Button>
-              <p className="text-xs text-slate-500">
-                Manage your subscription below without leaving the app. Changes sync with Stripe automatically.
-              </p>
             </div>
           </div>
 
@@ -955,13 +1189,7 @@ export default function Account() {
         </div>
 
         {/* Subscription controls */}
-        <div
-          ref={planManagerRef}
-          className={cn(
-            "bg-slate-900 border border-slate-800 rounded-md md:col-span-2",
-            planHighlight && "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-950",
-          )}
-        >
+        <div className="bg-slate-900 border border-slate-800 rounded-md md:col-span-2">
           <div className="p-6 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="flex items-center space-x-2 font-semibold">
@@ -979,7 +1207,9 @@ export default function Account() {
                     variant={active ? "default" : "outline"}
                     className={cn(
                       "rounded-md text-xs",
-                      active ? "bg-indigo-600 hover:bg-indigo-500" : "border-slate-700 text-slate-300",
+                      active ? "bg-indigo-600 hover:bg-indigo-500" : "border-slate-700",
+                      !active && option.key !== "annual" ? "text-slate-300" : "",
+                      option.key === "annual" && "text-black",
                     )}
                     onClick={() => setPlanSelectionCycle(option.key)}
                   >
@@ -995,6 +1225,7 @@ export default function Account() {
                 const isSelected = planSelectionSlug === plan.slug;
                 const isCurrent =
                   currentPlanSlug === plan.slug && (plan.slug === "free" || normalizedCurrentCycle === planSelectionCycle);
+                const isScheduled = hasPendingChange && normalizedPendingPlanSlug === plan.slug;
                 const price = getPlanPrice(plan, planSelectionCycle);
                 const inputId = `plan-${plan.slug}-${planSelectionCycle}`;
                 const priceLabel =
@@ -1016,26 +1247,110 @@ export default function Account() {
                           <p className="text-sm font-semibold text-slate-100">{plan.name}</p>
                           <p className="text-xs text-slate-400">{plan.description}</p>
                         </div>
-                        <div
-                          className={cn(
-                            "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
-                            isSelected ? "border-indigo-400 bg-indigo-500/20" : "border-slate-600",
-                          )}
-                        >
-                          {isSelected ? <Check className="h-3 w-3 text-indigo-300" /> : null}
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="flex gap-2">
+                            {isScheduled ? (
+                              <span className="inline-flex items-center rounded-sm border border-amber-300 bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                                Scheduled
+                              </span>
+                            ) : null}
+                            {isCurrent ? (
+                              <span className="inline-flex items-center rounded-sm border border-emerald-400 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                                Current
+                              </span>
+                            ) : null}
+                          </div>
+                          <div
+                            className={cn(
+                              "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
+                              isSelected ? "border-indigo-400 bg-indigo-500/20" : "border-slate-600",
+                            )}
+                          >
+                            {isSelected ? <Check className="h-3 w-3 text-indigo-300" /> : null}
+                          </div>
                         </div>
                       </div>
                       <div className="mt-3 flex items-center justify-between text-sm">
                         <span className="font-semibold text-slate-100">{priceLabel}</span>
-                        {isCurrent ? (
-                          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Current</span>
-                        ) : null}
                       </div>
                     </label>
                   </div>
                 );
               })}
             </RadioGroup>
+            <Dialog
+              open={scheduleDialogOpen}
+              onOpenChange={(open) => {
+                if (open) {
+                  setScheduleDialogOpen(true);
+                } else {
+                  handleDismissScheduleDialog();
+                }
+              }}
+            >
+              <DialogContent className="bg-slate-900 border border-slate-800 text-slate-100">
+                <DialogHeader>
+                  <DialogTitle>Schedule downgrade?</DialogTitle>
+                  <DialogDescription className="text-slate-400">
+                    You’ll stay on <span className="font-semibold text-slate-100">{currentPlan?.name ?? "your current plan"}</span>
+                    {scheduledDowngradeEffectiveLabel ? ` until ${scheduledDowngradeEffectiveLabel}` : ""}. After that, the subscription will switch to{" "}
+                    <span className="font-semibold text-slate-100">{scheduledDowngradePlan?.name ?? scheduledDowngradeTarget?.plan_slug}</span>.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 text-sm text-slate-300">
+                  <p>
+                    Upcoming plan: <span className="font-semibold text-slate-100">{scheduledDowngradePlan?.name ?? scheduledDowngradeTarget?.plan_slug}</span>
+                    {scheduledDowngradeCycleDisplay ? ` (${scheduledDowngradeCycleDisplay})` : ""}.
+                  </p>
+                  {scheduledDowngradePriceLabel ? (
+                    <p>Next charge: <span className="font-semibold text-slate-100">{scheduledDowngradePriceLabel}</span></p>
+                  ) : null}
+                  <p className="text-xs text-slate-400">
+                    You can cancel or change this scheduled downgrade anytime before the next billing period starts.
+                  </p>
+                </div>
+                <DialogFooter className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-md border-slate-700 text-black bg-white hover:bg-slate-100"
+                    onClick={handleDismissScheduleDialog}
+                    disabled={planChangeLoading}
+                  >
+                    Keep current plan
+                  </Button>
+                  <Button
+                    onClick={handleConfirmScheduledDowngrade}
+                    disabled={planChangeLoading}
+                    className="bg-amber-500 hover:bg-amber-400 text-black rounded-md"
+                  >
+                    {planChangeLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Confirm schedule
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            {hasPendingChange ? (
+              <div className="border border-amber-500/40 bg-amber-500/10 rounded-md p-4 space-y-2">
+                <p className="text-sm text-amber-100">
+                  Scheduled to switch to <span className="font-semibold">{pendingPlan?.name ?? pendingPlanSlug}</span>
+                  {pendingBillingDisplay ? ` (${pendingBillingDisplay})` : ""}
+                  {pendingEffectiveLabel ? ` on ${pendingEffectiveLabel}` : " at the next billing cycle"}.
+                </p>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Button
+                    variant="outline"
+                    className="rounded-md border-amber-400 text-black hover:bg-amber-500/20"
+                    onClick={handleCancelScheduledChange}
+                    disabled={cancelScheduledChangeLoading}
+                  >
+                    {cancelScheduledChangeLoading ? "Canceling…" : "Cancel scheduled change"}
+                  </Button>
+                  <span className="text-xs text-amber-100">
+                    Select a different tier below to replace this scheduled change.
+                  </span>
+                </div>
+              </div>
+            ) : null}
             {planChangeError ? (
               <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
                 {planChangeError}
@@ -1054,20 +1369,54 @@ export default function Account() {
               >
                 {planChangeLoading ? "Working…" : planChangeButtonLabel}
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenBillingPortal}
-                disabled={portalDisabled}
-                className="rounded-md border-slate-700 text-slate-200"
-              >
-                {portalLoading ? "Opening…" : "Open Stripe portal"}
-              </Button>
             </div>
-            {portalError ? (
-              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
-                {portalError}
-              </div>
-            ) : null}
+            <Dialog
+              open={cancelDialogOpen}
+              onOpenChange={(open) => {
+                if (!cancelLoading) {
+                  setCancelDialogOpen(open);
+                }
+              }}
+            >
+              <DialogContent className="bg-slate-900 border border-slate-800 text-slate-100">
+                <DialogHeader>
+                  <DialogTitle>Confirm cancellation</DialogTitle>
+                  <DialogDescription className="text-slate-400">
+                    {subscriptionCancelAtPeriodEnd
+                      ? "A cancellation is already scheduled."
+                      : `Your paid access will remain active until ${formatRenewalDate(currentPeriodEnd)}. After that you'll move back to the Free tier.`}
+                  </DialogDescription>
+                </DialogHeader>
+                {!subscriptionCancelAtPeriodEnd ? (
+                  <div className="space-y-2 text-sm text-slate-300">
+                    <p>
+                      You can resume the subscription before the end of your current billing period.
+                    </p>
+                    <p>
+                      Need to upgrade again later? Restarting is a single click from this page.
+                    </p>
+                  </div>
+                ) : null}
+                <DialogFooter className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={cancelLoading}
+                    onClick={() => setCancelDialogOpen(false)}
+                    className="rounded-md border-slate-700 text-black"
+                  >
+                    Keep subscription
+                  </Button>
+                  <Button
+                    onClick={executeCancelSubscription}
+                    disabled={cancelLoading || subscriptionCancelAtPeriodEnd}
+                    className="bg-red-600 hover:bg-red-500 rounded-md text-white"
+                  >
+                    {cancelLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Confirm cancel
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             {!hasActiveSubscription ? (
               <div className="text-xs text-slate-500">
                 You’re on the Free tier. Select a paid plan and click “Start paid plan” to launch Stripe checkout.
@@ -1077,7 +1426,7 @@ export default function Account() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
-                  className="rounded-md border-slate-700 text-slate-200"
+                  className="rounded-md border-slate-700 text-black"
                   onClick={handleCancelSubscription}
                   disabled={cancelActionsDisabled || subscriptionStatus === "canceled" || subscriptionCancelAtPeriodEnd}
                 >
@@ -1086,7 +1435,7 @@ export default function Account() {
                 {subscriptionCancelAtPeriodEnd && (
                   <Button
                     variant="outline"
-                    className="rounded-md border-slate-700 text-slate-200"
+                    className="rounded-md border-slate-700 text-black"
                     onClick={handleResumeSubscription}
                     disabled={resumeActionsDisabled}
                   >

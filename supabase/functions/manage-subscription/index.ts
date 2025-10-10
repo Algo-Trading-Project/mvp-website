@@ -2,7 +2,12 @@ import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { getUserFromRequest } from "../_shared/auth.ts";
 import { json, badRequest, methodNotAllowed, internalError } from "../_shared/http.ts";
 import { corsHeaders } from "../_shared/middleware.ts";
-import { getPriceIdForPlan, persistStripeCustomerId, updateUserFromSubscription } from "../_shared/subscription.ts";
+import {
+  derivePlanInfoFromSubscription,
+  getPriceIdForPlan,
+  persistStripeCustomerId,
+  updateUserFromSubscription,
+} from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 if (!STRIPE_SECRET_KEY) {
@@ -12,6 +17,9 @@ if (!STRIPE_SECRET_KEY) {
 const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
   : null;
+
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://quantpulse.ai";
+const subscriptionExpand = ["items.data.price", "items.data.price.product"];
 
 const statusPriority: Record<string, number> = {
   active: 6,
@@ -66,13 +74,18 @@ const retrieveSubscription = async (subscriptionId: string | null, customerId: s
   if (!stripe) return null;
   if (subscriptionId) {
     try {
-      return await stripe.subscriptions.retrieve(subscriptionId);
+      return await stripe.subscriptions.retrieve(subscriptionId, { expand: subscriptionExpand });
     } catch (error) {
       console.warn("Unable to retrieve subscription by id", subscriptionId, error);
     }
   }
   try {
-    const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 });
+    const subscriptions = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 20,
+      expand: subscriptionExpand,
+    });
     return selectBestSubscription(subscriptions);
   } catch (error) {
     console.warn("Unable to list subscriptions for customer", customerId, error);
@@ -80,8 +93,23 @@ const retrieveSubscription = async (subscriptionId: string | null, customerId: s
   }
 };
 
+const metaStringOrNull = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
+const metaDateToMillis = (value: unknown) => {
+  const normalized = metaStringOrNull(value);
+  if (!normalized) return null;
+  const parsed = Date.parse(normalized);
+  if (Number.isNaN(parsed)) return null;
+  return parsed;
+};
+
 const summarizeSubscription = (subscription: Stripe.Subscription | null) => {
   if (!subscription) return null;
+  const pendingPlanSlug = metaStringOrNull(subscription.metadata?.pending_plan_slug);
   return {
     id: subscription.id,
     status: subscription.status,
@@ -90,7 +118,42 @@ const summarizeSubscription = (subscription: Stripe.Subscription | null) => {
     current_period_start: subscription.current_period_start ? subscription.current_period_start * 1000 : null,
     plan_slug: subscription.metadata?.plan_slug ?? null,
     billing_cycle: subscription.metadata?.billing_cycle ?? null,
+    pending_plan_slug: pendingPlanSlug,
+    pending_billing_cycle: metaStringOrNull(subscription.metadata?.pending_billing_cycle),
+    pending_effective_date: metaDateToMillis(subscription.metadata?.pending_effective_date),
+    pending_schedule_id: metaStringOrNull(subscription.metadata?.pending_schedule_id),
+    schedule_id: typeof subscription.schedule === "string"
+      ? subscription.schedule
+      : subscription.schedule?.id ?? null,
   };
+};
+
+const computeComparableAmount = (price: Stripe.Price | null | undefined) => {
+  if (!price) return null;
+  if (typeof price.unit_amount !== "number") return null;
+  const interval = price.recurring?.interval ?? "month";
+  const intervalCount = price.recurring?.interval_count ?? 1;
+  if (!intervalCount || intervalCount <= 0) return price.unit_amount;
+  if (interval === "year") {
+    return price.unit_amount / intervalCount / 12;
+  }
+  if (interval === "week") {
+    return price.unit_amount / intervalCount * (7 / 30);
+  }
+  if (interval === "day") {
+    return price.unit_amount / intervalCount * (1 / 30);
+  }
+  return price.unit_amount / intervalCount;
+};
+
+const fetchPriceById = async (priceId: string | null | undefined) => {
+  if (!priceId || !stripe) return null;
+  try {
+    return await stripe.prices.retrieve(priceId, { expand: ["product"] });
+  } catch (error) {
+    console.warn("Failed to fetch price", priceId, error);
+    return null;
+  }
 };
 
 Deno.serve(async (req) => {
@@ -136,17 +199,27 @@ Deno.serve(async (req) => {
     return badRequest("No active subscription found for this account");
   }
 
+  let responseMessage = "Subscription updated";
+
   try {
     if (actionRaw === "cancel") {
       const cancelImmediately = Boolean(payload.cancel_now ?? false);
       subscription = cancelImmediately
-        ? await stripe.subscriptions.cancel(subscription.id)
-        : await stripe.subscriptions.update(subscription.id, { cancel_at_period_end: true });
+        ? await stripe.subscriptions.cancel(subscription.id, { expand: subscriptionExpand })
+        : await stripe.subscriptions.update(subscription.id, {
+            cancel_at_period_end: true,
+            expand: subscriptionExpand,
+          });
+      responseMessage = cancelImmediately ? "Subscription canceled" : "Cancellation scheduled";
     } else if (actionRaw === "resume") {
       if (!subscription.cancel_at_period_end) {
         return json({ subscription: summarizeSubscription(subscription), message: "Subscription already active" });
       }
-      subscription = await stripe.subscriptions.update(subscription.id, { cancel_at_period_end: false });
+      subscription = await stripe.subscriptions.update(subscription.id, {
+        cancel_at_period_end: false,
+        expand: subscriptionExpand,
+      });
+      responseMessage = "Subscription resumed";
     } else if (actionRaw === "change_plan") {
       const planSlug = String(payload.plan_slug ?? "").toLowerCase();
       const billingCycle = String(payload.billing_cycle ?? "monthly").toLowerCase();
@@ -159,6 +232,7 @@ Deno.serve(async (req) => {
             billing_cycle: billingCycle,
           },
         });
+        responseMessage = "Cancellation scheduled";
       } else {
         const priceId = getPriceIdForPlan(planSlug, billingCycle);
         if (!priceId) {
@@ -170,13 +244,57 @@ Deno.serve(async (req) => {
         if (!items.length) {
           return internalError("Subscription has no items to update");
         }
-        const targetItem = items[0];
+        const currentItem = items[0];
+        const currentPrice =
+          (currentItem.price as Stripe.Price | undefined) ?? (await fetchPriceById(currentItem.price?.id));
+        const targetPrice = await fetchPriceById(priceId);
+        const currentComparable = computeComparableAmount(currentPrice);
+        const targetComparable = computeComparableAmount(targetPrice);
+        const isUpgrade =
+          targetComparable !== null &&
+          (currentComparable === null || targetComparable > currentComparable);
+        if (isUpgrade) {
+          const pendingEffectiveIso = new Date().toISOString();
+          await stripe.subscriptions.update(subscription.id, {
+            metadata: {
+              ...(subscription.metadata ?? {}),
+              pending_plan_slug: planSlug,
+              pending_billing_cycle: billingCycle,
+              pending_effective_date: pendingEffectiveIso,
+              pending_schedule_id: "",
+            },
+            expand: subscriptionExpand,
+          });
+          const upgradeReturnUrl = String(payload.upgrade_return_url ?? payload.success_url ?? SITE_URL);
+          const session = await stripe.billingPortal.sessions.create({
+            customer: stripeCustomerId,
+            return_url: upgradeReturnUrl || SITE_URL,
+            flow_data: {
+              type: "subscription_update",
+              subscription_update: {
+                subscription: subscription.id,
+                items: [{ price: priceId, quantity: 1 }],
+                proration_behavior: "create_prorations",
+                allow_promotion_codes: true,
+              },
+            },
+          });
+          if (!session?.url) {
+            return internalError("Stripe portal session unavailable for upgrade");
+          }
+          return json({
+            subscription: summarizeSubscription(subscription),
+            redirect_url: session.url,
+            requires_action: "redirect_to_stripe",
+            message: "Complete the upgrade in Stripe to finish.",
+          });
+        }
         subscription = await stripe.subscriptions.update(subscription.id, {
           cancel_at_period_end: false,
           proration_behavior: prorationBehavior,
           items: [
             {
-              id: targetItem.id,
+              id: currentItem.id,
               price: priceId,
             },
           ],
@@ -184,9 +302,119 @@ Deno.serve(async (req) => {
             ...(subscription.metadata ?? {}),
             plan_slug: planSlug,
             billing_cycle: billingCycle,
+            pending_plan_slug: "",
+            pending_billing_cycle: "",
+            pending_effective_date: "",
+            pending_schedule_id: "",
           },
+          expand: subscriptionExpand,
+        });
+        responseMessage = "Subscription updated";
+      }
+    } else if (actionRaw === "schedule_downgrade") {
+      const planSlug = String(payload.plan_slug ?? "").toLowerCase();
+      const billingCycle = String(payload.billing_cycle ?? "monthly").toLowerCase();
+      const priceId = getPriceIdForPlan(planSlug, billingCycle);
+      if (!priceId) {
+        return badRequest("Unsupported plan or billing cycle");
+      }
+      const currentItem = subscription.items?.data?.[0];
+      if (!currentItem?.price?.id) {
+        return internalError("Unable to locate current subscription price for scheduling downgrade");
+      }
+      if (!subscription.current_period_end) {
+        return internalError("Subscription missing current period end for scheduling downgrade");
+      }
+      const scheduleIdRaw = subscription.schedule
+        ? (typeof subscription.schedule === "string"
+          ? subscription.schedule
+          : subscription.schedule.id)
+        : null;
+      let schedule: Stripe.SubscriptionSchedule;
+      if (scheduleIdRaw) {
+        schedule = await stripe.subscriptionSchedules.retrieve(scheduleIdRaw);
+      } else {
+        schedule = await stripe.subscriptionSchedules.create({
+          from_subscription: subscription.id,
         });
       }
+      const existingPhases = schedule.phases ?? [];
+      const scheduleStart = schedule.start_date ?? subscription.current_period_start ?? null;
+      const currentPhaseStart = existingPhases[0]?.start_date ?? scheduleStart ?? null;
+
+      const currentPhase: Stripe.SubscriptionScheduleUpdateParams.Phase = {
+        items: [{ price: currentItem.price.id, quantity: 1 }],
+        proration_behavior: "none",
+        end_date: subscription.current_period_end,
+        metadata: {
+          ...(subscription.metadata ?? {}),
+        },
+      };
+      if (currentPhaseStart) {
+        currentPhase.start_date = currentPhaseStart;
+      }
+
+      const nextPhase: Stripe.SubscriptionScheduleUpdateParams.Phase = {
+        items: [{ price: priceId, quantity: 1 }],
+        proration_behavior: "none",
+        metadata: {
+          plan_slug: planSlug,
+          billing_cycle: billingCycle,
+        },
+      };
+      if (subscription.current_period_end) {
+        nextPhase.start_date = subscription.current_period_end;
+      }
+
+      await stripe.subscriptionSchedules.update(schedule.id, {
+        end_behavior: "release",
+        proration_behavior: "none",
+        phases: [currentPhase, nextPhase],
+      });
+      const pendingEffectiveIso = subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : "";
+      subscription = await stripe.subscriptions.update(subscription.id, {
+        metadata: {
+          ...(subscription.metadata ?? {}),
+          pending_plan_slug: planSlug,
+          pending_billing_cycle: billingCycle,
+          pending_effective_date: pendingEffectiveIso,
+          pending_schedule_id: schedule.id,
+        },
+        expand: subscriptionExpand,
+      });
+      responseMessage = "Downgrade scheduled";
+    } else if (actionRaw === "cancel_scheduled_change") {
+      const pendingScheduleId =
+        metaStringOrNull(subscription.metadata?.pending_schedule_id) ??
+        (typeof subscription.schedule === "string"
+          ? subscription.schedule
+          : subscription.schedule?.id ?? null);
+      if (pendingScheduleId && stripe) {
+        try {
+          await stripe.subscriptionSchedules.release(pendingScheduleId);
+        } catch (releaseError) {
+          console.warn("Unable to release subscription schedule", pendingScheduleId, releaseError);
+          try {
+            await stripe.subscriptionSchedules.cancel(pendingScheduleId);
+          } catch (cancelError) {
+            console.warn("Unable to cancel subscription schedule", pendingScheduleId, cancelError);
+          }
+        }
+      }
+      subscription = await stripe.subscriptions.update(subscription.id, {
+        cancel_at_period_end: false,
+        metadata: {
+          ...(subscription.metadata ?? {}),
+          pending_plan_slug: "",
+          pending_billing_cycle: "",
+          pending_effective_date: "",
+          pending_schedule_id: "",
+        },
+        expand: subscriptionExpand,
+      });
+      responseMessage = "Scheduled change canceled";
     } else {
       return badRequest("Unsupported action");
     }
@@ -202,7 +430,7 @@ Deno.serve(async (req) => {
 
     return json({
       subscription: summarizeSubscription(subscription),
-      message: "Subscription updated",
+      message: responseMessage,
     });
   } catch (error) {
     console.error("manage-subscription failed", error);

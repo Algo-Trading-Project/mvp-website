@@ -64,12 +64,34 @@ export const StripeApi = {
   async manageSubscription(payload = {}) {
     return invokeStripeFunction("manage-subscription", payload);
   },
-  async changeSubscriptionPlan({ plan_slug, billing_cycle, proration_behavior } = {}) {
+  async changeSubscriptionPlan({
+    plan_slug,
+    billing_cycle,
+    proration_behavior,
+    upgrade_return_url,
+    success_url,
+    cancel_url,
+  } = {}) {
     return invokeStripeFunction("manage-subscription", {
       action: "change_plan",
       plan_slug,
       billing_cycle,
       proration_behavior,
+      upgrade_return_url,
+      success_url,
+      cancel_url,
+    });
+  },
+  async scheduleDowngrade({ plan_slug, billing_cycle } = {}) {
+    return invokeStripeFunction("manage-subscription", {
+      action: "schedule_downgrade",
+      plan_slug,
+      billing_cycle,
+    });
+  },
+  async cancelScheduledChange() {
+    return invokeStripeFunction("manage-subscription", {
+      action: "cancel_scheduled_change",
     });
   },
   async cancelSubscription({ cancel_now } = {}) {
