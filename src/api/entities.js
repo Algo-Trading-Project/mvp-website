@@ -49,4 +49,5 @@ export const monthly_performance_metrics = wrapEntity(
   "monthly_performance_metrics",
   base44.entities.monthly_performance_metrics
 );
+export const Users = wrapEntity("users", base44.entities.users);
 export const User = wrapAuth(base44.auth);

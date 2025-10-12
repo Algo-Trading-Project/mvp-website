@@ -347,6 +347,7 @@ const entityTableMap = {
   ohlcv_1d: "ohlcv_1d",
   cross_sectional_metrics_1d: "cross_sectional_metrics_1d",
   monthly_performance_metrics: "monthly_performance_metrics",
+  users: "users",
 };
 
 const entitiesClient = Object.fromEntries(
