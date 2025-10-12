@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User } from "@/api/entities";
+import { StripeApi } from "@/api/stripe";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
@@ -239,12 +240,45 @@ export default function Pricing() {
   const getSavings = (plan) =>
     billingCycle === "annual" && plan.price ? plan.price.monthly * 12 - plan.price.annual : 0;
 
-  const startCheckout = (plan) => {
-    const planName = plan?.name ?? "This plan";
-    const cycleLabel = billingCycle === "annual" ? "annual" : "monthly";
-    toast.info(`${planName} (${cycleLabel}) is available by contacting our team.`, {
-      description: "Self-serve checkout is currently disabled.",
-    });
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
+
+  const startCheckout = async (plan) => {
+    if (!plan?.slug) {
+      toast.error("This plan is not available for self-serve checkout yet.");
+      return;
+    }
+
+    const cycle = billingCycle === "annual" ? "annual" : "monthly";
+    const key = `${plan.slug}:${cycle}`;
+    setCheckoutLoading(key);
+
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://quantpulse.ai";
+      const successUrl = `${origin}${createPageUrl("Pricing")}?status=success`;
+      const cancelUrl = `${origin}${createPageUrl("Pricing")}?status=cancel`;
+
+      const { url } = await StripeApi.createCheckoutSession({
+        plan_slug: plan.slug,
+        billing_cycle: cycle,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+
+      setCheckoutLoading(null);
+
+      if (url && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+
+      toast.error("Checkout unavailable", {
+        description: "Stripe did not return a checkout link.",
+      });
+    } catch (error) {
+      const description = error?.message || error?.cause?.message || "Please try again or contact support.";
+      toast.error("Unable to start checkout", { description });
+      setCheckoutLoading(null);
+    }
   };
 
   // Card renderer (shared)
@@ -315,8 +349,9 @@ export default function Pricing() {
                 <Button
                   className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
                   onClick={() => startCheckout(plan)}
+                  disabled={checkoutLoading === `${plan.slug}:${billingCycle}`}
                 >
-                  {plan.cta || "Contact us"}
+                  {checkoutLoading === `${plan.slug}:${billingCycle}` ? "Redirecting…" : plan.cta || "Subscribe"}
                 </Button>
               ) : (
                 <Link to={createPageUrl("GetStarted")} className="block">

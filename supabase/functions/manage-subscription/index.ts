@@ -18,7 +18,10 @@ if (!STRIPE_SECRET_KEY) {
 }
 
 const stripe = STRIPE_SECRET_KEY
-  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2022-11-15",
+      httpClient: Stripe.createFetchHttpClient(),
+    })
   : null;
 
 type Action = "refresh";

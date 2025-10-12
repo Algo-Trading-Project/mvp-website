@@ -19,7 +19,10 @@ if (!STRIPE_SECRET_KEY) {
 }
 
 const stripe = STRIPE_SECRET_KEY
-  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2022-11-15",
+      httpClient: Stripe.createFetchHttpClient(),
+    })
   : null;
 
 type CheckoutPayload = {
@@ -116,7 +119,6 @@ Deno.serve(async (req) => {
       cancel_url: cancelUrl,
       billing_address_collection: "auto",
       allow_promotion_codes: true,
-      automatic_tax: { enabled: true },
       payment_method_types: ["card"],
       subscription_data: {
         metadata: {

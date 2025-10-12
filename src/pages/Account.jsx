@@ -17,8 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
 import { toast } from "sonner";
+import { StripeApi } from "@/api/stripe";
 
 const ACCOUNT_CACHE_KEY = "account-page-cache";
+const DEFAULT_ORIGIN_FALLBACK = "https://quantpulse.ai";
 
 const toIsoOrNull = (value) => {
   if (!value) return null;
@@ -232,6 +234,8 @@ export default function Account() {
     }
     return buildSubscriptionSnapshot(initialMetadata);
   });
+  const [subscriptionRefreshing, setSubscriptionRefreshing] = useState(false);
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
 
   const saveBannerTimeout = useRef(null);
 
@@ -256,11 +260,10 @@ export default function Account() {
     productUpdates: initialCache?.preferences?.productUpdates ?? false,
   });
 
-  const pendingPlan = subscription?.pendingChange ?? null;
-
-  useEffect(() => {
-    const checkUser = async () => {
-      if (!cacheRef.current) {
+  const loadAccount = useCallback(
+    async ({ silent = false } = {}) => {
+      const shouldToggleLoading = !silent && !cacheRef.current;
+      if (shouldToggleLoading) {
         setLoading(true);
       }
       try {
@@ -279,14 +282,16 @@ export default function Account() {
           setProductUpdates(false);
           cacheRef.current = null;
           persistAccountCache(null);
-          setLoading(false);
+          if (shouldToggleLoading) setLoading(false);
           return;
         }
+
         setUser(me);
         const meta = me.raw_user_meta_data ?? me.user_metadata ?? {};
         setHasStoredApiKey(Boolean(meta.api_key_hash));
         const cachedApiKey = cacheRef.current?.apiKey ?? "";
         setApiKey(cachedApiKey || "");
+
         const prefs = {
           marketingOptIn: Boolean(meta.marketing_opt_in ?? false),
           weeklySummary: Boolean(meta.weekly_summary ?? false),
@@ -390,11 +395,69 @@ export default function Account() {
         cacheRef.current = null;
         persistAccountCache(null);
       } finally {
-        setLoading(false);
+        if (shouldToggleLoading) {
+          setLoading(false);
+        }
       }
-    };
-    checkUser();
-  }, [handleMetadataPatch]);
+    },
+    [handleMetadataPatch],
+  );
+
+  const pendingPlan = subscription?.pendingChange ?? null;
+
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
+
+  const handleRefreshSubscription = useCallback(async () => {
+    setSubscriptionRefreshing(true);
+    try {
+      const result = await StripeApi.syncSubscription();
+      await loadAccount({ silent: true });
+      const message = result?.message ?? "Subscription refreshed.";
+      toast.success(message);
+    } catch (error) {
+      const description = error?.message || error?.cause?.message || "Please try again.";
+      toast.error("Unable to refresh subscription", { description });
+    } finally {
+      setSubscriptionRefreshing(false);
+    }
+  }, [loadAccount]);
+
+  const handleOpenBillingPortal = useCallback(async () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : DEFAULT_ORIGIN_FALLBACK;
+    const returnUrl = origin ? `${origin}/account?from=stripe_portal` : undefined;
+    setBillingPortalLoading(true);
+    try {
+      const { url } = await StripeApi.createBillingPortalSession(
+        returnUrl ? { return_url: returnUrl } : undefined,
+      );
+      if (url && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+      toast.error("Unable to open Stripe portal", {
+        description: "Stripe did not return a portal link.",
+      });
+    } catch (error) {
+      const description = error?.message || error?.cause?.message || "Please try again.";
+      toast.error("Unable to open Stripe portal", { description });
+    } finally {
+      setBillingPortalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const flag = url.searchParams.get("from");
+    if (flag && flag.toLowerCase().startsWith("stripe")) {
+      handleRefreshSubscription();
+      url.searchParams.delete("from");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, document.title, next);
+    }
+  }, [handleRefreshSubscription]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -575,11 +638,6 @@ export default function Account() {
     }
   };
 
-  const handleOpenBillingPortal = () => {
-    toast.info("Billing portal is not configured yet. Please contact support to update billing.");
-  };
-
-
   if (loading) {
     return <AccountPageSkeleton />;
   }
@@ -666,9 +724,32 @@ export default function Account() {
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleOpenBillingPortal}
+                disabled={billingPortalLoading}
                 className="bg-indigo-600 hover:bg-indigo-500 rounded-md"
               >
-                Manage billing
+                {billingPortalLoading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Opening portal…
+                  </span>
+                ) : (
+                  "Manage billing"
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-md border-slate-700 text-slate-200 hover:bg-slate-800"
+                onClick={handleRefreshSubscription}
+                disabled={subscriptionRefreshing}
+              >
+                {subscriptionRefreshing ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Refreshing…
+                  </span>
+                ) : (
+                  "Refresh subscription"
+                )}
               </Button>
             </div>
           </div>
