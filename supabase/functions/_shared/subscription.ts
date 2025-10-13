@@ -114,15 +114,33 @@ const resolvePendingFromPhase = (phase: Stripe.SubscriptionSchedule.Phase | null
   if (!phase) {
     return { planSlug: null, billingCycle: null, effectiveDate: null };
   }
-  const rawPlan = metadataStringOrNull(phase.metadata?.plan_slug);
-  const rawCycle = metadataStringOrNull(phase.metadata?.billing_cycle);
-  const priceId =
-    typeof phase.items?.[0]?.price === "string"
-      ? (phase.items?.[0]?.price as string)
-      : phase.items?.[0]?.price?.id ?? null;
+  const rawPlan =
+    metadataStringOrNull(phase.metadata?.plan_slug) ??
+    metadataStringOrNull(phase.metadata?.pending_plan_slug);
+  const rawCycle =
+    metadataStringOrNull(phase.metadata?.billing_cycle) ??
+    metadataStringOrNull(phase.metadata?.pending_billing_cycle);
+  const priceObjOrId = phase.items?.[0]?.price;
+  const priceId = typeof priceObjOrId === "string" ? priceObjOrId : priceObjOrId?.id ?? null;
   const mapping = getPlanInfoForPriceId(priceId);
-  const planSlug = normalizePlanSlug(mapping?.planSlug ?? rawPlan) ?? null;
-  const billingCycle = normalizeBillingCycle(mapping?.billingCycle ?? rawCycle) ?? null;
+  // Try mapping → phase metadata → price metadata, in that order
+  const priceMetaPlan =
+    typeof priceObjOrId === "object" && priceObjOrId?.metadata
+      ? metadataStringOrNull((priceObjOrId.metadata as Record<string, unknown>)?.plan_slug)
+      : null;
+  const priceMetaCycle =
+    typeof priceObjOrId === "object" && priceObjOrId?.metadata
+      ? metadataStringOrNull((priceObjOrId.metadata as Record<string, unknown>)?.billing_cycle)
+      : null;
+
+  const planSlug = normalizePlanSlug(mapping?.planSlug ?? rawPlan ?? priceMetaPlan) ?? null;
+  const billingCycle =
+    normalizeBillingCycle(
+      mapping?.billingCycle ??
+        rawCycle ??
+        priceMetaCycle ??
+        (typeof priceObjOrId === "object" ? priceObjOrId?.recurring?.interval ?? null : null),
+    ) ?? null;
   const effectiveDate = phase.start_date ? toIsoString(phase.start_date) : null;
   return { planSlug, billingCycle, effectiveDate };
 };
