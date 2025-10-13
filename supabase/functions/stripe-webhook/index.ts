@@ -204,6 +204,63 @@ const relevantEvents = new Set<string>([
   "invoice.payment_failed",
 ]);
 
+const timingSafeEqual = (a: string, b: string) => {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+};
+
+const parseStripeSignature = (header: string) => {
+  const result: Record<string, string> = {};
+  for (const part of header.split(",")) {
+    const [key, value] = part.split("=");
+    if (key && value) {
+      result[key.trim()] = value.trim();
+    }
+  }
+  return {
+    timestamp: result["t"] ?? "",
+    signature: result["v1"] ?? "",
+  };
+};
+
+const verifyStripeSignature = async (payload: string, header: string, secret: string) => {
+  const { timestamp, signature } = parseStripeSignature(header);
+  if (!timestamp || !signature) {
+    throw new Error("Invalid signature header format");
+  }
+
+  const toleranceSeconds = 300;
+  const timestampNumber = Number(timestamp);
+  if (!Number.isFinite(timestampNumber) ||
+      Math.abs(timestampNumber - Date.now() / 1000) > toleranceSeconds) {
+    throw new Error("Signature timestamp outside tolerance");
+  }
+
+  const encoder = new TextEncoder();
+  const signedPayload = `${timestamp}.${payload}`;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const computedBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload));
+  const computed = Array.from(new Uint8Array(computedBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  if (!timingSafeEqual(computed, signature)) {
+    throw new Error("Signature mismatch");
+  }
+
+  return JSON.parse(payload) as StripeEvent;
+};
+
 const handleEvent = async (event: StripeEvent) => {
   switch (event.type) {
     case "checkout.session.completed":
@@ -242,16 +299,16 @@ Deno.serve(async (req) => {
     return internalError("Stripe webhook configuration missing");
   }
 
-  const signature = req.headers.get("stripe-signature");
-  if (!signature) {
+  const signatureHeader = req.headers.get("stripe-signature");
+  if (!signatureHeader) {
     return badRequest("Missing stripe-signature header");
   }
 
-  const payload = await req.text();
+  const rawBody = await req.text();
 
   let event: StripeEvent;
   try {
-    event = stripe.webhooks.constructEvent(payload, signature, STRIPE_WEBHOOK_SECRET);
+    event = await verifyStripeSignature(rawBody, signatureHeader, STRIPE_WEBHOOK_SECRET);
   } catch (error) {
     console.error("Stripe webhook signature verification failed", error);
     return badRequest("Invalid signature");
