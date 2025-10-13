@@ -55,6 +55,25 @@ const tierFromPlanSlug = (slug) => PLAN_SLUG_TO_TIER[normalizeKeyValue(slug)] ??
 const normalizePlanKey = (value) => normalizePlanKeyOptional(value) ?? "free";
 const normalizeBillingCycle = (value) => (normalizeKeyValue(value) === "annual" ? "annual" : "monthly");
 
+// Presentation helpers
+const PLAN_LABELS = {
+  free: "Free",
+  signals_lite: "Signals Lite",
+  signals_pro: "Signals Pro",
+  signals_api: "Signals API",
+};
+
+const TIER_LABELS = {
+  free: "Free",
+  lite: "Signals Lite",
+  pro: "Signals Pro",
+  api: "Signals API",
+};
+
+const formatPlanSlug = (slug) => PLAN_LABELS[normalizePlanKey(slug)] ?? slug;
+const formatTier = (tier) => TIER_LABELS[normalizeKeyValue(tier)] ?? tier;
+const formatCycle = (cycle) => (normalizeBillingCycle(cycle) === "annual" ? "Annual" : "Monthly");
+
 const formatRenewalDate = (isoValue) => {
   if (!isoValue) return "N/A";
   const date = new Date(isoValue);
@@ -311,30 +330,20 @@ export default function Account() {
 
         const summarySource = profile
           ? {
-              plan_slug: planSlugForTier(profile.subscription_tier ?? meta.subscription_tier ?? "free"),
-              billing_cycle: profile.billing_cycle ?? meta.billing_cycle ?? null,
-              status: profile.subscription_status ?? meta.subscription_status ?? "trial",
-              current_period_end: profile.current_period_end
-                ? Date.parse(profile.current_period_end)
-                : meta.current_period_end
-                  ? Date.parse(meta.current_period_end)
-                  : null,
-              cancel_at_period_end: Boolean(
-                profile.subscription_cancel_at_period_end ?? meta.subscription_cancel_at_period_end ?? false,
-              ),
-              pending_plan_slug:
-                profile.subscription_pending_plan_slug ?? meta.subscription_pending_plan_slug ?? null,
-              pending_billing_cycle:
-                profile.subscription_pending_billing_cycle ?? meta.subscription_pending_billing_cycle ?? null,
+              // Source exclusively from public.users when a profile row exists
+              plan_slug: planSlugForTier(profile.subscription_tier ?? "free"),
+              billing_cycle: profile.billing_cycle ?? null,
+              status: profile.subscription_status ?? "trial",
+              current_period_end: profile.current_period_end ? Date.parse(profile.current_period_end) : null,
+              cancel_at_period_end: Boolean(profile.subscription_cancel_at_period_end ?? false),
+              pending_plan_slug: profile.subscription_pending_plan_slug ?? null,
+              pending_billing_cycle: profile.subscription_pending_billing_cycle ?? null,
               pending_effective_date: profile.subscription_pending_effective_date
                 ? Date.parse(profile.subscription_pending_effective_date)
-                : meta.subscription_pending_effective_date
-                  ? Date.parse(meta.subscription_pending_effective_date)
-                  : null,
-              pending_schedule_id:
-                profile.subscription_pending_schedule_id ?? meta.subscription_pending_schedule_id ?? null,
+                : null,
+              pending_schedule_id: profile.subscription_pending_schedule_id ?? null,
               schedule_id: null,
-              id: profile.stripe_subscription_id ?? meta.stripe_subscription_id ?? null,
+              id: profile.stripe_subscription_id ?? null,
             }
           : {
               plan_slug: meta.plan_slug ?? null,
@@ -357,6 +366,7 @@ export default function Account() {
         const metadataPatch = profile
           ? {
               ...meta,
+              // Mirror public.users into local user metadata so UI remains consistent
               subscription_tier: profile.subscription_tier ?? meta.subscription_tier,
               subscription_status: profile.subscription_status ?? meta.subscription_status,
               billing_cycle: profile.billing_cycle ?? meta.billing_cycle,
@@ -644,12 +654,13 @@ export default function Account() {
   }
 
   const subscriptionTier = subscription?.tier ?? "free";
+  const subscriptionTierLabel = formatTier(subscriptionTier);
   const subscriptionStatus = subscription?.status ?? "trial";
-  const billingCycleLabel = subscription?.billingCycle ?? "monthly";
+  const billingCycleLabel = formatCycle(subscription?.billingCycle ?? "monthly");
   const currentPeriodEnd = subscription?.currentPeriodEnd ?? null;
   const subscriptionCancelAtPeriodEnd = Boolean(subscription?.cancelAtPeriodEnd);
-  const pendingPlanLabel = pendingPlan?.planSlug ?? null;
-  const pendingCycleLabel = pendingPlan?.billingCycle ?? null;
+  const pendingPlanLabel = pendingPlan?.planSlug ? formatPlanSlug(pendingPlan.planSlug) : null;
+  const pendingCycleLabel = pendingPlan?.billingCycle ? formatCycle(pendingPlan.billingCycle) : null;
   const pendingEffectiveLabel = pendingPlan?.effectiveDate ? formatRenewalDate(pendingPlan.effectiveDate) : null;
 
   return (
@@ -669,7 +680,7 @@ export default function Account() {
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
               <div>
                 <Label className="text-xs uppercase text-slate-500">Current tier</Label>
-                <p className="font-semibold text-lg capitalize text-white">{subscriptionTier}</p>
+                <p className="font-semibold text-lg text-white">{subscriptionTierLabel}</p>
               </div>
               <div>
                 <Label className="text-xs uppercase text-slate-500">Status</Label>
@@ -677,7 +688,7 @@ export default function Account() {
               </div>
               <div>
                 <Label className="text-xs uppercase text-slate-500">Billing cycle</Label>
-                <p className="font-semibold text-lg capitalize text-white">{billingCycleLabel}</p>
+                <p className="font-semibold text-lg text-white">{billingCycleLabel}</p>
               </div>
               <div>
                 <Label className="text-xs uppercase text-slate-500">Next renewal</Label>
