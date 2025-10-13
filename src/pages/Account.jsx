@@ -19,7 +19,7 @@ import AccountPageSkeleton from "@/components/skeletons/AccountPageSkeleton";
 import { toast } from "sonner";
 import { StripeApi } from "@/api/stripe";
 
-const ACCOUNT_CACHE_KEY = "account-page-cache";
+// Caching disabled: always fetch fresh data
 const DEFAULT_ORIGIN_FALLBACK = "https://quantpulse.ai";
 
 const toIsoOrNull = (value) => {
@@ -140,68 +140,9 @@ const buildSubscriptionSnapshot = (metadata) => {
   return snapshot;
 };
 
-const upgradeLegacyCache = (legacy) => {
-  if (!legacy || typeof legacy !== "object") return null;
-  const user = legacy.user ?? null;
-  const metadata = user ? (user.raw_user_meta_data ?? user.user_metadata ?? {}) : {};
-  const rawPlanSlug = metadata.plan_slug ?? planSlugForTier(metadata.subscription_tier ?? "free");
-  const normalizedPlanSlug = normalizePlanKey(rawPlanSlug);
-  return {
-    user,
-    subscriptionSnapshot: {
-      planSlug: normalizedPlanSlug,
-      tier: tierFromPlanSlug(normalizedPlanSlug),
-      billingCycle: metadata.billing_cycle ?? "monthly",
-      status: metadata.subscription_status ?? "trial",
-      currentPeriodEnd: toIsoOrNull(metadata.current_period_end ?? null),
-      cancelAtPeriodEnd: Boolean(metadata.subscription_cancel_at_period_end ?? false),
-      pendingChange: metadata.subscription_pending_plan_slug
-        ? {
-            planSlug: normalizePlanKey(metadata.subscription_pending_plan_slug),
-            billingCycle: metadata.subscription_pending_billing_cycle ?? "monthly",
-            effectiveDate: toIsoOrNull(metadata.subscription_pending_effective_date ?? null),
-          }
-        : null,
-      stripeSubscriptionId: metadata.stripe_subscription_id ?? null,
-      stripeCustomerId: metadata.stripe_customer_id ?? null,
-      pendingScheduleId: metadata.subscription_pending_schedule_id ?? null,
-      scheduleId: metadata.subscription_schedule_id ?? null,
-    },
-    apiKey: legacy.apiKey ?? "",
-    hasApiKeyHash: Boolean(legacy.hasApiKeyHash ?? metadata.api_key_hash),
-    preferences: legacy.preferences ?? {
-      marketingOptIn: Boolean(metadata.marketing_opt_in ?? false),
-      weeklySummary: Boolean(metadata.weekly_summary ?? false),
-      productUpdates: Boolean(metadata.product_updates ?? false),
-    },
-  };
-};
+// No legacy cache upgrade needed; page is always fresh
 
-const loadAccountCache = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage?.getItem(ACCOUNT_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return upgradeLegacyCache(parsed);
-  } catch (error) {
-    console.warn("Failed to read account cache", error);
-    return null;
-  }
-};
-
-const persistAccountCache = (snapshot) => {
-  if (typeof window === "undefined") return;
-  try {
-    if (snapshot) {
-      window.sessionStorage?.setItem(ACCOUNT_CACHE_KEY, JSON.stringify(snapshot));
-    } else {
-      window.sessionStorage?.removeItem(ACCOUNT_CACHE_KEY);
-    }
-  } catch (error) {
-    console.warn("Failed to persist account cache", error);
-  }
-};
+// No session caching helpers
 
 const hashApiKey = async (key) => {
   if (!key) throw new Error("Cannot hash an empty API key.");
@@ -227,16 +168,13 @@ const generateRandomKey = () => {
 };
 
 export default function Account() {
-  const cacheRef = useRef(loadAccountCache());
-  const initialCache = cacheRef.current;
-
-  const [user, setUser] = useState(initialCache?.user ?? null);
-  const [loading, setLoading] = useState(!initialCache);
-  const [marketingOptIn, setMarketingOptIn] = useState(initialCache?.preferences?.marketingOptIn ?? false);
-  const [weeklySummary, setWeeklySummary] = useState(initialCache?.preferences?.weeklySummary ?? false);
-  const [productUpdates, setProductUpdates] = useState(initialCache?.preferences?.productUpdates ?? false);
-  const [apiKey, setApiKey] = useState(initialCache?.apiKey ?? "");
-  const [hasStoredApiKey, setHasStoredApiKey] = useState(initialCache?.hasApiKeyHash ?? false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [weeklySummary, setWeeklySummary] = useState(false);
+  const [productUpdates, setProductUpdates] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(false);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
@@ -245,14 +183,8 @@ export default function Account() {
   const [showPlainApiKey, setShowPlainApiKey] = useState(false);
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
-  const initialMetadata =
-    initialCache?.user?.raw_user_meta_data ?? initialCache?.user?.user_metadata ?? null;
-  const [subscription, setSubscription] = useState(() => {
-    if (initialCache?.subscriptionSnapshot) {
-      return initialCache.subscriptionSnapshot;
-    }
-    return buildSubscriptionSnapshot(initialMetadata);
-  });
+  const initialMetadata = null;
+  const [subscription, setSubscription] = useState(() => buildSubscriptionSnapshot(initialMetadata));
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
 
   const saveBannerTimeout = useRef(null);
@@ -273,17 +205,14 @@ export default function Account() {
   }, []);
 
   const initialPreferencesRef = useRef({
-    marketingOptIn: initialCache?.preferences?.marketingOptIn ?? false,
-    weeklySummary: initialCache?.preferences?.weeklySummary ?? false,
-    productUpdates: initialCache?.preferences?.productUpdates ?? false,
+    marketingOptIn: false,
+    weeklySummary: false,
+    productUpdates: false,
   });
 
   const loadAccount = useCallback(
     async ({ silent = false } = {}) => {
-      const shouldToggleLoading = !silent && !cacheRef.current;
-      if (shouldToggleLoading) {
-        setLoading(true);
-      }
+      if (!silent) setLoading(true);
       try {
         const me = await User.me();
         if (!me) {
@@ -298,17 +227,14 @@ export default function Account() {
           setMarketingOptIn(false);
           setWeeklySummary(false);
           setProductUpdates(false);
-          cacheRef.current = null;
-          persistAccountCache(null);
-          if (shouldToggleLoading) setLoading(false);
+          if (!silent) setLoading(false);
           return;
         }
 
         setUser(me);
         const meta = me.raw_user_meta_data ?? me.user_metadata ?? {};
         setHasStoredApiKey(Boolean(meta.api_key_hash));
-        const cachedApiKey = cacheRef.current?.apiKey ?? "";
-        setApiKey(cachedApiKey || "");
+        setApiKey("");
 
         const prefs = {
           marketingOptIn: Boolean(meta.marketing_opt_in ?? false),
@@ -322,7 +248,9 @@ export default function Account() {
 
         let profile = null;
         try {
-          const rows = await Users.filter({ user_id: me.id }, "-updated_at", 1);
+          // Bypass session cache to ensure freshest subscription flags after portal actions
+          const controller = new AbortController();
+          const rows = await Users.filter({ user_id: me.id }, "-updated_at", 1, { signal: controller.signal });
           profile = rows?.[0] ?? null;
         } catch (profileError) {
           console.warn("Failed to load subscription profile", profileError);
@@ -401,12 +329,9 @@ export default function Account() {
         setMarketingOptIn(false);
         setWeeklySummary(false);
         setProductUpdates(false);
-        cacheRef.current = null;
-        persistAccountCache(null);
+        // no cache to clear
       } finally {
-        if (shouldToggleLoading) {
-          setLoading(false);
-        }
+        if (!silent) setLoading(false);
       }
     },
     [handleMetadataPatch],
@@ -485,23 +410,7 @@ export default function Account() {
     }
   }, [preferencesChanged]);
 
-  useEffect(() => {
-    const snapshot = user
-      ? {
-          user,
-          subscriptionSnapshot: subscription,
-          apiKey,
-          hasApiKeyHash: hasStoredApiKey,
-          preferences: {
-            marketingOptIn,
-            weeklySummary,
-            productUpdates,
-          },
-        }
-      : null;
-    cacheRef.current = snapshot;
-    persistAccountCache(snapshot);
-  }, [user, subscription, apiKey, hasStoredApiKey, marketingOptIn, weeklySummary, productUpdates]);
+  // No session cache persistence
 
   const handleGenerateApiKey = async () => {
     setApiKeyLoading(true);
@@ -662,6 +571,7 @@ export default function Account() {
   const pendingPlanLabel = pendingPlan?.planSlug ? formatPlanSlug(pendingPlan.planSlug) : null;
   const pendingCycleLabel = pendingPlan?.billingCycle ? formatCycle(pendingPlan.billingCycle) : null;
   const pendingEffectiveLabel = pendingPlan?.effectiveDate ? formatRenewalDate(pendingPlan.effectiveDate) : null;
+  const cancellationEffectiveLabel = currentPeriodEnd ? formatRenewalDate(currentPeriodEnd) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 py-12">
@@ -677,7 +587,7 @@ export default function Account() {
             </p>
           </div>
           <div className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <Label className="text-xs uppercase text-slate-500">Current tier</Label>
                 <p className="font-semibold text-lg text-white">{subscriptionTierLabel}</p>
@@ -699,12 +609,7 @@ export default function Account() {
                   <p className="text-xs text-amber-300 mt-1">Cancellation is scheduled at period end.</p>
                 ) : null}
               </div>
-              <div>
-                <Label className="text-xs uppercase text-slate-500">Stripe subscription</Label>
-                <p className="font-mono text-slate-300 text-xs truncate">
-                  {subscription?.stripeSubscriptionId ?? "Not active"}
-                </p>
-              </div>
+              {/* Removed Stripe subscription field (not shown to customers) */}
             </div>
 
             {pendingPlanLabel ? (
@@ -712,6 +617,16 @@ export default function Account() {
                 Scheduled change to <span className="font-semibold">{pendingPlanLabel}</span>
                 {pendingCycleLabel ? ` (${pendingCycleLabel})` : ""}
                 {pendingEffectiveLabel ? ` on ${pendingEffectiveLabel}` : " at the next billing cycle"}.
+              </div>
+            ) : null}
+
+            {subscriptionCancelAtPeriodEnd ? (
+              <div className="mt-2 border border-red-400/50 bg-red-500/10 rounded-md px-4 py-3 text-sm text-red-100">
+                Subscription will cancel
+                {cancellationEffectiveLabel && cancellationEffectiveLabel !== "N/A"
+                  ? ` on ${cancellationEffectiveLabel}`
+                  : " at the end of the current billing period"}
+                .
               </div>
             ) : null}
 

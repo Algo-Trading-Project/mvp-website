@@ -206,10 +206,11 @@ const handleSubscriptionUpdate = async (
     planSlug: derived.planSlug ?? undefined,
     billingCycle: derived.billingCycle ?? undefined,
     statusOverride: subscription.status ?? undefined,
-    pendingPlanSlug: pending.planSlug ?? undefined,
-    pendingBillingCycle: pending.billingCycle ?? undefined,
-    pendingEffectiveDate: pending.effectiveDate ?? undefined,
-    pendingScheduleId: pending.scheduleId ?? undefined,
+    // IMPORTANT: pass through nulls explicitly to clear pending fields when schedule is canceled
+    pendingPlanSlug: pending.planSlug,
+    pendingBillingCycle: pending.billingCycle,
+    pendingEffectiveDate: pending.effectiveDate,
+    pendingScheduleId: pending.scheduleId,
   });
 };
 
