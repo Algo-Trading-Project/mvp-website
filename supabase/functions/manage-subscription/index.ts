@@ -7,8 +7,6 @@ import {
   extractSubscriptionSnapshot,
   normalizePlanSlug,
   normalizeBillingCycle,
-  updateUserFromSubscription,
-  syncUserMetadataFromStripe,
 } from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -91,54 +89,29 @@ Deno.serve(async (req) => {
     return badRequest("Unsupported action.");
   }
 
-  const metadata =
-    (user.user_metadata as Record<string, unknown> | undefined) ??
-    (user.raw_user_meta_data as Record<string, unknown> | undefined) ??
-    {};
-
   try {
-    const customerId = await ensureStripeCustomerId(stripe, user, metadata);
+    const metadata =
+      (user.user_metadata as Record<string, unknown> | undefined) ??
+      (user.raw_user_meta_data as Record<string, unknown> | undefined) ??
+      {};
 
-    const existingSubscriptionId = typeof metadata.stripe_subscription_id === "string" ? metadata.stripe_subscription_id : null;
+    const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
 
-    const subscription =
-      (await syncUserMetadataFromStripe(stripe, user.id, customerId)) ??
-      (await tryResolveSubscription(customerId, existingSubscriptionId));
+    const existingSubscriptionId =
+      typeof metadata.stripe_subscription_id === "string" ? metadata.stripe_subscription_id : null;
+
+    const subscription = await tryResolveSubscription(customerId, existingSubscriptionId);
 
     if (!subscription) {
-      const metadataPatch = await updateUserFromSubscription({
-        userId: user.id,
-        subscription: null,
-        planSlug: "free",
-        billingCycle: "monthly",
-        statusOverride: "canceled",
-        supabaseUser: user,
-        existingMetadata: metadata,
-      });
-
       return json({
-        subscription: {
-          plan_slug: metadataPatch?.plan_slug ?? "free",
-          billing_cycle: metadataPatch?.billing_cycle ?? "monthly",
-          status: metadataPatch?.subscription_status ?? "canceled",
-        },
-        message: "Subscription status refreshed. No active subscription found.",
+        subscription: null,
+        message: "No active subscription found.",
       });
     }
 
     const snapshot = extractSubscriptionSnapshot(subscription);
     const normalizedPlan = normalizePlanSlug(snapshot?.planSlug ?? "free") ?? "free";
     const normalizedCycle = normalizeBillingCycle(snapshot?.billingCycle ?? "monthly") ?? "monthly";
-
-    await updateUserFromSubscription({
-      userId: user.id,
-      subscription,
-      supabaseUser: user,
-      existingMetadata: metadata,
-      planSlug: normalizedPlan,
-      billingCycle: normalizedCycle,
-      statusOverride: subscription.status ?? undefined,
-    });
 
     return json({
       subscription: {

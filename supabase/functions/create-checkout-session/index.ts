@@ -8,7 +8,6 @@ import {
   normalizeBillingCycle,
   normalizePlanSlug,
   planSlugForTier,
-  updateUserFromSubscription,
 } from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -101,7 +100,7 @@ Deno.serve(async (req) => {
       (user.raw_user_meta_data as Record<string, unknown> | undefined) ??
       {};
 
-    const customerId = await ensureStripeCustomerId(stripe, user, metadata);
+    const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
 
     const successUrl = coerceUrl(
       payload.success_url,
@@ -142,20 +141,6 @@ Deno.serve(async (req) => {
 
     if (!session.url) {
       throw new Error("Stripe did not return a checkout URL");
-    }
-
-    try {
-      await updateUserFromSubscription({
-        userId: user.id,
-        subscription: null,
-        pendingPlanSlug: planSlug,
-        pendingBillingCycle: billingCycleNormalized,
-        pendingEffectiveDate: null,
-        supabaseUser: user,
-        existingMetadata: metadata,
-      });
-    } catch (syncError) {
-      console.warn("Failed to update pending subscription metadata", syncError);
     }
 
     return json({ url: session.url });

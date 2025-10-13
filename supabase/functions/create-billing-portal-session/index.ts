@@ -1,17 +1,8 @@
 import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { getUserFromRequest } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/middleware.ts";
-import { internalError, json, methodNotAllowed, badRequest } from "../_shared/http.ts";
-import {
-  ensureStripeCustomerId,
-  derivePlanInfoFromSubscription,
-  getTrackedPriceIds,
-  updateUserFromSubscription,
-  normalizeBillingCycle,
-  normalizePlanSlug,
-  buildMetadataPatchFromSummary,
-  syncUserMetadataFromStripe,
-} from "../_shared/subscription.ts";
+import { internalError, json, methodNotAllowed } from "../_shared/http.ts";
+import { ensureStripeCustomerId, getTrackedPriceIds } from "../_shared/subscription.ts";
 import type StripeTypes from "https://esm.sh/stripe@12.17.0?target=deno";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -165,7 +156,7 @@ Deno.serve(async (req) => {
       (user.raw_user_meta_data as Record<string, unknown> | undefined) ??
       {};
 
-    const customerId = await ensureStripeCustomerId(stripe, user, metadata);
+    const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
 
     const portalConfigurationId = await resolvePortalConfiguration(stripe);
 
@@ -177,42 +168,6 @@ Deno.serve(async (req) => {
 
     if (!session.url) {
       throw new Error("Billing portal session did not return a URL");
-    }
-
-    try {
-      const subscription = await syncUserMetadataFromStripe(stripe, user.id, customerId);
-      if (!subscription) {
-        await updateUserFromSubscription({
-          userId: user.id,
-          supabaseUser: user,
-          existingMetadata: metadata,
-          subscription: null,
-        });
-      } else {
-        const inferred = derivePlanInfoFromSubscription(subscription);
-        const summaryPatch = buildMetadataPatchFromSummary({
-          plan_slug: inferred.planSlug ?? undefined,
-          billing_cycle: inferred.billingCycle ?? undefined,
-          status: subscription.status,
-          id: subscription.id,
-          pending_plan_slug: subscription.metadata?.pending_plan_slug,
-          pending_billing_cycle: subscription.metadata?.pending_billing_cycle,
-          pending_effective_date: subscription.metadata?.pending_effective_date,
-          pending_schedule_id: subscription.metadata?.pending_schedule_id,
-          schedule_id: typeof subscription.schedule === "object" ? subscription.schedule?.id : null,
-        });
-        await updateUserFromSubscription({
-          userId: user.id,
-          subscription,
-          supabaseUser: user,
-          existingMetadata: { ...metadata, ...summaryPatch },
-          planSlug: inferred.planSlug ?? undefined,
-          billingCycle: inferred.billingCycle ?? undefined,
-          statusOverride: subscription.status ?? undefined,
-        });
-      }
-    } catch (syncError) {
-      console.warn("Failed to refresh subscription metadata before returning portal session", syncError);
     }
 
     return json({ url: session.url });

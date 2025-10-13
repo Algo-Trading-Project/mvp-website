@@ -634,8 +634,11 @@ export const ensureStripeCustomerId = async (
   stripe: Stripe,
   user: SupabaseAuthUser,
   metadata?: Record<string, unknown> | null,
+  options: { persist?: boolean } = {},
 ) => {
   if (!stripe) throw new Error("Stripe client unavailable");
+  const { persist = false } = options;
+
   const supabaseMetadata =
     metadata ??
     (user.user_metadata as Record<string, unknown> | undefined) ??
@@ -644,32 +647,60 @@ export const ensureStripeCustomerId = async (
 
   const existingMetaId = metadataStringOrNull(supabaseMetadata.stripe_customer_id);
   if (existingMetaId) {
+    if (persist) {
+      await persistStripeCustomerId(user.id, existingMetaId, {
+        supabaseUser: user,
+        existingMetadata: supabaseMetadata,
+      });
+    }
     return existingMetaId;
   }
 
-  const emailCandidates = [
-    user.email,
-    metadataStringOrNull(supabaseMetadata.email),
-    metadataStringOrNull(supabaseMetadata.contact_email),
-  ];
-
-  const normalizedEmail = emailCandidates.find((entry) => entry && entry.length) ?? null;
-
-  let existingCustomer: Stripe.Customer | null = null;
-  if (normalizedEmail) {
+  const resolveByMetadata = async () => {
     try {
-      const matches = await stripe.customers.list({ email: normalizedEmail, limit: 20 });
-      existingCustomer =
-        matches.data.find((candidate) => metadataStringOrNull(candidate.email) === normalizedEmail) ?? null;
-    } catch (listError) {
-      console.warn("Unable to list existing Stripe customers", listError);
+      if (stripe.customers.search) {
+        const result = await stripe.customers.search({
+          query: `metadata['supabase_user_id']:'${user.id}'`,
+          limit: 1,
+        });
+        return result.data?.[0] ?? null;
+      }
+    } catch (searchError) {
+      console.warn("Stripe customer search unavailable", searchError);
+    }
+    return null;
+  };
+
+  let existingCustomer: Stripe.Customer | null = await resolveByMetadata();
+
+  if (!existingCustomer) {
+    const emailCandidates = [
+      user.email,
+      metadataStringOrNull(supabaseMetadata.email),
+      metadataStringOrNull(supabaseMetadata.contact_email),
+    ];
+
+    const normalizedEmail = emailCandidates.find((entry) => entry && entry.length) ?? null;
+
+    if (normalizedEmail) {
+      try {
+        const matches = await stripe.customers.list({ email: normalizedEmail, limit: 20 });
+        existingCustomer =
+          matches.data.find((candidate) => metadataStringOrNull(candidate.email) === normalizedEmail) ?? null;
+      } catch (listError) {
+        console.warn("Unable to list existing Stripe customers", listError);
+      }
     }
   }
 
   if (!existingCustomer) {
     try {
       existingCustomer = await stripe.customers.create({
-        email: normalizedEmail ?? undefined,
+        email:
+          metadataStringOrNull(supabaseMetadata.contact_email) ??
+          metadataStringOrNull(supabaseMetadata.email) ??
+          user.email ??
+          undefined,
         name:
           metadataStringOrNull(supabaseMetadata.full_name) ??
           metadataStringOrNull(supabaseMetadata.name) ??
@@ -683,16 +714,29 @@ export const ensureStripeCustomerId = async (
       console.error("Failed to create Stripe customer", createError);
       throw createError;
     }
+  } else if (!metadataStringOrNull(existingCustomer.metadata?.supabase_user_id)) {
+    try {
+      await stripe.customers.update(existingCustomer.id, {
+        metadata: {
+          ...(existingCustomer.metadata ?? {}),
+          supabase_user_id: user.id,
+        },
+      });
+    } catch (updateError) {
+      console.warn("Failed to backfill supabase_user_id metadata on customer", updateError);
+    }
   }
 
   if (!existingCustomer?.id) {
     throw new Error("Stripe customer provisioning failed");
   }
 
-  await persistStripeCustomerId(user.id, existingCustomer.id, {
-    supabaseUser: user,
-    existingMetadata: supabaseMetadata,
-  });
+  if (persist) {
+    await persistStripeCustomerId(user.id, existingCustomer.id, {
+      supabaseUser: user,
+      existingMetadata: supabaseMetadata,
+    });
+  }
 
   return existingCustomer.id;
 };

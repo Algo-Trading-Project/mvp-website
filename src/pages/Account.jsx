@@ -234,7 +234,6 @@ export default function Account() {
     }
     return buildSubscriptionSnapshot(initialMetadata);
   });
-  const [subscriptionRefreshing, setSubscriptionRefreshing] = useState(false);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
 
   const saveBannerTimeout = useRef(null);
@@ -409,21 +408,6 @@ export default function Account() {
     loadAccount();
   }, [loadAccount]);
 
-  const handleRefreshSubscription = useCallback(async () => {
-    setSubscriptionRefreshing(true);
-    try {
-      const result = await StripeApi.syncSubscription();
-      await loadAccount({ silent: true });
-      const message = result?.message ?? "Subscription refreshed.";
-      toast.success(message);
-    } catch (error) {
-      const description = error?.message || error?.cause?.message || "Please try again.";
-      toast.error("Unable to refresh subscription", { description });
-    } finally {
-      setSubscriptionRefreshing(false);
-    }
-  }, [loadAccount]);
-
   const handleOpenBillingPortal = useCallback(async () => {
     const origin = typeof window !== "undefined" ? window.location.origin : DEFAULT_ORIGIN_FALLBACK;
     const returnUrl = origin ? `${origin}/account?from=stripe_portal` : undefined;
@@ -452,12 +436,11 @@ export default function Account() {
     const url = new URL(window.location.href);
     const flag = url.searchParams.get("from");
     if (flag && flag.toLowerCase().startsWith("stripe")) {
-      handleRefreshSubscription();
       url.searchParams.delete("from");
       const next = `${url.pathname}${url.search}${url.hash}`;
       window.history.replaceState({}, document.title, next);
     }
-  }, [handleRefreshSubscription]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -736,85 +719,120 @@ export default function Account() {
                   "Manage billing"
                 )}
               </Button>
-              <Button
-                variant="outline"
-                className="rounded-md border-slate-700 text-slate-200 hover:bg-slate-800"
-                onClick={handleRefreshSubscription}
-                disabled={subscriptionRefreshing}
-              >
-                {subscriptionRefreshing ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Refreshing…
-                  </span>
-                ) : (
-                  "Refresh subscription"
-                )}
-              </Button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-md">
-            <div className="p-6 border-b border-slate-800">
-              <h3 className="flex items-center space-x-2 font-semibold text-white">
-                <KeyRound className="w-5 h-5 text-amber-400" />
-                <span>API Access</span>
-              </h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-slate-400">
-                API access is available on Pro and Desk plans. Use your key to download signals programmatically.
-              </p>
+        <div className="bg-slate-900 border border-slate-800 rounded-md">
+          <div className="p-6 border-b border-slate-800">
+            <h3 className="flex items-center space-x-2 font-semibold text-white">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+              <span>API Access</span>
+            </h3>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-slate-400">
+              API access is available on Pro and Desk plans. Use your key to download signals programmatically.
+            </p>
 
-              <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
-                <span className="font-mono text-slate-200 break-all">
-                  {apiKey
-                    ? showPlainApiKey
-                      ? apiKey
-                      : "••••••••••••••••••••••••••••••••"
-                    : hasStoredApiKey
-                      ? "••••••••••••••••••••••••••••••••"
-                      : "No key generated"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
-                    onClick={handleCopyApiKey}
-                    disabled={!apiKey}
-                  >
-                    <Copy className="w-3 h-3 mr-2" />
-                    {copyStatus === "copied" ? "Copied" : "Copy"}
-                  </Button>
+            <div className="p-3 bg-slate-950 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-700">
+              <span className="font-mono text-slate-200 break-all">
+                {apiKey
+                  ? showPlainApiKey
+                    ? apiKey
+                    : "••••••••••••••••••••••••••••••••"
+                  : hasStoredApiKey
+                    ? "••••••••••••••••••••••••••••••••"
+                    : "No key generated"}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-md border-slate-700 bg-white text-slate-900 hover:bg-slate-100"
+                  onClick={handleCopyApiKey}
+                  disabled={!apiKey}
+                >
+                  <Copy className="w-3 h-3 mr-2" />
+                  {copyStatus === "copied" ? "Copied" : "Copy"}
+                </Button>
+                <Dialog
+                  open={apiKeyDialogOpen}
+                  onOpenChange={(open) => {
+                    setApiKeyDialogOpen(open);
+                    if (!open) {
+                      setApiKeyError(null);
+                      setApiKeyLoading(false);
+                    }
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-md border-blue-500 text-blue-400 hover:bg-blue-500/10"
+                      onClick={() => setApiKeyError(null)}
+                    >
+                      {apiKey || hasStoredApiKey ? "Regenerate Key" : "Generate New Key"}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-slate-900 border border-slate-700 text-white">
+                    <DialogHeader>
+                      <DialogTitle>{apiKey ? "Regenerate API key" : "Generate API key"}</DialogTitle>
+                      <DialogDescription className="text-slate-400">
+                        Generating a new key revokes the previous one immediately. Store the new key securely—this is the
+                        only time it will be shown.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {apiKeyError ? (
+                      <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                        {apiKeyError}
+                      </div>
+                    ) : null}
+                    <DialogFooter className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setApiKeyDialogOpen(false)}
+                        disabled={apiKeyLoading}
+                        className="rounded-md"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleGenerateApiKey}
+                        disabled={apiKeyLoading}
+                        className="bg-blue-600 hover:bg-blue-700 rounded-md"
+                      >
+                        {apiKeyLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        {apiKey ? "Regenerate" : "Generate"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {(apiKey || hasStoredApiKey) && (
                   <Dialog
-                    open={apiKeyDialogOpen}
+                    open={revokeDialogOpen}
                     onOpenChange={(open) => {
-                      setApiKeyDialogOpen(open);
+                      setRevokeDialogOpen(open);
                       if (!open) {
                         setApiKeyError(null);
-                        setApiKeyLoading(false);
                       }
                     }}
                   >
                     <DialogTrigger asChild>
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
-                        className="rounded-md border-blue-500 text-blue-400 hover:bg-blue-500/10"
-                        onClick={() => setApiKeyError(null)}
+                        className="rounded-md bg-red-600 hover:bg-red-500 text-white"
                       >
-                        {apiKey || hasStoredApiKey ? "Regenerate Key" : "Generate New Key"}
+                        Revoke
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-slate-900 border border-slate-700 text-white">
                       <DialogHeader>
-                        <DialogTitle>{apiKey ? "Regenerate API key" : "Generate API key"}</DialogTitle>
+                        <DialogTitle>Revoke API key</DialogTitle>
                         <DialogDescription className="text-slate-400">
-                          Generating a new key revokes the previous one immediately. Store the new key securely—this is the
-                          only time it will be shown.
+                          Revoking removes access immediately. You can generate a new key at any time.
                         </DialogDescription>
                       </DialogHeader>
                       {apiKeyError ? (
@@ -824,125 +842,64 @@ export default function Account() {
                       ) : null}
                       <DialogFooter className="flex justify-end gap-2">
                         <Button
-                          variant="ghost"
-                          onClick={() => setApiKeyDialogOpen(false)}
+                          variant="outline"
+                          onClick={() => setRevokeDialogOpen(false)}
                           disabled={apiKeyLoading}
-                          className="rounded-md"
+                          className="rounded-md border-slate-700 text-black"
                         >
-                          Cancel
+                          Keep key
                         </Button>
                         <Button
-                          onClick={handleGenerateApiKey}
+                          onClick={handleRevokeApiKey}
                           disabled={apiKeyLoading}
-                          className="bg-blue-600 hover:bg-blue-700 rounded-md"
+                          className="bg-red-600 hover:bg-red-500 rounded-md text-white"
                         >
                           {apiKeyLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                          {apiKey ? "Regenerate" : "Generate"}
+                          Revoke key
                         </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
-                  {(apiKey || hasStoredApiKey) && (
-                    <Dialog
-                      open={revokeDialogOpen}
-                      onOpenChange={(open) => {
-                        setRevokeDialogOpen(open);
-                        if (!open) {
-                          setApiKeyError(null);
-                        }
-                      }}
-                    >
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="rounded-md bg-red-600 hover:bg-red-500 text-white"
-                        >
-                          Revoke
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="bg-slate-900 border border-slate-700 text-white">
-                        <DialogHeader>
-                          <DialogTitle>Revoke API key</DialogTitle>
-                          <DialogDescription className="text-slate-400">
-                            Revoking removes access immediately. You can generate a new key at any time.
-                          </DialogDescription>
-                        </DialogHeader>
-                        {apiKeyError ? (
-                          <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
-                            {apiKeyError}
-                          </div>
-                        ) : null}
-                        <DialogFooter className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => setRevokeDialogOpen(false)}
-                            disabled={apiKeyLoading}
-                            className="rounded-md border-slate-700 text-black"
-                          >
-                            Keep key
-                          </Button>
-                          <Button
-                            onClick={handleRevokeApiKey}
-                            disabled={apiKeyLoading}
-                            className="bg-red-600 hover:bg-red-500 rounded-md text-white"
-                          >
-                            {apiKeyLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                            Revoke key
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
+                )}
               </div>
-              {hasStoredApiKey ? (
-                <button
-                  type="button"
-                  onClick={() => setShowPlainApiKey((prev) => !prev)}
-                  className="text-xs text-slate-400 hover:text-slate-200 underline"
-                >
-                  {showPlainApiKey ? "Hide key" : "Show key"}
-                </button>
-              ) : null}
             </div>
           </div>
+        </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-md">
-            <div className="p-6 border-b border-slate-800">
-              <h3 className="font-semibold text-white">Preferences</h3>
-              <p className="text-slate-400 text-sm mt-1">
-                Control how we keep in touch and what updates you receive.
-              </p>
+        <div className="bg-slate-900 border border-slate-800 rounded-md">
+          <div className="p-6 border-b border-slate-800">
+            <h3 className="font-semibold text-white">Preferences</h3>
+            <p className="text-slate-400 text-sm mt-1">
+              Control how we keep in touch and what updates you receive.
+            </p>
+          </div>
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="marketing" className="text-slate-200">
+                  Marketing emails
+                </Label>
+                <p className="text-xs text-slate-400">Receive occasional updates, promotions, and news.</p>
+              </div>
+              <Switch id="marketing" checked={marketingOptIn} onCheckedChange={setMarketingOptIn} />
             </div>
-            <div className="p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="marketing" className="text-slate-200">
-                    Marketing emails
-                  </Label>
-                  <p className="text-xs text-slate-400">Receive occasional updates, promotions, and news.</p>
-                </div>
-                <Switch id="marketing" checked={marketingOptIn} onCheckedChange={setMarketingOptIn} />
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="weekly" className="text-slate-200">
+                  Weekly summary
+                </Label>
+                <p className="text-xs text-slate-400">Get a weekly digest of performance and signals.</p>
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="weekly" className="text-slate-200">
-                    Weekly summary
-                  </Label>
-                  <p className="text-xs text-slate-400">Get a weekly digest of performance and signals.</p>
-                </div>
-                <Switch id="weekly" checked={weeklySummary} onCheckedChange={setWeeklySummary} />
+              <Switch id="weekly" checked={weeklySummary} onCheckedChange={setWeeklySummary} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="product" className="text-slate-200">
+                  Product updates
+                </Label>
+                <p className="text-xs text-slate-400">Be notified of new features and improvements.</p>
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="product" className="text-slate-200">
-                    Product updates
-                  </Label>
-                  <p className="text-xs text-slate-400">Be notified of new features and improvements.</p>
-                </div>
-                <Switch id="product" checked={productUpdates} onCheckedChange={setProductUpdates} />
-              </div>
+              <Switch id="product" checked={productUpdates} onCheckedChange={setProductUpdates} />
             </div>
           </div>
         </div>
