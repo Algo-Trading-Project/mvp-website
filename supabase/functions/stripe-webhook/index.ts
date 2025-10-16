@@ -1,4 +1,4 @@
-// No Stripe SDK/runtime import: use Stripe REST via fetch to avoid Node polyfills
+import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { corsHeaders } from "../_shared/middleware.ts";
 import { badRequest, internalError, json, methodNotAllowed } from "../_shared/http.ts";
 import {
@@ -11,11 +11,11 @@ import {
   getPlanInfoForPriceId,
 } from "../_shared/subscription.ts";
 
-type StripeEvent = any;
-type StripeSubscription = any;
-type StripeCustomer = any;
-type StripeInvoice = any;
-type StripeCheckoutSession = any;
+type StripeEvent = Stripe.Event;
+type StripeSubscription = Stripe.Subscription;
+type StripeCustomer = Stripe.Customer;
+type StripeInvoice = Stripe.Invoice;
+type StripeCheckoutSession = Stripe.Checkout.Session;
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -26,37 +26,12 @@ if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
   );
 }
 
-// Minimal Stripe REST helper (no Node polyfills)
-const stripeFetch = async (
-  method: string,
-  path: string,
-  body?: Record<string, string | number | boolean | null | undefined>,
-) => {
-  if (!STRIPE_SECRET_KEY) throw new Error("Stripe secret key missing");
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
-  };
-  let requestBody: BodyInit | undefined;
-  if (method !== "GET" && body) {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(body)) {
-      if (v === undefined) continue;
-      params.append(k, String(v));
-    }
-    headers["Content-Type"] = "application/x-www-form-urlencoded";
-    requestBody = params;
-  }
-  const url = `https://api.stripe.com/v1${path}`;
-  const res = await fetch(url, { method, headers, body: requestBody });
-  const json = await res.json();
-  if (!res.ok) {
-    throw Object.assign(new Error(json?.error?.message || `Stripe error ${res.status}`), {
-      status: res.status,
-      raw: json,
-    });
-  }
-  return json;
-};
+const stripe = STRIPE_SECRET_KEY
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2022-11-15",
+      httpClient: Stripe.createFetchHttpClient(),
+    })
+  : null;
 
 const subscriptionExpand = [
   "items.data.price",
@@ -76,7 +51,7 @@ const metadataStringOrNull = (value: unknown) => {
 };
 
 const resolveUserIdFromCustomer = async (customer: StripeCustomer | string | null | undefined) => {
-  if (!customer) return null;
+  if (!customer || !stripe) return null;
   if (typeof customer === "object" && customer.metadata) {
     const direct =
       metadataStringOrNull((customer.metadata as Record<string, unknown>)?.supabase_user_id) ??
@@ -86,7 +61,7 @@ const resolveUserIdFromCustomer = async (customer: StripeCustomer | string | nul
   const customerId = typeof customer === "string" ? customer : customer?.id ?? null;
   if (!customerId) return null;
   try {
-    const fetched = await stripeFetch("GET", `/customers/${customerId}`);
+    const fetched = await stripe.customers.retrieve(customerId);
     if (typeof fetched === "object" && fetched.metadata) {
       return (
         metadataStringOrNull((fetched.metadata as Record<string, unknown>)?.supabase_user_id) ??
@@ -106,11 +81,9 @@ const resolveUserIdFromSubscription = async (subscription: StripeSubscription) =
 };
 
 const fetchSubscription = async (subscriptionId: string | null | undefined) => {
-  if (!subscriptionId) return null;
+  if (!stripe || !subscriptionId) return null;
   try {
-    const params = new URLSearchParams();
-    for (const key of subscriptionExpand) params.append("expand[]", key);
-    return await stripeFetch("GET", `/subscriptions/${subscriptionId}?${params.toString()}`);
+    return await stripe.subscriptions.retrieve(subscriptionId, { expand: subscriptionExpand });
   } catch (error) {
     console.warn("Unable to retrieve subscription", subscriptionId, error);
     return null;
@@ -118,7 +91,9 @@ const fetchSubscription = async (subscriptionId: string | null | undefined) => {
 };
 
 const computePendingFromSchedule = async (subscription: StripeSubscription) => {
-  // stripeFetch available globally
+  if (!stripe) {
+    return { planSlug: null as string | null, billingCycle: null as string | null, effectiveDate: null as string | null, scheduleId: null as string | null };
+  }
   
   // Resolve schedule object
   // @ts-ignore schedule can be object|string|null
@@ -132,10 +107,9 @@ const computePendingFromSchedule = async (subscription: StripeSubscription) => {
   const scheduleIdFromString: string | null = typeof subscription.schedule === "string" ? subscription.schedule : null;
   if (!schedule && scheduleIdFromString) {
     try {
-      const params = new URLSearchParams();
-      params.append("expand[]", "phases");
-      params.append("expand[]", "phases.items.price");
-      schedule = await stripeFetch("GET", `/subscription_schedules/${scheduleIdFromString}?${params.toString()}`);
+      schedule = await stripe.subscriptionSchedules.retrieve(scheduleIdFromString, {
+        expand: ["phases", "phases.items.price"],
+      });
     } catch (e) {
       console.warn("Failed to retrieve subscription schedule", scheduleIdFromString, e);
     }
@@ -222,6 +196,7 @@ const handleSubscriptionUpdate = async (
   const derived = derivePlanInfoFromSubscription(subscription);
   // Also compute pending change from schedule (expanded or via fetch fallback)
   const pending = await computePendingFromSchedule(subscription);
+  const currentEnd = typeof subscription.current_period_end === 'number' ? subscription.current_period_end : null;
   await updateUserFromSubscription({
     userId,
     subscription,
@@ -233,11 +208,13 @@ const handleSubscriptionUpdate = async (
     pendingBillingCycle: pending.billingCycle,
     pendingEffectiveDate: pending.effectiveDate,
     pendingScheduleId: pending.scheduleId,
+    currentPeriodEndOverride: currentEnd ?? undefined,
   });
 };
 
 const handleCheckoutSessionCompleted = async (event: StripeEvent) => {
   const session = event.data.object as StripeCheckoutSession;
+  if (!stripe) return;
 
   const userId =
     metadataStringOrNull(session.metadata?.user_id) ??
@@ -278,6 +255,7 @@ const handleCheckoutSessionCompleted = async (event: StripeEvent) => {
 };
 
 const handleInvoiceEvent = async (event: StripeEvent) => {
+  if (!stripe) return;
   const invoice = event.data.object as StripeInvoice;
   const invAny: any = invoice as any;
 
@@ -324,11 +302,9 @@ const handleInvoiceEvent = async (event: StripeEvent) => {
   // Fallback: if subscription still unresolved, list by customer and pick latest non-canceled
   if (!subscription && customerId) {
     try {
-      const params = new URLSearchParams({ customer: customerId, status: "all", limit: "20" });
-      const listed = await stripeFetch("GET", `/subscriptions?${params.toString()}`);
-      const data = listed?.data || [];
-      if (data.length) {
-        subscription = data.find((s: any) => s.status !== "canceled") ?? data.sort((a: any, b: any) => (b.created ?? 0) - (a.created ?? 0))[0];
+      const listed = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 });
+      if (listed?.data?.length) {
+        subscription = listed.data.find((s) => s.status !== "canceled") ?? listed.data.sort((a, b) => (b.created ?? 0) - (a.created ?? 0))[0];
       }
     } catch (e) {
       console.warn("Unable to fallback-list subscriptions for customer", customerId, e);
@@ -352,12 +328,22 @@ const handleInvoiceEvent = async (event: StripeEvent) => {
   const derived = subscription ? derivePlanInfoFromSubscription(subscription) : null;
   const pending = subscription ? await computePendingFromSchedule(subscription) : null;
 
-  // Compute period end from invoice as fallback for initial payment
-  const computedPeriodEnd: number | null =
-    (typeof invAny.period_end === 'number' ? invAny.period_end : null) ??
-    (invAny.lines && Array.isArray(invAny.lines.data) && invAny.lines.data[0]?.period?.end
-      ? Number(invAny.lines.data[0].period.end)
-      : null);
+  // Renewal date override strategy:
+  // - Prefer Stripe's subscription.current_period_end whenever available (all reasons)
+  // - If unavailable and this is a real cycle start (create/cycle), compute from now + billing cycle
+  let currentPeriodEndOverride: number | undefined = undefined;
+  const stripeAnchor = typeof subscription?.current_period_end === "number" ? subscription.current_period_end : null;
+  if (stripeAnchor) {
+    currentPeriodEndOverride = stripeAnchor;
+  } else if (event.type === "invoice.payment_succeeded" && (reason === "subscription_create" || reason === "subscription_cycle")) {
+    const cycleFromSub = derived?.billingCycle ?? null;
+    const cycleFromInvoiceMeta = metadataStringOrNull(invAny.parent?.subscription_details?.metadata?.billing_cycle) ?? null;
+    const cycle = (cycleFromSub ?? cycleFromInvoiceMeta ?? "monthly").toLowerCase();
+    const now = new Date();
+    if (cycle === "annual") now.setFullYear(now.getFullYear() + 1);
+    else now.setMonth(now.getMonth() + 1);
+    currentPeriodEndOverride = Math.floor(now.getTime() / 1000);
+  }
 
   await updateUserFromSubscription({
     userId,
@@ -369,7 +355,7 @@ const handleInvoiceEvent = async (event: StripeEvent) => {
     pendingBillingCycle: pending?.billingCycle ?? undefined,
     pendingEffectiveDate: pending?.effectiveDate ?? undefined,
     pendingScheduleId: pending?.scheduleId ?? undefined,
-    currentPeriodEndOverride: computedPeriodEnd ?? undefined,
+    currentPeriodEndOverride,
   });
 };
 
@@ -393,15 +379,77 @@ const firstPriceId = (sub: StripeSubscription | null | undefined) =>
   sub?.items?.data?.[0]?.price?.id ?? null;
 
 /**
- * Enforce change policy:
- * - Downgrade (lower tier): schedule change at period end; keep current price for current period
- * - Upgrade (higher tier): apply immediately (no schedule)
- * - Same tier, cycle change: schedule change at period end
+ * Enforce plan/interval change policy programmatically:
+ * - Tier upgrade: apply immediately (proration) at current interval; if interval also changed, schedule that interval change at period end.
+ * - Tier downgrade: schedule at period end.
+ * - Same-tier interval change: schedule at period end.
  */
-const enforceChangePolicy = async (_event: StripeEvent, _subscription: StripeSubscription) => {
-  // No-op: policy is enforced in the app/portal configuration.
-  return;
+const enforceChangePolicy = async (event: StripeEvent, subscription: StripeSubscription) => {
+  if (!stripe) return;
+
+  const newPriceId = firstPriceId(subscription);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prevAttrs: any = (event as any).data?.previous_attributes ?? {};
+  const prevPriceId: string | null =
+    prevAttrs?.items?.data?.[0]?.price?.id ??
+    (typeof prevAttrs?.items?.data?.[0]?.price === 'string' ? (prevAttrs.items.data[0].price as string) : null);
+
+  if (!newPriceId || !prevPriceId || newPriceId === prevPriceId) return;
+
+  const newMap = getPlanInfoForPriceId(newPriceId);
+  const prevMap = getPlanInfoForPriceId(prevPriceId);
+  if (!newMap || !prevMap) return;
+
+  const newRank = rankTier(newMap.planSlug);
+  const prevRank = rankTier(prevMap.planSlug);
+  const sameTier = newMap.planSlug === prevMap.planSlug;
+  const intervalChanged = newMap.billingCycle !== prevMap.billingCycle;
+  const itemId = subscription.items?.data?.[0]?.id;
+  if (!itemId) return;
+
+  const cancelPortalArtifacts = async () => {
+    try { await stripe.subscriptions.cancelPendingUpdate(subscription.id); } catch (_) {}
+    // @ts-ignore schedule can be string|object|null
+    const scheduleId: string | null = typeof subscription.schedule === 'string' ? subscription.schedule : subscription.schedule?.id ?? null;
+    if (scheduleId) { try { await stripe.subscriptionSchedules.cancel(scheduleId); } catch (_) {} }
+  };
+
+  if (newRank > prevRank) {
+    // Upgrade immediately. If interval also changed, apply the requested price NOW and reset anchor to now.
+    await cancelPortalArtifacts();
+    try {
+      await stripe.subscriptions.update(subscription.id, {
+        items: [{ id: itemId, price: newPriceId }],
+        proration_behavior: 'create_prorations',
+        billing_cycle_anchor: intervalChanged ? 'now' : 'unchanged',
+      });
+    } catch (e) { console.warn('Immediate upgrade failed', e); }
+    return;
+  }
+
+  // Downgrade or same-tier interval change: schedule at period end
+  if (newRank < prevRank || (sameTier && intervalChanged)) {
+    await cancelPortalArtifacts();
+    try {
+      await stripe.subscriptions.update(subscription.id, {
+        items: [{ id: itemId, price: prevPriceId }],
+        proration_behavior: 'none',
+      });
+    } catch (e) { console.warn('Revert to previous price failed', e); }
+    const startAt = subscription.current_period_end ?? Math.floor(Date.now() / 1000) + 60;
+    try {
+      await stripe.subscriptionSchedules.create({
+        from_subscription: subscription.id,
+        phases: [{
+          start_date: startAt,
+          items: [{ price: newPriceId }],
+          metadata: { pending_plan_slug: newMap.planSlug, pending_billing_cycle: newMap.billingCycle },
+        }],
+      });
+    } catch (e) { console.warn('Failed to schedule deferred change', e); }
+  }
 };
+// (removed no-op duplicate enforceChangePolicy)
 
 const timingSafeEqual = (a: string, b: string) => {
   if (a.length !== b.length) return false;
@@ -472,11 +520,15 @@ const handleEvent = async (event: StripeEvent) => {
       // Always refetch with expansions so we can infer pending schedule info
       const subObj = event.data.object as StripeSubscription;
       const subId = subObj?.id ?? null;
-      const subscription = await fetchSubscription(subId);
+      let subscription = await fetchSubscription(subId);
       if (subscription) {
+        await enforceChangePolicy(event, subscription);
+        // Re-fetch to pick up any enforced changes
+        subscription = (await fetchSubscription(subscription.id)) ?? subscription;
         await handleSubscriptionUpdate(subscription);
       } else {
         // Fallback to raw object if refetch fails
+        await enforceChangePolicy(event, subObj);
         await handleSubscriptionUpdate(subObj);
       }
       break;
@@ -502,7 +554,7 @@ Deno.serve(async (req) => {
     return methodNotAllowed();
   }
 
-  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
     return internalError("Stripe webhook configuration missing");
   }
 
