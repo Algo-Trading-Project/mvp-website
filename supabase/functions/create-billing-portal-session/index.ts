@@ -1,9 +1,8 @@
-import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
+// Avoid Stripe SDK (Node polyfills) — use Stripe REST via fetch
 import { getUserFromRequest } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/middleware.ts";
 import { internalError, json, methodNotAllowed } from "../_shared/http.ts";
-import { ensureStripeCustomerId, getTrackedPriceIds } from "../_shared/subscription.ts";
-import type StripeTypes from "https://esm.sh/stripe@12.17.0?target=deno";
+import { persistStripeCustomerId } from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const DEFAULT_SITE_URL = Deno.env.get("SITE_URL") ?? "https://quantpulse.ai";
@@ -13,12 +12,72 @@ if (!STRIPE_SECRET_KEY) {
   console.warn("STRIPE_SECRET_KEY is not set; create-billing-portal-session will fail until configured.");
 }
 
-const stripe = STRIPE_SECRET_KEY
-  ? new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: "2022-11-15",
-      httpClient: Stripe.createFetchHttpClient(),
-    })
-  : null;
+const stripeFetch = async (
+  method: string,
+  path: string,
+  body?: Record<string, string | number | boolean | null | undefined>,
+) => {
+  if (!STRIPE_SECRET_KEY) throw new Error("Stripe not configured");
+  const headers: Record<string, string> = { Authorization: `Bearer ${STRIPE_SECRET_KEY}` };
+  let requestBody: BodyInit | undefined;
+  if (method !== "GET" && body) {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(body)) {
+      if (v === undefined) continue;
+      params.append(k, String(v));
+    }
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    requestBody = params;
+  }
+  const res = await fetch(`https://api.stripe.com/v1${path}`, { method, headers, body: requestBody });
+  const json = await res.json();
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message || `Stripe error ${res.status}`), { status: res.status, raw: json });
+  return json;
+};
+
+const encodeParams = (obj: Record<string, unknown>, prefix = ""): Record<string, string> => {
+  const flat: Record<string, string> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null) continue;
+    const k = prefix ? `${prefix}[${key}]` : key;
+    if (Array.isArray(value)) {
+      value.forEach((v) => (flat[`${k}[]`] = String(v)));
+    } else if (typeof value === "object") {
+      Object.assign(flat, encodeParams(value as Record<string, unknown>, k));
+    } else {
+      flat[k] = String(value);
+    }
+  }
+  return flat;
+};
+
+const ensureCustomerId = async (user: any, meta: Record<string, unknown>) => {
+  const existing = (meta?.stripe_customer_id as string | undefined) ?? null;
+  if (existing) return existing;
+  try {
+    const search = await stripeFetch("GET", `/customers/search?query=${encodeURIComponent(`metadata['supabase_user_id']:'${user.id}'`)}&limit=1`);
+    if (search?.data?.[0]?.id) {
+      await persistStripeCustomerId(user.id, search.data[0].id, { supabaseUser: user, existingMetadata: meta });
+      return search.data[0].id;
+    }
+  } catch {}
+  if (user.email) {
+    try {
+      const listed = await stripeFetch("GET", `/customers?email=${encodeURIComponent(user.email)}&limit=20`);
+      const match = (listed.data || []).find((c: any) => (c.email || "").toLowerCase() === (user.email || "").toLowerCase());
+      if (match?.id) {
+        if (!match.metadata?.supabase_user_id) {
+          try { await stripeFetch("POST", `/customers/${match.id}`, encodeParams({ metadata: { supabase_user_id: user.id } })); } catch {}
+        }
+        await persistStripeCustomerId(user.id, match.id, { supabaseUser: user, existingMetadata: meta });
+        return match.id;
+      }
+    } catch {}
+  }
+  const created = await stripeFetch("POST", "/customers", encodeParams({ email: user.email ?? undefined, metadata: { supabase_user_id: user.id } }));
+  await persistStripeCustomerId(user.id, created.id, { supabaseUser: user, existingMetadata: meta });
+  return created.id;
+};
 
 const normalizeUrl = (value: unknown, fallback: string) => {
   if (typeof value !== "string") return fallback;
@@ -47,79 +106,7 @@ const resolveOriginFromRequest = (req: Request) => {
   return DEFAULT_SITE_URL;
 };
 
-const resolvePortalConfiguration = async (stripeClient: StripeTypes) => {
-  if (STRIPE_PORTAL_CONFIGURATION_ID) {
-    return STRIPE_PORTAL_CONFIGURATION_ID;
-  }
-
-  try {
-    const configurations = await stripeClient.billingPortal.configurations.list({ limit: 20 });
-    const selected =
-      configurations.data.find((config) => config.is_default) ??
-      configurations.data.find((config) => config.active) ??
-      configurations.data[0];
-    if (selected?.id) {
-      return selected.id;
-    }
-  } catch (error) {
-    console.warn("Unable to list billing portal configurations", error);
-  }
-
-  const productIds = await (async () => {
-    const trackedPriceIds = getTrackedPriceIds();
-    const uniqueProducts = new Set<string>();
-    await Promise.allSettled(
-      trackedPriceIds.map(async (priceId) => {
-        try {
-          const price = await stripeClient.prices.retrieve(priceId);
-          const productId =
-            typeof price.product === "string" ? price.product : price.product?.id ?? null;
-          if (productId) {
-            uniqueProducts.add(productId);
-          }
-        } catch (error) {
-          console.warn("Unable to resolve product for price", priceId, error);
-        }
-      }),
-    );
-    return Array.from(uniqueProducts);
-  })();
-
-  try {
-    const created = await stripeClient.billingPortal.configurations.create({
-      business_profile: {
-        headline: "QuantPulse Billing",
-        privacy_policy_url: `${DEFAULT_SITE_URL.replace(/\/+$/, "")}/privacy`,
-        terms_of_service_url: `${DEFAULT_SITE_URL.replace(/\/+$/, "")}/terms`,
-      },
-      features: {
-        customer_update: {
-          enabled: true,
-          allowed_updates: ["email", "address"],
-        },
-        invoice_history: { enabled: true },
-        subscription_cancel: {
-          enabled: true,
-          mode: "at_period_end",
-        },
-        subscription_pause: { enabled: false },
-        payment_method_update: { enabled: true },
-        subscription_update: productIds.length
-          ? {
-              enabled: true,
-              default_allowed_updates: ["price", "quantity"],
-              products: productIds,
-              proration_behavior: "create_prorations",
-            }
-          : { enabled: false },
-      },
-    });
-    return created.id ?? null;
-  } catch (error) {
-    console.error("Failed to create billing portal configuration", error);
-    return null;
-  }
-};
+// No portal configuration orchestration here; rely on default configuration unless overridden via ENV
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -130,7 +117,7 @@ Deno.serve(async (req) => {
     return methodNotAllowed();
   }
 
-  if (!stripe) {
+  if (!STRIPE_SECRET_KEY) {
     return internalError("Stripe is not configured");
   }
 
@@ -156,17 +143,17 @@ Deno.serve(async (req) => {
       (user.raw_user_meta_data as Record<string, unknown> | undefined) ??
       {};
 
-    const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
+    const customerId = await ensureCustomerId(user, metadata);
 
-    const portalConfigurationId = await resolvePortalConfiguration(stripe);
-
-    const session = await stripe.billingPortal.sessions.create({
+    // Use default portal configuration unless ENV overrides
+    const configurationId = STRIPE_PORTAL_CONFIGURATION_ID ?? undefined;
+    const session = await stripeFetch("POST", "/billing_portal/sessions", encodeParams({
       customer: customerId,
-      configuration: portalConfigurationId ?? undefined,
+      configuration: configurationId,
       return_url: normalizeUrl(returnUrl, `${normalizedBase}/account?from=stripe_portal`),
-    });
+    }));
 
-    if (!session.url) {
+    if (!session?.url) {
       throw new Error("Billing portal session did not return a URL");
     }
 

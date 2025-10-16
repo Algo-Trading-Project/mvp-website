@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4?target=deno';
 
 let client: SupabaseClient | null = null;
 

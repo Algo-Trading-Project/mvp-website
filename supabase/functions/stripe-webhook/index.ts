@@ -1,4 +1,4 @@
-import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
+// No Stripe SDK/runtime import: use Stripe REST via fetch to avoid Node polyfills
 import { corsHeaders } from "../_shared/middleware.ts";
 import { badRequest, internalError, json, methodNotAllowed } from "../_shared/http.ts";
 import {
@@ -11,15 +11,11 @@ import {
   getPlanInfoForPriceId,
 } from "../_shared/subscription.ts";
 
-type StripeEvent = Stripe.Event;
-
-type StripeSubscription = Stripe.Subscription;
-
-type StripeCustomer = Stripe.Customer;
-
-type StripeInvoice = Stripe.Invoice;
-
-type StripeCheckoutSession = Stripe.Checkout.Session;
+type StripeEvent = any;
+type StripeSubscription = any;
+type StripeCustomer = any;
+type StripeInvoice = any;
+type StripeCheckoutSession = any;
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -30,12 +26,37 @@ if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
   );
 }
 
-const stripe = STRIPE_SECRET_KEY
-  ? new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: "2022-11-15",
-      httpClient: Stripe.createFetchHttpClient(),
-    })
-  : null;
+// Minimal Stripe REST helper (no Node polyfills)
+const stripeFetch = async (
+  method: string,
+  path: string,
+  body?: Record<string, string | number | boolean | null | undefined>,
+) => {
+  if (!STRIPE_SECRET_KEY) throw new Error("Stripe secret key missing");
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+  };
+  let requestBody: BodyInit | undefined;
+  if (method !== "GET" && body) {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(body)) {
+      if (v === undefined) continue;
+      params.append(k, String(v));
+    }
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    requestBody = params;
+  }
+  const url = `https://api.stripe.com/v1${path}`;
+  const res = await fetch(url, { method, headers, body: requestBody });
+  const json = await res.json();
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message || `Stripe error ${res.status}`), {
+      status: res.status,
+      raw: json,
+    });
+  }
+  return json;
+};
 
 const subscriptionExpand = [
   "items.data.price",
@@ -55,7 +76,7 @@ const metadataStringOrNull = (value: unknown) => {
 };
 
 const resolveUserIdFromCustomer = async (customer: StripeCustomer | string | null | undefined) => {
-  if (!customer || !stripe) return null;
+  if (!customer) return null;
   if (typeof customer === "object" && customer.metadata) {
     const direct =
       metadataStringOrNull((customer.metadata as Record<string, unknown>)?.supabase_user_id) ??
@@ -65,7 +86,7 @@ const resolveUserIdFromCustomer = async (customer: StripeCustomer | string | nul
   const customerId = typeof customer === "string" ? customer : customer?.id ?? null;
   if (!customerId) return null;
   try {
-    const fetched = await stripe.customers.retrieve(customerId);
+    const fetched = await stripeFetch("GET", `/customers/${customerId}`);
     if (typeof fetched === "object" && fetched.metadata) {
       return (
         metadataStringOrNull((fetched.metadata as Record<string, unknown>)?.supabase_user_id) ??
@@ -85,9 +106,11 @@ const resolveUserIdFromSubscription = async (subscription: StripeSubscription) =
 };
 
 const fetchSubscription = async (subscriptionId: string | null | undefined) => {
-  if (!stripe || !subscriptionId) return null;
+  if (!subscriptionId) return null;
   try {
-    return await stripe.subscriptions.retrieve(subscriptionId, { expand: subscriptionExpand });
+    const params = new URLSearchParams();
+    for (const key of subscriptionExpand) params.append("expand[]", key);
+    return await stripeFetch("GET", `/subscriptions/${subscriptionId}?${params.toString()}`);
   } catch (error) {
     console.warn("Unable to retrieve subscription", subscriptionId, error);
     return null;
@@ -95,15 +118,13 @@ const fetchSubscription = async (subscriptionId: string | null | undefined) => {
 };
 
 const computePendingFromSchedule = async (subscription: StripeSubscription) => {
-  if (!stripe) {
-    return { planSlug: null as string | null, billingCycle: null as string | null, effectiveDate: null as string | null, scheduleId: null as string | null };
-  }
-
+  // stripeFetch available globally
+  
   // Resolve schedule object
   // @ts-ignore schedule can be object|string|null
-  let schedule: Stripe.SubscriptionSchedule | null =
+  let schedule: any =
     typeof subscription.schedule === "object" && subscription.schedule
-      ? (subscription.schedule as Stripe.SubscriptionSchedule)
+      ? subscription.schedule
       : null;
 
   // If only an ID, fetch schedule with needed expansions
@@ -111,9 +132,10 @@ const computePendingFromSchedule = async (subscription: StripeSubscription) => {
   const scheduleIdFromString: string | null = typeof subscription.schedule === "string" ? subscription.schedule : null;
   if (!schedule && scheduleIdFromString) {
     try {
-      schedule = await stripe.subscriptionSchedules.retrieve(scheduleIdFromString, {
-        expand: ["phases", "phases.items.price"],
-      });
+      const params = new URLSearchParams();
+      params.append("expand[]", "phases");
+      params.append("expand[]", "phases.items.price");
+      schedule = await stripeFetch("GET", `/subscription_schedules/${scheduleIdFromString}?${params.toString()}`);
     } catch (e) {
       console.warn("Failed to retrieve subscription schedule", scheduleIdFromString, e);
     }
@@ -216,7 +238,6 @@ const handleSubscriptionUpdate = async (
 
 const handleCheckoutSessionCompleted = async (event: StripeEvent) => {
   const session = event.data.object as StripeCheckoutSession;
-  if (!stripe) return;
 
   const userId =
     metadataStringOrNull(session.metadata?.user_id) ??
@@ -257,36 +278,99 @@ const handleCheckoutSessionCompleted = async (event: StripeEvent) => {
 };
 
 const handleInvoiceEvent = async (event: StripeEvent) => {
-  if (!stripe) return;
   const invoice = event.data.object as StripeInvoice;
+  const invAny: any = invoice as any;
 
-  const subscriptionId =
-    typeof invoice.subscription === "string"
-      ? invoice.subscription
-      : invoice.subscription?.id ?? null;
-
-  const subscription = await fetchSubscription(subscriptionId);
-  if (!subscription) {
-    console.warn("Invoice event without retrievable subscription", invoice.id);
-    return;
+  // Resolve subscription id from several locations (API versions differ)
+  let subscriptionId: string | null = null;
+  if (typeof invoice.subscription === "string") {
+    subscriptionId = invoice.subscription;
+  } else if (invoice.subscription && typeof (invoice.subscription as any).id === "string") {
+    subscriptionId = (invoice.subscription as any).id;
   }
+  if (!subscriptionId && invAny.parent && invAny.parent.subscription_details) {
+    const sd = invAny.parent.subscription_details;
+    if (sd && typeof sd.subscription === "string") {
+      subscriptionId = sd.subscription as string;
+    }
+  }
+  // Avoid deeper property chains beyond 4 levels; do not parse via invoice.lines.data[0].parent...
 
-  const userId =
-    metadataStringOrNull(invoice.metadata?.user_id) ??
-    (await resolveUserIdFromSubscription(subscription));
+  // Try to fetch subscription if we found an id (to sync plan/pending fields)
+  let subscription = await fetchSubscription(subscriptionId);
 
+  // Resolve user id from invoice/lines/customer/subscription metadata
+  let userId: string | null = metadataStringOrNull(invoice.metadata?.user_id);
+  if (!userId && subscription) {
+    userId = await resolveUserIdFromSubscription(subscription);
+  }
+  if (!userId) {
+    const customerRef = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id ?? null;
+    if (customerRef) {
+      userId = await resolveUserIdFromCustomer(customerRef);
+    }
+  }
   if (!userId) {
     console.warn("Invoice event missing user id", invoice.id);
     return;
   }
 
-  const customerId =
-    typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id ?? null;
+  // Persist stripe_customer_id for convenience
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id ?? null;
   if (customerId) {
     await persistStripeCustomerId(userId, customerId);
   }
 
-  await handleSubscriptionUpdate(subscription, userId);
+  // Fallback: if subscription still unresolved, list by customer and pick latest non-canceled
+  if (!subscription && customerId) {
+    try {
+      const params = new URLSearchParams({ customer: customerId, status: "all", limit: "20" });
+      const listed = await stripeFetch("GET", `/subscriptions?${params.toString()}`);
+      const data = listed?.data || [];
+      if (data.length) {
+        subscription = data.find((s: any) => s.status !== "canceled") ?? data.sort((a: any, b: any) => (b.created ?? 0) - (a.created ?? 0))[0];
+      }
+    } catch (e) {
+      console.warn("Unable to fallback-list subscriptions for customer", customerId, e);
+    }
+  }
+
+  // Decide whether to flip status based on billing_reason
+  const reason: string | null = (invAny.billing_reason as string | undefined) ?? null;
+  let statusOverride: string | undefined = undefined;
+  if (event.type === "invoice.payment_failed") {
+    // Only mark payment_required for failures that affect entitlements
+    const dunningReasons = new Set(["subscription_cycle", "subscription_create"]);
+    if (reason && dunningReasons.has(reason)) {
+      statusOverride = "payment_required";
+    }
+  } else if (event.type === "invoice.payment_succeeded") {
+    statusOverride = "active";
+  }
+
+  // Keep other fields in sync when we have a subscription
+  const derived = subscription ? derivePlanInfoFromSubscription(subscription) : null;
+  const pending = subscription ? await computePendingFromSchedule(subscription) : null;
+
+  // Compute period end from invoice as fallback for initial payment
+  const computedPeriodEnd: number | null =
+    (typeof invAny.period_end === 'number' ? invAny.period_end : null) ??
+    (invAny.lines && Array.isArray(invAny.lines.data) && invAny.lines.data[0]?.period?.end
+      ? Number(invAny.lines.data[0].period.end)
+      : null);
+
+  await updateUserFromSubscription({
+    userId,
+    subscription: subscription ?? null,
+    planSlug: derived?.planSlug ?? undefined,
+    billingCycle: derived?.billingCycle ?? undefined,
+    statusOverride,
+    pendingPlanSlug: pending?.planSlug ?? undefined,
+    pendingBillingCycle: pending?.billingCycle ?? undefined,
+    pendingEffectiveDate: pending?.effectiveDate ?? undefined,
+    pendingScheduleId: pending?.scheduleId ?? undefined,
+    currentPeriodEndOverride: computedPeriodEnd ?? undefined,
+  });
 };
 
 const relevantEvents = new Set<string>([
@@ -314,125 +398,9 @@ const firstPriceId = (sub: StripeSubscription | null | undefined) =>
  * - Upgrade (higher tier): apply immediately (no schedule)
  * - Same tier, cycle change: schedule change at period end
  */
-const enforceChangePolicy = async (
-  event: StripeEvent,
-  subscription: StripeSubscription,
-) => {
-  if (!stripe) return;
-
-  const newPrice = firstPriceId(subscription);
-  // Try to read previous price from previous_attributes; fall back to metadata if missing
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prevAttrs: any = (event as any).data?.previous_attributes ?? {};
-  const prevPrice: string | null =
-    prevAttrs?.items?.data?.[0]?.price?.id ??
-    (typeof prevAttrs?.items?.data?.[0]?.price === "string"
-      ? (prevAttrs?.items?.data?.[0]?.price as string)
-      : null);
-
-  if (!newPrice || !prevPrice || newPrice === prevPrice) {
-    return; // nothing to enforce
-  }
-
-  const newMap = getPlanInfoForPriceId(newPrice);
-  const prevMap = getPlanInfoForPriceId(prevPrice);
-  if (!newMap || !prevMap) return;
-
-  const newRank = rankTier(newMap.planSlug);
-  const prevRank = rankTier(prevMap.planSlug);
-  const sameTier = newMap.planSlug === prevMap.planSlug;
-  const cycleChanged = newMap.billingCycle !== prevMap.billingCycle;
-
-  // Helper: revert current period to previous price (no proration)
-  const revertToPreviousForCurrentPeriod = async () => {
-    try {
-      const itemId = subscription.items?.data?.[0]?.id;
-      if (!itemId) return;
-      await stripe.subscriptions.update(subscription.id, {
-        items: [
-          {
-            id: itemId,
-            price: prevPrice,
-          },
-        ],
-        proration_behavior: "none",
-      });
-    } catch (err) {
-      console.warn("Failed to revert subscription to previous price", subscription.id, err);
-    }
-  };
-
-  // Helper: ensure a schedule applies new price at period end
-  const ensureScheduleForNextPeriod = async () => {
-    const startAt = subscription.current_period_end ?? Math.floor(Date.now() / 1000) + 60;
-    try {
-      // Update existing schedule if present; otherwise create one from subscription
-      // @ts-ignore schedule can be object|string
-      const scheduleId: string | null =
-        typeof subscription.schedule === "string"
-          ? subscription.schedule
-          : subscription.schedule?.id ?? null;
-
-      if (scheduleId) {
-        try {
-          await stripe.subscriptionSchedules.update(scheduleId, {
-            phases: [
-              {
-                start_date: startAt,
-                items: [{ price: newPrice }],
-                metadata: {
-                  pending_plan_slug: newMap.planSlug,
-                  pending_billing_cycle: newMap.billingCycle,
-                },
-              },
-            ],
-          });
-          return;
-        } catch (e) {
-          console.warn("Failed to update existing schedule; will recreate", scheduleId, e);
-        }
-      }
-
-      await stripe.subscriptionSchedules.create({
-        from_subscription: subscription.id,
-        phases: [
-          {
-            start_date: startAt,
-            items: [{ price: newPrice }],
-            metadata: {
-              pending_plan_slug: newMap.planSlug,
-              pending_billing_cycle: newMap.billingCycle,
-            },
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Failed to create/update subscription schedule", subscription.id, err);
-    }
-  };
-
-  if (newRank > prevRank) {
-    // Upgrade: keep immediate change (already applied by Stripe); clear any pending schedule
-    try {
-      // @ts-ignore
-      const scheduleId: string | null =
-        typeof subscription.schedule === "string"
-          ? subscription.schedule
-          : subscription.schedule?.id ?? null;
-      if (scheduleId) {
-        await stripe.subscriptionSchedules.cancel(scheduleId);
-      }
-    } catch (err) {
-      console.warn("Failed to cancel existing schedule after upgrade", err);
-    }
-    return;
-  }
-
-  // Downgrade or same-tier cycle change: schedule at period end and revert current period
-  if (newRank < prevRank || (sameTier && cycleChanged)) {
-    await revertToPreviousForCurrentPeriod();
-    await ensureScheduleForNextPeriod();
-  }
+const enforceChangePolicy = async (_event: StripeEvent, _subscription: StripeSubscription) => {
+  // No-op: policy is enforced in the app/portal configuration.
+  return;
 };
 
 const timingSafeEqual = (a: string, b: string) => {
@@ -534,7 +502,7 @@ Deno.serve(async (req) => {
     return methodNotAllowed();
   }
 
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
     return internalError("Stripe webhook configuration missing");
   }
 

@@ -73,6 +73,24 @@ const TIER_LABELS = {
 const formatPlanSlug = (slug) => PLAN_LABELS[normalizePlanKey(slug)] ?? slug;
 const formatTier = (tier) => TIER_LABELS[normalizeKeyValue(tier)] ?? tier;
 const formatCycle = (cycle) => (normalizeBillingCycle(cycle) === "annual" ? "Annual" : "Monthly");
+const formatStatus = (status) => {
+  const s = (status || "").toLowerCase();
+  if (s === "payment_required" || s === "past_due" || s === "unpaid") return "Payment required";
+  if (s === "active") return "Active";
+  if (s === "trial" || s === "trialing") return "Trial";
+  if (s === "canceled") return "Canceled";
+  if (s === "incomplete" || s === "incomplete_expired") return "Payment required";
+  return status || "";
+};
+const statusColorClass = (status) => {
+  const s = (status || "").toLowerCase();
+  if (s === "payment_required" || s === "past_due" || s === "unpaid" || s === "incomplete" || s === "incomplete_expired")
+    return "text-red-400";
+  if (s === "active") return "text-emerald-400";
+  if (s === "trial" || s === "trialing") return "text-amber-300";
+  if (s === "canceled") return "text-slate-400";
+  return "text-slate-200";
+};
 
 const formatRenewalDate = (isoValue) => {
   if (!isoValue) return "N/A";
@@ -565,6 +583,8 @@ export default function Account() {
   const subscriptionTier = subscription?.tier ?? "free";
   const subscriptionTierLabel = formatTier(subscriptionTier);
   const subscriptionStatus = subscription?.status ?? "trial";
+  const subscriptionStatusLabel = formatStatus(subscriptionStatus);
+  const subscriptionStatusClass = statusColorClass(subscriptionStatus);
   const billingCycleLabel = formatCycle(subscription?.billingCycle ?? "monthly");
   const currentPeriodEnd = subscription?.currentPeriodEnd ?? null;
   const subscriptionCancelAtPeriodEnd = Boolean(subscription?.cancelAtPeriodEnd);
@@ -594,7 +614,7 @@ export default function Account() {
               </div>
               <div>
                 <Label className="text-xs uppercase text-slate-500">Status</Label>
-                <p className="font-semibold text-emerald-400 capitalize">{subscriptionStatus}</p>
+                <p className={`font-semibold ${subscriptionStatusClass}`}>{subscriptionStatusLabel}</p>
               </div>
               <div>
                 <Label className="text-xs uppercase text-slate-500">Billing cycle</Label>

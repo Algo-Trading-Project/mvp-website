@@ -1,5 +1,6 @@
-import type Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
-import type { User as SupabaseAuthUser } from "https://esm.sh/@supabase/supabase-js@2";
+// Avoid importing Stripe types to prevent Node polyfills in Edge runtime
+type Stripe = any;
+type SupabaseAuthUser = any;
 import { getServiceSupabaseClient } from "./supabase.ts";
 
 export const PLAN_TIER_MAP: Record<string, string> = {
@@ -96,7 +97,7 @@ const toIsoString = (value: number | string | null | undefined) => {
   return new Date(parsed).toISOString();
 };
 
-const selectNextSchedulePhase = (schedule: Stripe.SubscriptionSchedule | null | undefined) => {
+const selectNextSchedulePhase = (schedule: any | null | undefined) => {
   if (!schedule) return null;
   const phases = schedule.phases ?? [];
   if (!phases.length) return null;
@@ -110,7 +111,7 @@ const selectNextSchedulePhase = (schedule: Stripe.SubscriptionSchedule | null | 
   return phases[phases.length - 1];
 };
 
-const resolvePendingFromPhase = (phase: Stripe.SubscriptionSchedule.Phase | null | undefined) => {
+const resolvePendingFromPhase = (phase: any | null | undefined) => {
   if (!phase) {
     return { planSlug: null, billingCycle: null, effectiveDate: null };
   }
@@ -145,7 +146,7 @@ const resolvePendingFromPhase = (phase: Stripe.SubscriptionSchedule.Phase | null
   return { planSlug, billingCycle, effectiveDate };
 };
 
-const resolvePendingFromSubscription = (subscription: Stripe.Subscription | null) => {
+const resolvePendingFromSubscription = (subscription: any | null) => {
   if (!subscription) {
     return {
       planSlug: null,
@@ -162,7 +163,7 @@ const resolvePendingFromSubscription = (subscription: Stripe.Subscription | null
 
   const schedule =
     typeof subscription.schedule === "object" && subscription.schedule
-      ? (subscription.schedule as Stripe.SubscriptionSchedule)
+      ? (subscription.schedule as any)
       : null;
   const pendingFromSchedule = resolvePendingFromPhase(selectNextSchedulePhase(schedule));
 
@@ -201,7 +202,7 @@ export interface SubscriptionSnapshot {
 }
 
 export const extractSubscriptionSnapshot = (
-  subscription: Stripe.Subscription | null,
+  subscription: any | null,
 ): SubscriptionSnapshot | null => {
   if (!subscription) return null;
   const inferred = derivePlanInfoFromSubscription(subscription);
@@ -228,7 +229,7 @@ export const extractSubscriptionSnapshot = (
   };
 };
 
-export const derivePlanInfoFromSubscription = (subscription: Stripe.Subscription) => {
+export const derivePlanInfoFromSubscription = (subscription: any) => {
   let planSlug =
     normalizePlanSlug(subscription.metadata?.plan_slug) ??
     normalizePlanSlug(subscription.items?.data?.[0]?.price?.metadata?.plan_slug);
@@ -384,7 +385,7 @@ export const buildMetadataPatchFromSummary = (summary: Record<string, unknown> |
   };
 };
 
-const deriveLatestInvoiceStatus = (subscription?: Stripe.Subscription | null) => {
+const deriveLatestInvoiceStatus = (subscription?: any | null) => {
   if (!subscription) return null;
   const invoice = subscription.latest_invoice;
   if (!invoice) return null;
@@ -394,22 +395,28 @@ const deriveLatestInvoiceStatus = (subscription?: Stripe.Subscription | null) =>
 
 export const normalizeSubscriptionStatusValue = (
   status: string | null | undefined,
-  subscription?: Stripe.Subscription | null,
+  subscription?: any | null,
 ) => {
   if (!status) return null;
   const normalized = status.toLowerCase();
+  // Map Stripe statuses into our canonical set
+  if (normalized === "trialing") return "trial";
+  if (normalized === "past_due" || normalized === "unpaid") return "payment_required";
   if (normalized === "incomplete") {
     const invoiceStatus = deriveLatestInvoiceStatus(subscription);
     if (!invoiceStatus || invoiceStatus === "paid" || invoiceStatus === "void" || invoiceStatus === "uncollectible") {
       return "active";
     }
+    // Treat remaining incomplete as payment required to keep UX consistent
+    return "payment_required";
   }
+  if (normalized === "incomplete_expired") return "canceled";
   return normalized;
 };
 
 export interface UpdateUserFromSubscriptionOptions {
   userId: string;
-  subscription?: Stripe.Subscription | null;
+  subscription?: any | null;
   planSlug?: string | null;
   billingCycle?: string | null;
   statusOverride?: string | null;
@@ -417,6 +424,7 @@ export interface UpdateUserFromSubscriptionOptions {
   pendingBillingCycle?: string | null;
   pendingEffectiveDate?: string | null;
   pendingScheduleId?: string | null;
+  currentPeriodEndOverride?: string | number | null;
   supabaseUser?: SupabaseAuthUser | null;
   existingMetadata?: Record<string, unknown> | null;
 }
@@ -480,7 +488,10 @@ export const updateUserFromSubscription = async (options: UpdateUserFromSubscrip
       subscription ?? null,
     ) ?? "active";
 
-  const currentPeriodEnd = snapshot?.currentPeriodEnd ?? toIsoString(existingMeta.current_period_end ?? null);
+  const currentPeriodEnd =
+    options.currentPeriodEndOverride !== undefined
+      ? toIsoString(options.currentPeriodEndOverride)
+      : snapshot?.currentPeriodEnd ?? toIsoString(existingMeta.current_period_end ?? null);
   const planStartedAt = snapshot?.planStartedAt ?? toIsoString(existingMeta.plan_started_at ?? null);
   const cancelAtPeriodEnd =
     snapshot?.cancelAtPeriodEnd ??
@@ -649,7 +660,7 @@ export const persistStripeCustomerId = async (
 };
 
 export const ensureStripeCustomerId = async (
-  stripe: Stripe,
+  stripe: any,
   user: SupabaseAuthUser,
   metadata?: Record<string, unknown> | null,
   options: { persist?: boolean } = {},
@@ -689,7 +700,7 @@ export const ensureStripeCustomerId = async (
     return null;
   };
 
-  let existingCustomer: Stripe.Customer | null = await resolveByMetadata();
+  let existingCustomer: any | null = await resolveByMetadata();
 
   if (!existingCustomer) {
     const emailCandidates = [
@@ -760,7 +771,7 @@ export const ensureStripeCustomerId = async (
 };
 
 export const syncUserMetadataFromStripe = async (
-  stripe: Stripe,
+  stripe: any,
   userId: string,
   customerId?: string | null,
 ) => {
@@ -778,7 +789,7 @@ export const syncUserMetadataFromStripe = async (
       {};
 
     const stripeSubscriptionId = existingMeta.stripe_subscription_id as string | undefined;
-    let subscription: Stripe.Subscription | null = null;
+    let subscription: any | null = null;
 
     try {
       if (stripeSubscriptionId) {

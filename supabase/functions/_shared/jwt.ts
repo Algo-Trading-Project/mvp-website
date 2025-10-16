@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4?target=deno";
 import { SignJWT } from "https://esm.sh/jose@5.4.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
