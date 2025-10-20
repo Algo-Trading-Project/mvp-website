@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { User as UserIcon, KeyRound, Loader2, Copy } from "lucide-react";
-import { User, Users } from "@/api/entities";
+import { User } from "@/api/entities";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Switch } from "@/components/ui/switch";
@@ -264,74 +264,25 @@ export default function Account() {
         setWeeklySummary(prefs.weeklySummary);
         setProductUpdates(prefs.productUpdates);
 
-        let profile = null;
-        try {
-          // Bypass session cache to ensure freshest subscription flags after portal actions
-          const controller = new AbortController();
-          const rows = await Users.filter({ user_id: me.id }, "-updated_at", 1, { signal: controller.signal });
-          profile = rows?.[0] ?? null;
-        } catch (profileError) {
-          console.warn("Failed to load subscription profile", profileError);
-        }
-
-        const summarySource = profile
-          ? {
-              // Source exclusively from public.users when a profile row exists
-              plan_slug: planSlugForTier(profile.subscription_tier ?? "free"),
-              billing_cycle: profile.billing_cycle ?? null,
-              status: profile.subscription_status ?? "trial",
-              current_period_end: profile.current_period_end ? Date.parse(profile.current_period_end) : null,
-              cancel_at_period_end: Boolean(profile.subscription_cancel_at_period_end ?? false),
-              pending_plan_slug: profile.subscription_pending_plan_slug ?? null,
-              pending_billing_cycle: profile.subscription_pending_billing_cycle ?? null,
-              pending_effective_date: profile.subscription_pending_effective_date
-                ? Date.parse(profile.subscription_pending_effective_date)
-                : null,
-              pending_schedule_id: profile.subscription_pending_schedule_id ?? null,
-              schedule_id: null,
-              id: profile.stripe_subscription_id ?? null,
-            }
-          : {
-              plan_slug: meta.plan_slug ?? null,
-              billing_cycle: meta.billing_cycle ?? null,
-              status: meta.subscription_status ?? "trial",
-              current_period_end: meta.current_period_end ? Date.parse(meta.current_period_end) : null,
-              cancel_at_period_end: Boolean(meta.subscription_cancel_at_period_end ?? false),
-              pending_plan_slug: meta.subscription_pending_plan_slug ?? null,
-              pending_billing_cycle: meta.subscription_pending_billing_cycle ?? null,
-              pending_effective_date: meta.subscription_pending_effective_date
-                ? Date.parse(meta.subscription_pending_effective_date)
-                : null,
-              pending_schedule_id: meta.subscription_pending_schedule_id ?? null,
-              schedule_id: null,
-              id: meta.stripe_subscription_id ?? null,
-            };
+        const summarySource = {
+          plan_slug: meta.plan_slug ?? null,
+          billing_cycle: meta.billing_cycle ?? null,
+          status: meta.subscription_status ?? "trial",
+          current_period_end: meta.current_period_end ? Date.parse(meta.current_period_end) : null,
+          cancel_at_period_end: Boolean(meta.subscription_cancel_at_period_end ?? false),
+          pending_plan_slug: meta.subscription_pending_plan_slug ?? null,
+          pending_billing_cycle: meta.subscription_pending_billing_cycle ?? null,
+          pending_effective_date: meta.subscription_pending_effective_date
+            ? Date.parse(meta.subscription_pending_effective_date)
+            : null,
+          pending_schedule_id: meta.subscription_pending_schedule_id ?? null,
+          schedule_id: null,
+          id: meta.stripe_subscription_id ?? null,
+        };
 
         setSubscription(buildSubscriptionSnapshot(summarySource));
 
-        const metadataPatch = profile
-          ? {
-              ...meta,
-              // Mirror public.users into local user metadata so UI remains consistent
-              subscription_tier: profile.subscription_tier ?? meta.subscription_tier,
-              subscription_status: profile.subscription_status ?? meta.subscription_status,
-              billing_cycle: profile.billing_cycle ?? meta.billing_cycle,
-              current_period_end: profile.current_period_end ?? meta.current_period_end,
-              plan_started_at: profile.plan_started_at ?? meta.plan_started_at,
-              stripe_customer_id: profile.stripe_customer_id ?? meta.stripe_customer_id,
-              stripe_subscription_id: profile.stripe_subscription_id ?? meta.stripe_subscription_id,
-              subscription_cancel_at_period_end:
-                profile.subscription_cancel_at_period_end ?? meta.subscription_cancel_at_period_end ?? false,
-              subscription_pending_plan_slug:
-                profile.subscription_pending_plan_slug ?? meta.subscription_pending_plan_slug ?? null,
-              subscription_pending_billing_cycle:
-                profile.subscription_pending_billing_cycle ?? meta.subscription_pending_billing_cycle ?? null,
-              subscription_pending_effective_date:
-                profile.subscription_pending_effective_date ?? meta.subscription_pending_effective_date ?? null,
-              subscription_pending_schedule_id:
-                profile.subscription_pending_schedule_id ?? meta.subscription_pending_schedule_id ?? null,
-            }
-          : meta;
+        const metadataPatch = meta;
 
         handleMetadataPatch(metadataPatch);
       } catch (error) {

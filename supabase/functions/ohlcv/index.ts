@@ -34,11 +34,11 @@ Deno.serve(async (req) => {
   const { user, keyHash } = auth;
 
   const url = new URL(req.url);
-  const token = (url.searchParams.get('token') ?? url.searchParams.get('symbol') ?? '').trim().toUpperCase();
+  const tokenRaw = (url.searchParams.get('token') ?? url.searchParams.get('symbol') ?? '').trim().toUpperCase();
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
   const endDate = normalizeDate(url.searchParams.get('end_date') ?? '');
 
-  if (!token) {
+  if (!tokenRaw) {
     return badRequest('token query parameter is required');
   }
   if (!startDate || !endDate) {
@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
 
   try {
     const { client: supabase } = await createAuthedClient(user.user_id);
+    const token = tokenRaw.includes('_') ? tokenRaw : `${tokenRaw}_USDT_BINANCE`;
     const { data, error } = await supabase
       .from('ohlcv_1d')
       .select('date, symbol_id, open, high, low, close, volume')
