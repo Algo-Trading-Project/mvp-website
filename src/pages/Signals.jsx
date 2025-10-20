@@ -1,7 +1,7 @@
 
 import React from "react";
 import { User } from "@/api/entities";
-import { predictions } from "@/api/entities";
+import { listPredictionDates, predictionsRange } from "@/api/functions";
 import { Button } from "@/components/ui/button";
 import { Calendar, Download, Search, Filter, Lock, ChevronDown, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -23,11 +23,12 @@ function toCSV(rows) {
 }
 
 async function fetchPredictionsForDate(date) {
-  const rows = await predictions.filter({ date }, "symbol_id", 10000);
-  return rows.map(r => ({
+  const res = await predictionsRange({ start: date, end: date, limit: 200000 });
+  const rows = Array.isArray(res?.rows) ? res.rows : [];
+  return rows.map((r) => ({
     date: r.date,
-    symbol: r.symbol_id.split("_")[0],
-    y_pred: r.y_pred
+    symbol: String(r.symbol_id || "").split("_")[0],
+    y_pred: r.y_pred,
   }));
 }
 
@@ -94,91 +95,47 @@ export default function SignalsHub() {
   }, []);
 
   React.useEffect(() => {
-    const loadLatest = async () => {
-      const last = await predictions.filter({}, "-date", 1);
-      if (last?.length) {
-        setLatestDate(last[0].date);
-        const end = last[0].date;
-        const endDate = new Date(end);
+    const loadInitial = async () => {
+      const { dates = [] } = (await listPredictionDates({ limit: 8 })) || {};
+      if (dates.length) {
+        setLatestDate(dates[0]);
+        const end = dates[0];
+        const endDate = new Date(`${end}T00:00:00Z`);
         const startDate = new Date(endDate);
-        startDate.setDate(endDate.getDate() - 6);
-        setRange({
-          start: startDate.toISOString().slice(0,10),
-          end
-        });
+        startDate.setUTCDate(endDate.getUTCDate() - 6);
+        setRange({ start: startDate.toISOString().slice(0, 10), end });
+        // Set recent (exclude latest)
+        setVisibleDates(dates.slice(1, 8));
+        setHasMoreDates(false);
+        setRecentLoading(false);
+      } else {
+        setRecentLoading(false);
       }
     };
-    loadLatest();
+    setRecentLoading(true);
+    loadInitial();
   }, []);
 
-  // Load symbol list, lexicographic
+  // Load token list from latest day via edge function
   React.useEffect(() => {
+    if (!latestDate) return;
     const loadTokens = async () => {
-      const rows = await predictions.filter({}, "symbol_id", 10000);
-      const unique = Array.from(new Set(rows.map(r => r.symbol_id.split("_")[0])));
+      const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000 });
+      const rows = Array.isArray(res?.rows) ? res.rows : [];
+      const unique = Array.from(
+        new Set(rows.map((r) => String(r.symbol_id || "").split("_")[0]).filter(Boolean))
+      );
       unique.sort((a, b) => a.localeCompare(b));
       setAllTokens(unique);
     };
     loadTokens();
-  }, []);
+  }, [latestDate]);
 
-  // Load initial recent dates (first 14 days), excluding the most recent day
-  React.useEffect(() => {
-    const loadInitialDates = async () => {
-      setRecentLoading(true);
-      const rows = await predictions.filter({}, "-date", 10000);
-      const seen = new Set();
-      const allDates = [];
-      
-      for (const r of rows) {
-        if (!seen.has(r.date)) {
-          seen.add(r.date);
-          allDates.push(r.date);
-        }
-      }
-      
-      // Exclude the latest by skipping index 0
-      const initial = allDates.slice(1, 15);
-      setVisibleDates(initial);
-      
-      if (initial.length > 0) {
-        setLastLoadedDate(initial[initial.length - 1]);
-      }
-      
-      // Are there more dates beyond these 14 (excluding the latest)?
-      setHasMoreDates(allDates.length > 15);
-      setRecentLoading(false);
-    };
-    loadInitialDates();
-  }, []);
+  // Recent dates are derived in loadInitial above (exclude latest, top 7)
 
   const loadMoreDates = async () => {
-    if (!hasMoreDates || loadingMore) return;
-    setLoadingMore(true);
-    
-    const rows = await predictions.filter({}, "-date", 10000);
-    const seen = new Set();
-    const allDates = [];
-    for (const r of rows) {
-      if (!seen.has(r.date)) {
-        seen.add(r.date);
-        allDates.push(r.date);
-      }
-    }
-
-    // Filter to dates older than the last loaded date (latest already excluded in initial batch)
-    const olderDates = allDates.filter(d => d < lastLoadedDate);
-    const nextBatch = olderDates.slice(0, 14);
-
-    if (nextBatch.length > 0) {
-      setVisibleDates(prev => [...prev, ...nextBatch]);
-      setLastLoadedDate(nextBatch[nextBatch.length - 1]);
-      setHasMoreDates(olderDates.length > 14);
-    } else {
-      setHasMoreDates(false);
-    }
-
-    setLoadingMore(false);
+    // With simplified recent list (top 7), no pagination for now
+    return;
   };
 
   const plan = me?.subscription_level || "free";
@@ -247,20 +204,23 @@ export default function SignalsHub() {
     }
 
     setRangeLoading(true);
-    const allRows = [];
-    
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const ds = d.toISOString().slice(0,10);
-      const dayRows = await fetchPredictionsForDate(ds);
-      if (dayRows.length) {
-        allRows.push(...dayRows);
-      }
+    const tokenFilter = isFreeUser ? FREE_TIER_TOKENS : selectedTokens;
+    const payload = { start: range.start, end: range.end, limit: 200000 };
+    if (tokenFilter && tokenFilter.length) {
+      // Use short symbols (BTC) — server expands to *_USD
+      Object.assign(payload, { tokens: tokenFilter });
     }
+    const res = await predictionsRange(payload);
+    const allRows = (res?.rows || []).map((r) => ({
+      date: r.date,
+      symbol: String(r.symbol_id || "").split("_")[0],
+      y_pred: r.y_pred,
+    }));
 
     // For free users, always filter to free tier tokens
     const tokensToFilter = isFreeUser ? FREE_TIER_TOKENS : selectedTokens;
-    if (tokensToFilter.length > 0) {
-      const setTokens = new Set(tokensToFilter.map(s => s.toUpperCase()));
+    if (tokensToFilter && tokensToFilter.length > 0) {
+      const setTokens = new Set(tokensToFilter.map((s) => s.toUpperCase()));
       const filtered = allRows.filter(r => setTokens.has(r.symbol.toUpperCase()));
       const csv = toCSV(filtered);
       const suffix = isFreeUser ? "_free_tier" : "_filtered";

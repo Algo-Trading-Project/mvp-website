@@ -57,8 +57,11 @@ Deno.serve(async (req) => {
       .order('date', { ascending: true })
       .limit(limit);
 
-    if (tokens) {
-      query = query.in('symbol_id', tokens);
+    if (tokens && tokens.length) {
+      const expanded = tokens.some((s) => s.includes('_'))
+        ? tokens
+        : tokens.map((t) => `${t}_USDT_BINANCE`);
+      query = query.in('symbol_id', expanded);
     }
 
     const { data, error } = await query;

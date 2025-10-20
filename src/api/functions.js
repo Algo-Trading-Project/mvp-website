@@ -85,3 +85,13 @@ export const predictionsCoverage = wrapCall(
   "Failed to load predictions coverage",
   base44.functions.predictionsCoverage
 );
+
+export const listPredictionDates = wrapCall(
+  "Failed to list prediction dates",
+  base44.functions.listPredictionDates
+);
+
+export const predictionsRange = wrapCall(
+  "Failed to load predictions range",
+  base44.functions.predictionsRange
+);

@@ -332,6 +332,8 @@ const functionMap = {
   bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
   advByDecilePlot: "adv-by-decile-plot",
   predictionsCoverage: "predictions-coverage",
+  listPredictionDates: "list-prediction-dates",
+  predictionsRange: "predictions-range",
   backtestEquityCurvePlot: "backtest-equity-curve-plot",
   backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",
   backtestBootstrapRobustnessPlot: "backtest-bootstrap-robustness-plot",
