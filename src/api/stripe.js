@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "./base44Client.js";
+import { getSupabaseClient } from "./supabaseClient.js";
 import { ApiError } from "./errors.js";
 import { API_DEBUG } from "./config.js";
 

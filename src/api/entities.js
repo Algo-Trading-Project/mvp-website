@@ -1,4 +1,4 @@
-import { base44 } from "./base44Client.js";
+import { supabaseApi } from "./supabaseClient.js";
 import { ApiError } from "./errors.js";
 
 const wrapCall = async (label, fn) => {
@@ -17,13 +17,6 @@ const wrapCall = async (label, fn) => {
   }
 };
 
-const wrapEntity = (label, entity) => ({
-  list: (options) => wrapCall(`Failed to list ${label}`, () => entity.list(options)),
-  filter: (criteria, sortKey, limit, options) =>
-    wrapCall(`Failed to filter ${label}`, () => entity.filter(criteria, sortKey, limit, options)),
-  create: (payload, options) => wrapCall(`Failed to create ${label}`, () => entity.create(payload, options)),
-});
-
 const wrapAuth = (auth) => ({
   me: (options) => wrapCall("Failed to fetch current user", () => auth.me(options ?? {})),
   signUp: (payload, options) =>
@@ -39,15 +32,4 @@ const wrapAuth = (auth) => ({
   logout: (options) => wrapCall("Failed to logout", () => auth.logout(options ?? {})),
 });
 
-export const predictions = wrapEntity("predictions", base44.entities.predictions);
-export const ohlcv_1d = wrapEntity("ohlcv_1d", base44.entities.ohlcv_1d);
-export const cross_sectional_metrics_1d = wrapEntity(
-  "cross_sectional_metrics_1d",
-  base44.entities.cross_sectional_metrics_1d
-);
-export const monthly_performance_metrics = wrapEntity(
-  "monthly_performance_metrics",
-  base44.entities.monthly_performance_metrics
-);
-export const Users = wrapEntity("users", base44.entities.users);
-export const User = wrapAuth(base44.auth);
+export const User = wrapAuth(supabaseApi.auth);

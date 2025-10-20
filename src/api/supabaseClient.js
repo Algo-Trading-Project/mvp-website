@@ -20,9 +20,7 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   : null;
 
 const FUNCTION_CACHE_PREFIX = "sb-fn-cache:";
-const TABLE_CACHE_PREFIX = "sb-table-cache:";
 const functionCacheMemory = new Map();
-const tableCacheMemory = new Map();
 
 const computeFunctionCacheKey = (name, payload) => {
   return `${name}:${stableSerialize(payload)}`;
@@ -100,28 +98,6 @@ const setCacheEntry = (memoryMap, storagePrefix, key, value) => {
   }
 };
 
-const clearTableCache = (table) => {
-  const pattern = `${table}:`;
-  for (const key of Array.from(tableCacheMemory.keys())) {
-    if (key.startsWith(pattern)) {
-      tableCacheMemory.delete(key);
-    }
-  }
-  const storage = getSessionStorage();
-  if (!storage) return;
-  const removal = [];
-  for (let i = 0; i < storage.length; i++) {
-    const storageKey = storage.key(i);
-    if (storageKey && storageKey.startsWith(TABLE_CACHE_PREFIX)) {
-      const raw = storageKey.slice(TABLE_CACHE_PREFIX.length);
-      if (raw.startsWith(pattern)) {
-        removal.push(storageKey);
-      }
-    }
-  }
-  removal.forEach((key) => storage.removeItem(key));
-};
-
 const ensureClient = () => {
   if (!supabase) {
     throw new ApiError("Supabase client is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
@@ -157,72 +133,6 @@ const invokeFunction = (name) => async (payload = {}, { signal } = {}) => {
   }
   return data;
 };
-
-const createTableClient = (table) => ({
-  async list({ select = "*", signal } = {}) {
-    const client = ensureClient();
-    const cacheKey = !signal ? `${table}:list:${select}` : null;
-    if (cacheKey) {
-      const cached = getCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey);
-      if (cached !== null) return cached;
-    }
-    let query = client.from(table).select(select);
-    if (signal && query.abortSignal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) {
-      throw new ApiError(`supabase.from(${table}).select failed`, { status: error.code, data: error });
-    }
-    const result = data ?? [];
-    if (cacheKey) {
-      setCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey, result);
-    }
-    return result;
-  },
-  async filter(criteria = {}, sortKey, limit, { signal } = {}) {
-    const client = ensureClient();
-    const cacheKey = !signal
-      ? `${table}:filter:${stableSerialize({ criteria, sortKey, limit })}`
-      : null;
-    if (cacheKey) {
-      const cached = getCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey);
-      if (cached !== null) return cached;
-    }
-    let query = client.from(table).select("*");
-    Object.entries(criteria || {}).forEach(([column, value]) => {
-      if (value === undefined || value === null) return;
-      query = query.eq(column, value);
-    });
-    if (sortKey) {
-      const ascending = !String(sortKey).startsWith("-");
-      const column = ascending ? sortKey : String(sortKey).slice(1);
-      query = query.order(column, { ascending });
-    }
-    if (limit) {
-      query = query.limit(limit);
-    }
-    if (signal && query.abortSignal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) {
-      throw new ApiError(`supabase.from(${table}).filter failed`, { status: error.code, data: error });
-    }
-    const result = data ?? [];
-    if (cacheKey) {
-      setCacheEntry(tableCacheMemory, TABLE_CACHE_PREFIX, cacheKey, result);
-    }
-    return result;
-  },
-  async create(payload, { signal } = {}) {
-    const client = ensureClient();
-    let query = client.from(table).insert(payload).select();
-    if (signal && query.abortSignal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) {
-      throw new ApiError(`supabase.from(${table}).insert failed`, { status: error.code, data: error });
-    }
-    clearTableCache(table);
-    return Array.isArray(data) ? data : data ? [data] : [];
-  },
-});
 
 const authClient = {
   async me() {
@@ -344,21 +254,8 @@ const functionsClient = Object.fromEntries(
   Object.entries(functionMap).map(([logical, supabaseName]) => [logical, invokeFunction(supabaseName)])
 );
 
-const entityTableMap = {
-  predictions: "predictions",
-  ohlcv_1d: "ohlcv_1d",
-  cross_sectional_metrics_1d: "cross_sectional_metrics_1d",
-  monthly_performance_metrics: "monthly_performance_metrics",
-  users: "users",
-};
-
-const entitiesClient = Object.fromEntries(
-  Object.entries(entityTableMap).map(([logical, table]) => [logical, createTableClient(table)])
-);
-
-export const base44 = {
+export const supabaseApi = {
   functions: functionsClient,
-  entities: entitiesClient,
   auth: authClient,
   integrations: {},
 };

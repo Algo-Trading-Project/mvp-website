@@ -1,4 +1,4 @@
-import { base44 } from "./base44Client.js";
+import { supabaseApi } from "./supabaseClient.js";
 import { ApiError } from "./errors.js";
 
 const wrapCall = (label, fn) => async (payload = {}, options = {}) => {
@@ -19,79 +19,79 @@ const wrapCall = (label, fn) => async (payload = {}, options = {}) => {
 
 export const fetchMetrics = wrapCall(
   "Failed to fetch metrics",
-  base44.functions.fetchMetrics
+  supabaseApi.functions.fetchMetrics
 );
 export const getLatestPredictions = wrapCall(
   "Failed to load latest predictions",
-  base44.functions.getLatestPredictions
+  supabaseApi.functions.getLatestPredictions
 );
 export const rollingIcPlot = wrapCall(
   "Failed to load rolling IC plot",
-  base44.functions.rollingIcPlot
+  supabaseApi.functions.rollingIcPlot
 );
 export const rollingSpreadPlot = wrapCall(
   "Failed to load rolling spread plot",
-  base44.functions.rollingSpreadPlot
+  supabaseApi.functions.rollingSpreadPlot
 );
 export const quintileReturnsPlot = wrapCall(
   "Failed to load quintile returns plot",
-  base44.functions.quintileReturnsPlot
+  supabaseApi.functions.quintileReturnsPlot
 );
 export const rollingHitRatePlot = wrapCall(
   "Failed to load rolling hit rate plot",
-  base44.functions.rollingHitRatePlot
+  supabaseApi.functions.rollingHitRatePlot
 );
 export const backtestEquityCurvePlot = wrapCall(
   "Failed to load backtest equity curve",
-  base44.functions.backtestEquityCurvePlot
+  supabaseApi.functions.backtestEquityCurvePlot
 );
 export const backtestRollingAlphaPlot = wrapCall(
   "Failed to load backtest rolling alpha/beta",
-  base44.functions.backtestRollingAlphaPlot
+  supabaseApi.functions.backtestRollingAlphaPlot
 );
 export const backtestBootstrapRobustnessPlot = wrapCall(
   "Failed to load bootstrap robustness plot",
-  base44.functions.backtestBootstrapRobustnessPlot
+  supabaseApi.functions.backtestBootstrapRobustnessPlot
 );
 export const icBySymbolPlot = wrapCall(
   "Failed to load IC by symbol plot",
-  base44.functions.icBySymbolPlot
+  supabaseApi.functions.icBySymbolPlot
 );
 export const icDistributionPlot = wrapCall(
   "Failed to load IC distribution plot",
-  base44.functions.icDistributionPlot
+  supabaseApi.functions.icDistributionPlot
 );
 export const bootstrapIcDistributionPlot = wrapCall(
   "Failed to load bootstrap IC distribution plot",
-  base44.functions.bootstrapIcDistributionPlot
+  supabaseApi.functions.bootstrapIcDistributionPlot
 );
 export const spreadDistributionPlot = wrapCall(
   "Failed to load spread distribution plot",
-  base44.functions.spreadDistributionPlot
+  supabaseApi.functions.spreadDistributionPlot
 );
 export const bootstrapSpreadDistributionPlot = wrapCall(
   "Failed to load bootstrap spread distribution plot",
-  base44.functions.bootstrapSpreadDistributionPlot
+  supabaseApi.functions.bootstrapSpreadDistributionPlot
 );
 export const checkEmailAvailability = wrapCall(
   "Failed to check email availability",
-  base44.functions.checkEmailAvailability
+  supabaseApi.functions.checkEmailAvailability
 );
 export const advByDecilePlot = wrapCall(
   "Failed to load ADV by decile plot",
-  base44.functions.advByDecilePlot
+  supabaseApi.functions.advByDecilePlot
 );
 export const predictionsCoverage = wrapCall(
   "Failed to load predictions coverage",
-  base44.functions.predictionsCoverage
+  supabaseApi.functions.predictionsCoverage
 );
 
 export const listPredictionDates = wrapCall(
   "Failed to list prediction dates",
-  base44.functions.listPredictionDates
+  supabaseApi.functions.listPredictionDates
 );
 
 export const predictionsRange = wrapCall(
   "Failed to load predictions range",
-  base44.functions.predictionsRange
+  supabaseApi.functions.predictionsRange
 );

@@ -1,7 +1,7 @@
 
 import React from "react";
 import { icBySymbolPlot } from "@/api/functions";
-import { getCachedFunctionResult } from "@/api/base44Client";
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";

@@ -2,7 +2,6 @@ import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
 import { spreadDistributionPlot } from "@/api/functions";
-import { cross_sectional_metrics_1d } from "@/api/entities";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 
 const InfoTooltip = ({ title, description }) => {
@@ -32,14 +31,6 @@ export default function SpreadDistribution({ dateRange }) {
     if (!dateRange?.start || !dateRange?.end) { setHtml(null); setLoading(false); return; }
     const controller = new AbortController();
     let cancelled = false;
-    const toHtml = (values, bins = 20) => {
-      const mean = values.reduce((a,b)=>a+b,0)/values.length;
-      const variance = values.reduce((s,x)=> s + (x-mean)*(x-mean), 0) / values.length;
-      const std = Math.sqrt(variance);
-      const sharpe_ann = std ? (mean / std) * Math.sqrt(365) : 0;
-      const html = `<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><script src=\"https://cdn.plot.ly/plotly-2.27.0.min.js\"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head><body><div id=\"chart\"></div><script>const x=${JSON.stringify(values)};const data=[{type:'histogram',x,nbinsx:${20},marker:{color:'#f59e0b',line:{color:'#000',width:1}},hovertemplate:'Spread: %{x:.4f}<br>Count: %{y}<extra></extra>'}];const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t:10,b:30},xaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155'},yaxis:{tickfont:{color:'#94a3b8'},gridcolor:'#334155'},shapes:[{type:'line',x0:${mean},x1:${mean},y0:0,y1:1,yref:'paper',line:{color:'#3b82f6',width:2,dash:'dash'}}]};const config={responsive:true,displayModeBar:false,scrollZoom:false};Plotly.newPlot('chart',data,layout,config);</script></body></html>`;
-      return { html, summary: { mean, std, sharpe_ann } };
-    };
     const load = async () => {
       setLoading(true); setError(null);
       try {
@@ -48,31 +39,10 @@ export default function SpreadDistribution({ dateRange }) {
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, std: 0, sharpe_ann: 0 });
       } catch (e) {
-        // Fallback: compute in-browser from table if edge function is unavailable
-        try {
-          const rows = await cross_sectional_metrics_1d.filter({}, 'date', 10000);
-          if (cancelled || controller.signal.aborted) return;
-          const start = dateRange.start; const end = dateRange.end;
-          const values = (rows||[])
-            .filter(r => r.date >= start && r.date <= end)
-            .map(r => Number(r.cs_top_bottom_decile_spread))
-            .filter(v => Number.isFinite(v));
-          if (values.length) {
-            const local = toHtml(values, 20);
-            setHtml(local.html);
-            setSummary(local.summary);
-            setError(null);
-          } else {
-            setError('No data available for the selected range.');
-            setHtml(null);
-            setSummary({ mean: 0, std: 0, sharpe_ann: 0 });
-          }
-        } catch (e2) {
-          if (cancelled || controller.signal.aborted) return;
-          setError(e?.message || 'Unable to load spread distribution.');
-          setHtml(null);
-          setSummary({ mean: 0, std: 0, sharpe_ann: 0 });
-        }
+        if (cancelled || controller.signal.aborted) return;
+        setError(e?.message || 'Unable to load spread distribution.');
+        setHtml(null);
+        setSummary({ mean: 0, std: 0, sharpe_ann: 0 });
       } finally {
         if (!cancelled) setLoading(false);
       }

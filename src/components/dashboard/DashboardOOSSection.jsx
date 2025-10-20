@@ -14,13 +14,12 @@ import {
 import PerformancePublicSkeleton from "@/components/skeletons/PerformancePublicSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cross_sectional_metrics_1d } from "@/api/entities";
-import { monthly_performance_metrics } from "@/api/entities";
+import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
-import { rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
-import { getCachedFunctionResult } from "@/api/base44Client";
+// functions imported above
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import MedianADVByDecile from "@/components/dashboard/MedianADVByDecile";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
 import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
@@ -121,9 +120,8 @@ export default function DashboardOOSSection() {
 
   React.useEffect(() => {
     const load = async () => {
-      const [rawRows, mRows, coverageInfo] = await Promise.all([
-        cross_sectional_metrics_1d.filter({}, "date", 10000),
-        monthly_performance_metrics.filter({}, "year", 10000),
+      const [metrics, coverageInfo] = await Promise.all([
+        fetchMetrics({}).catch((e) => { console.error("Failed to fetch metrics", e); return { cross: [], monthly: [] }; }),
         predictionsCoverage({ monthsBack: 240 }).catch((error) => {
           console.error("Failed to load predictions coverage", error);
           return null;
@@ -142,7 +140,7 @@ export default function DashboardOOSSection() {
         return Number.isFinite(n) ? n : null;
       };
 
-      const rows = rawRows
+      const rows = (metrics?.cross || [])
         .map((row) => ({
           ...row,
           cross_sectional_ic_1d: toNumber(row.cross_sectional_ic_1d),
@@ -186,7 +184,7 @@ export default function DashboardOOSSection() {
         }
       }
 
-      setMonthlyRows(mRows);
+      setMonthlyRows(metrics?.monthly || []);
 
       setLoading(false);
     };
