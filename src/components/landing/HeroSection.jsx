@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Cpu, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { monthly_performance_metrics } from "@/api/entities";
+import { fetchMetrics } from "@/api/functions";
 
 export default function HeroSection() {
   const [icir1d, setIcir1d] = React.useState(null);
@@ -11,7 +11,8 @@ export default function HeroSection() {
 
   React.useEffect(() => {
     const loadMonthly = async () => {
-      const rows = await monthly_performance_metrics.filter({}, "year", 10000); // Fetching all records up to 10000 years
+      const data = await fetchMetrics({});
+      const rows = Array.isArray(data?.monthly) ? data.monthly : [];
       const toNumber = (value) => {
         if (typeof value === "number") return Number.isNaN(value) ? null : value;
         if (typeof value === "string" && value.trim() !== "") {
@@ -20,9 +21,7 @@ export default function HeroSection() {
         }
         return null;
       };
-
       const vals1d = rows.map(r => toNumber(r.information_coefficient_1d)).filter(v => v !== null);
-
       const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
       const std = (arr) => {
         if (arr.length < 2) return 0;
@@ -30,13 +29,11 @@ export default function HeroSection() {
         const variance = arr.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (arr.length - 1);
         return Math.sqrt(variance);
       };
-
       const icStd = std(vals1d);
       const icMean = mean(vals1d);
       const icir = icStd > 0 ? (icMean / icStd) * Math.sqrt(12) : null;
       const positives = vals1d.filter(v => v > 0).length;
       const share = vals1d.length ? positives / vals1d.length : null;
-
       setIcir1d(icir);
       setPositiveShare(share);
     };
