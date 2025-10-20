@@ -80,4 +80,7 @@ export const StripeApi = {
   async syncSubscription() {
     return invokeStripeFunction("manage-subscription", { action: "refresh" });
   },
+  async resetSubscription() {
+    return invokeStripeFunction("manage-subscription", { action: "reset" });
+  },
 };

@@ -2,7 +2,13 @@ import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { getUserFromRequest } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/middleware.ts";
 import { internalError, json, methodNotAllowed } from "../_shared/http.ts";
-import { ensureStripeCustomerId } from "../_shared/subscription.ts";
+import {
+  ensureStripeCustomerId,
+  getPriceIdForPlan,
+  normalizeBillingCycle,
+  normalizePlanSlug,
+  planSlugForTier,
+} from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const DEFAULT_SITE_URL = Deno.env.get("SITE_URL") ?? "https://quantpulse.ai";
@@ -85,17 +91,51 @@ Deno.serve(async (req) => {
 
     const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
 
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      configuration: STRIPE_PORTAL_CONFIGURATION_ID ?? undefined,
-      return_url: normalizeUrl(returnUrl, `${normalizedBase}/account?from=stripe_portal`),
-    });
-
-    if (!session.url) {
-      throw new Error("Billing portal session did not return a URL");
+    // Try to create a Billing Portal session; if it fails (e.g., canceled subscription under Test Clock),
+    // fall back to a Checkout Session to let the user re-subscribe.
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        configuration: STRIPE_PORTAL_CONFIGURATION_ID ?? undefined,
+        return_url: normalizeUrl(returnUrl, `${normalizedBase}/account?from=stripe_portal`),
+      });
+      if (!session.url) throw new Error("Billing portal session did not return a URL");
+      return json({ url: session.url });
+    } catch (portalError) {
+      // Fallback: create a new Checkout session using the user's last known plan/cycle (or sensible defaults)
+      const rawPlan = (metadata.plan_slug as string | undefined) ?? planSlugForTier((metadata.subscription_tier as string | undefined) ?? "free");
+      const planSlug = normalizePlanSlug(rawPlan) ?? "signals_lite";
+      const billingCycle = normalizeBillingCycle((metadata.billing_cycle as string | undefined) ?? "monthly") ?? "monthly";
+      const priceId = getPriceIdForPlan(planSlug, billingCycle);
+      if (!priceId) {
+        // As a last resort, send the user to pricing
+        return json({ url: `${normalizedBase}/pricing?from=stripe_portal` });
+      }
+      const checkout = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer: customerId,
+        success_url: `${normalizedBase}/account?from=stripe_checkout_success`,
+        cancel_url: `${normalizedBase}/pricing?from=stripe_checkout_cancel`,
+        billing_address_collection: "auto",
+        allow_promotion_codes: true,
+        payment_method_types: ["card"],
+        subscription_data: {
+          metadata: {
+            plan_slug: planSlug,
+            billing_cycle: billingCycle,
+            user_id: user.id,
+          },
+        },
+        metadata: {
+          plan_slug: planSlug,
+          billing_cycle: billingCycle,
+          user_id: user.id,
+        },
+        line_items: [{ price: priceId, quantity: 1 }],
+      });
+      if (!checkout.url) throw portalError;
+      return json({ url: checkout.url });
     }
-
-    return json({ url: session.url });
   } catch (error) {
     return internalError(error);
   }

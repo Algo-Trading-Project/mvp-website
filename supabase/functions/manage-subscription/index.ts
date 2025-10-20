@@ -7,6 +7,7 @@ import {
   extractSubscriptionSnapshot,
   normalizePlanSlug,
   normalizeBillingCycle,
+  updateUserFromSubscription,
 } from "../_shared/subscription.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -22,7 +23,7 @@ const stripe = STRIPE_SECRET_KEY
     })
   : null;
 
-type Action = "refresh";
+type Action = "refresh" | "reset";
 
 type ManageSubscriptionPayload = {
   action?: Action;
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
 
   const action = payload.action ?? "refresh";
 
-  if (action !== "refresh") {
+  if (action !== "refresh" && action !== "reset") {
     return badRequest("Unsupported action.");
   }
 
@@ -96,6 +97,43 @@ Deno.serve(async (req) => {
       {};
 
     const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
+
+    if (action === "reset") {
+      // Cancel any active/pending subscriptions and schedules, then reset auth/users metadata to Free/Monthly
+      try {
+        const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+        for (const sub of subs.data) {
+          try { await stripe.subscriptions.cancelPendingUpdate(sub.id); } catch (_) {}
+          // @ts-ignore schedule can be string|object|null
+          const scheduleId: string | null = typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id ?? null;
+          if (scheduleId) { try { await stripe.subscriptionSchedules.cancel(scheduleId); } catch (_) {} }
+          if (sub.status !== "canceled") {
+            try { await stripe.subscriptions.cancel(sub.id); } catch (e) { console.warn("Cancel subscription failed", sub.id, e); }
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to enumerate subscriptions during reset", e);
+      }
+
+      await updateUserFromSubscription({
+        userId: user.id,
+        subscription: null,
+        planSlug: "free",
+        billingCycle: "monthly",
+        statusOverride: "active",
+        supabaseUser: user,
+        // Use an empty metadata source so old values (e.g., stripe_subscription_id, status, period end) don't stick
+        existingMetadata: {},
+        pendingPlanSlug: null,
+        pendingBillingCycle: null,
+        pendingEffectiveDate: null,
+        pendingScheduleId: null,
+        // Set far-future default so UI shows N/A for Next renewal
+        currentPeriodEndOverride: "9999-12-31T00:00:00Z",
+      });
+
+      return json({ message: "Subscription reset to Free/Monthly; Stripe subscriptions canceled." });
+    }
 
     const existingSubscriptionId =
       typeof metadata.stripe_subscription_id === "string" ? metadata.stripe_subscription_id : null;

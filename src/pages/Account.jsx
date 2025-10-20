@@ -384,6 +384,32 @@ export default function Account() {
     }
   }, []);
 
+  const [resetting, setResetting] = useState(false);
+  const handleResetSubscription = useCallback(async () => {
+    setResetting(true);
+    try {
+      await StripeApi.resetSubscription();
+      await loadAccount({ silent: true });
+      toast.success("Subscription reset to Free/Monthly");
+    } catch (error) {
+      const description = error?.message || error?.cause?.message || "Please try again.";
+      toast.error("Unable to reset subscription", { description });
+    } finally {
+      setResetting(false);
+    }
+  }, [loadAccount]);
+
+  const handlePrimaryBillingCta = useCallback(async () => {
+    // If canceled, send to Pricing to choose a new plan
+    const normalized = (subscription?.status || "").toLowerCase();
+    if (normalized === "canceled") {
+      const path = createPageUrl ? createPageUrl("Pricing") : "/pricing";
+      if (typeof window !== "undefined") window.location.assign(path);
+      return;
+    }
+    await handleOpenBillingPortal();
+  }, [subscription?.status, handleOpenBillingPortal]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -585,6 +611,10 @@ export default function Account() {
   const subscriptionStatus = subscription?.status ?? "trial";
   const subscriptionStatusLabel = formatStatus(subscriptionStatus);
   const subscriptionStatusClass = statusColorClass(subscriptionStatus);
+  const normalizedStatus = (subscriptionStatus || "").toLowerCase();
+  const isCanceled = normalizedStatus === "canceled";
+  const isPaymentRequired = normalizedStatus === "payment_required";
+  const primaryCtaLabel = isCanceled ? "Re-subscribe" : isPaymentRequired ? "Update payment method" : "Manage billing";
   const billingCycleLabel = formatCycle(subscription?.billingCycle ?? "monthly");
   const currentPeriodEnd = subscription?.currentPeriodEnd ?? null;
   const subscriptionCancelAtPeriodEnd = Boolean(subscription?.cancelAtPeriodEnd);
@@ -652,19 +682,35 @@ export default function Account() {
 
             <div className="flex flex-wrap gap-3">
               <Button
-                onClick={handleOpenBillingPortal}
-                disabled={billingPortalLoading}
+                onClick={handlePrimaryBillingCta}
+                disabled={!isCanceled && billingPortalLoading}
                 className="bg-indigo-600 hover:bg-indigo-500 rounded-md"
               >
-                {billingPortalLoading ? (
+                {!isCanceled && billingPortalLoading ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Opening portal…
                   </span>
                 ) : (
-                  "Manage billing"
+                  primaryCtaLabel
                 )}
               </Button>
+              {typeof window !== "undefined" && (window.location.hostname.includes("localhost") || window.location.hostname.includes("127.0.0.1")) ? (
+                <Button
+                  onClick={handleResetSubscription}
+                  disabled={resetting}
+                  className="bg-red-600 hover:bg-red-500 rounded-md"
+                >
+                  {resetting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Resetting…
+                    </span>
+                  ) : (
+                    "Reset subscription"
+                  )}
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>

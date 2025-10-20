@@ -1,6 +1,7 @@
 import Stripe from "https://esm.sh/stripe@12.17.0?target=deno";
 import { corsHeaders } from "../_shared/middleware.ts";
 import { badRequest, internalError, json, methodNotAllowed } from "../_shared/http.ts";
+import { getServiceSupabaseClient } from "../_shared/supabase.ts";
 import {
   derivePlanInfoFromSubscription,
   normalizeBillingCycle,
@@ -197,18 +198,22 @@ const handleSubscriptionUpdate = async (
   // Also compute pending change from schedule (expanded or via fetch fallback)
   const pending = await computePendingFromSchedule(subscription);
   const currentEnd = typeof subscription.current_period_end === 'number' ? subscription.current_period_end : null;
+  const isCanceled = (subscription.status ?? '').toLowerCase() === 'canceled';
+  // Ensure cancel_at_period_end is forced to false once fully canceled so UI/state clear correctly
+  const subForUpdate = isCanceled ? { ...subscription, cancel_at_period_end: false } : subscription;
   await updateUserFromSubscription({
     userId,
-    subscription,
+    subscription: subForUpdate,
     planSlug: derived.planSlug ?? undefined,
     billingCycle: derived.billingCycle ?? undefined,
     statusOverride: subscription.status ?? undefined,
     // IMPORTANT: pass through nulls explicitly to clear pending fields when schedule is canceled
-    pendingPlanSlug: pending.planSlug,
-    pendingBillingCycle: pending.billingCycle,
-    pendingEffectiveDate: pending.effectiveDate,
-    pendingScheduleId: pending.scheduleId,
-    currentPeriodEndOverride: currentEnd ?? undefined,
+    pendingPlanSlug: isCanceled ? null : pending.planSlug,
+    pendingBillingCycle: isCanceled ? null : pending.billingCycle,
+    pendingEffectiveDate: isCanceled ? null : pending.effectiveDate,
+    pendingScheduleId: isCanceled ? null : pending.scheduleId,
+    // When canceled, reset renewal to far-future so UI renders N/A
+    currentPeriodEndOverride: isCanceled ? '9999-12-31T00:00:00Z' : (currentEnd ?? undefined),
   });
 };
 
@@ -355,7 +360,10 @@ const handleInvoiceEvent = async (event: StripeEvent) => {
     pendingBillingCycle: pending?.billingCycle ?? undefined,
     pendingEffectiveDate: pending?.effectiveDate ?? undefined,
     pendingScheduleId: pending?.scheduleId ?? undefined,
-    currentPeriodEndOverride,
+    // If initial subscription payment failed, push far‑future default so UI shows N/A
+    currentPeriodEndOverride: (event.type === "invoice.payment_failed" && reason === "subscription_create")
+      ? "9999-12-31T00:00:00Z"
+      : currentPeriodEndOverride,
   });
 };
 
@@ -573,10 +581,101 @@ Deno.serve(async (req) => {
     return badRequest("Invalid signature");
   }
 
+  const supabase = getServiceSupabaseClient();
+
+  const eventId = event.id;
+
+  // Ensure an event row exists (best-effort). If it already exists, ignore duplicate error.
+  try {
+    await supabase.from("stripe_webhook_events").insert({ event_id: eventId });
+  } catch (_) {}
+
+  // Try to claim this event for processing. Only proceed if we acquire the claim.
+  const nowIso = new Date().toISOString();
+  // Reclaim stale claims after 1 minute (processing normally takes < 20s)
+  const staleCutoffMs = Date.now() - 1 * 60 * 1000;
+
+  // First, try to claim if never started
+  let { data: claimed, error: claimError } = await supabase
+    .from("stripe_webhook_events")
+    .update({ processing_started_at: nowIso })
+    .eq("event_id", eventId)
+    .is("processed_at", null)
+    .is("processing_started_at", null)
+    .select("event_id")
+    .maybeSingle();
+
+  if (claimError) {
+    console.warn("Idempotency claim (never-started) failed", { eventId, claimError });
+    claimed = null;
+  }
+
+  if (!claimed?.event_id) {
+    // Not claimed yet; check current state
+    const { data: existing, error: readErr } = await supabase
+      .from("stripe_webhook_events")
+      .select("processed_at, processing_started_at")
+      .eq("event_id", eventId)
+      .maybeSingle();
+
+    if (readErr) {
+      console.warn("Idempotency state read failed", { eventId, readErr });
+      // Ask Stripe to retry later
+      return json({ received: false, retry: true, is_duplicate_event: false }, { status: 409 });
+    }
+
+    const processed = Boolean(existing?.processed_at);
+    if (processed) return json({ received: true, is_duplicate_event: true });
+
+    const startedAt = existing?.processing_started_at
+      ? new Date(existing.processing_started_at as string).getTime()
+      : null;
+    const stale = startedAt ? startedAt < staleCutoffMs : false;
+
+    if (!stale && startedAt) {
+      // In progress and not stale — let Stripe retry later
+      return json({ received: false, retry: true, is_duplicate_event: false, in_progress: true }, { status: 409 });
+    }
+
+    // Attempt to reclaim stale claim
+    const { data: reclaimed, error: reclaimErr } = await supabase
+      .from("stripe_webhook_events")
+      .update({ processing_started_at: nowIso })
+      .eq("event_id", eventId)
+      .is("processed_at", null)
+      .lt("processing_started_at", new Date(staleCutoffMs).toISOString())
+      .select("event_id")
+      .maybeSingle();
+
+    if (reclaimErr) {
+      console.warn("Idempotency stale-claim failed", { eventId, reclaimErr });
+      return json({ received: false, retry: true, is_duplicate_event: false }, { status: 409 });
+    }
+
+    if (!reclaimed?.event_id) {
+      // Could not reclaim — another process likely claimed in parallel
+      return json({ received: false, retry: true, is_duplicate_event: false }, { status: 409 });
+    }
+
+    // Proceed with reclaimed claim
+  }
+
   try {
     await handleEvent(event);
-    return json({ received: true });
+    await supabase
+      .from("stripe_webhook_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("event_id", eventId);
+    return json({ received: true, is_duplicate_event: false });
   } catch (error) {
+    // Release the claim so Stripe retries can be processed later
+    try {
+      await supabase
+        .from("stripe_webhook_events")
+        .update({ processing_started_at: null })
+        .eq("event_id", eventId)
+        .is("processed_at", null);
+    } catch (_) {}
     return internalError(error);
   }
 });
