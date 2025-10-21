@@ -1,7 +1,7 @@
 import { authenticateApiRequest } from '../_shared/api_key.ts';
 import { badRequest, internalError, json, methodNotAllowed } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
-import { createAuthedClient } from '../_shared/jwt.ts';
+import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 
 function normalizeDate(value: string): string | null {
   if (!value) return null;
@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { client: supabase } = await createAuthedClient(user.user_id);
+    const supabase = getServiceSupabaseClient();
     const token = tokenRaw.includes('_') ? tokenRaw : `${tokenRaw}_USDT_BINANCE`;
     const { data, error } = await supabase
       .from('ohlcv_1d')

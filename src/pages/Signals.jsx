@@ -138,9 +138,20 @@ export default function SignalsHub() {
     return;
   };
 
-  const plan = me?.subscription_level || "free";
-  const isPro = plan === "pro" || plan === "desk";
-  const isFreeUser = !me || plan === "free";
+  // Derive plan tier from auth user metadata (subscription_tier preferred)
+  const planTier = React.useMemo(() => {
+    const meta = (me && (me.user_metadata || me.raw_user_meta_data)) || {};
+    const tier = String((meta.subscription_tier ?? meta.subscription_level ?? "")).toLowerCase();
+    if (tier) return tier;
+    const slug = String(meta.plan_slug ?? "").toLowerCase();
+    if (slug.includes("pro")) return "pro";
+    if (slug.includes("lite")) return "lite";
+    if (slug.includes("api")) return "api";
+    return "free";
+  }, [me]);
+
+  const isPro = planTier === "pro" || planTier === "api" || planTier === "desk";
+  const isFreeUser = !me || planTier === "free";
 
   const freshness = React.useMemo(() => {
     if (!latestDate) return { label: "Syncing", tone: "pending" };
@@ -362,7 +373,7 @@ export default function SignalsHub() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Token Filter {isFreeUser ? "(Free Tier: 8 tokens)" : "(Pro Only)"}
+                    Token Filter {isFreeUser ? "(Free Tier: 8 tokens)" : "(Pro+ Only)"}
                   </label>
                   <Button
                     variant="outline"
@@ -538,6 +549,14 @@ export default function SignalsHub() {
                 {selectedTokens.length} token{selectedTokens.length !== 1 ? 's' : ''} selected
               </div>
               <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedTokens(allTokens)}
+                  className="bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700"
+                  disabled={allTokens.length === 0}
+                >
+                  Select All
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setSelectedTokens([])}

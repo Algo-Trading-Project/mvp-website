@@ -25,13 +25,33 @@ Deno.serve(async (req) => {
     if (!isIsoDate(start) || !isIsoDate(end)) {
       return json({ error: "start and end must be YYYY-MM-DD" }, { status: 400 });
     }
+    // Validate date range ordering
+    if (new Date(`${start}T00:00:00Z`) > new Date(`${end}T00:00:00Z`)) {
+      return json({ error: "start must be <= end" }, { status: 400 });
+    }
     const supabase = getServiceSupabaseClient();
+
+    // Debug: verify RLS identity can see own users row
+    try {
+      const { data: who, error: whoErr } = await supabase
+        .from("users")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      console.log("predictions-range: whoami check", {
+        user_id: user.id,
+        whoami_found: Boolean(who?.user_id === user.id),
+        whoami_error: whoErr?.message ?? null,
+      });
+    } catch (e) {
+      console.log("predictions-range: whoami exception", String(e));
+    }
     const max = 200000; // safety cap
     const lim = (Number(limit) && Number(limit)! > 0 ? Math.min(Number(limit)!, max) : max);
 
     let query = supabase
       .from("predictions")
-      .select("date, symbol_id, y_pred")
+      .select("date, symbol_id, y_pred", { count: "exact" })
       .gte("date", start!)
       .lte("date", end!)
       .order("date", { ascending: true })
@@ -50,7 +70,7 @@ Deno.serve(async (req) => {
       query = query.in("symbol_id", expanded);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw error;
     const rows = (data ?? []).map((row: Record<string, unknown>) => ({
       date: String(row.date ?? "").slice(0, 10),
@@ -63,7 +83,10 @@ Deno.serve(async (req) => {
           : null,
     })).filter((r) => r.date && r.symbol_id);
 
-    return json({ count: rows.length, rows });
+    return json({
+      count: typeof count === "number" ? count : rows.length,
+      rows,
+    });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
