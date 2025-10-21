@@ -4,6 +4,7 @@ alter table public.users
   add column if not exists subscription_pending_billing_cycle text,
   add column if not exists subscription_pending_effective_date timestamptz,
   add column if not exists subscription_pending_schedule_id text;
+  
 create or replace function public.sync_user_from_auth()
 returns trigger
 language plpgsql
