@@ -228,7 +228,7 @@ const authClient = {
   },
 };
 
-const functionMap = {
+  const functionMap = {
   fetchMetrics: "fetch-metrics",
   getLatestPredictions: "get-latest-predictions",
   rollingIcPlot: "rolling-ic-plot",
@@ -244,6 +244,7 @@ const functionMap = {
   predictionsCoverage: "predictions-coverage",
   listPredictionDates: "list-prediction-dates",
   predictionsRange: "predictions-range",
+  liteTokens: "lite-tokens",
   backtestEquityCurvePlot: "backtest-equity-curve-plot",
   backtestRollingAlphaPlot: "backtest-rolling-alpha-plot",
   backtestBootstrapRobustnessPlot: "backtest-bootstrap-robustness-plot",

@@ -31,48 +31,136 @@ Deno.serve(async (req) => {
     }
     const supabase = getServiceSupabaseClient();
 
-    // Debug: verify RLS identity can see own users row
+    // Determine subscription tier from the caller's auth token (manual gating; queries still use service role)
+    const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization');
+    let subscriptionTier = 'free';
     try {
-      const { data: who, error: whoErr } = await supabase
-        .from("users")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      console.log("predictions-range: whoami check", {
-        user_id: user.id,
-        whoami_found: Boolean(who?.user_id === user.id),
-        whoami_error: whoErr?.message ?? null,
-      });
-    } catch (e) {
-      console.log("predictions-range: whoami exception", String(e));
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        const { data: userResult } = await supabase.auth.getUser(token);
+        const authUser = userResult?.user ?? null;
+        const uid = authUser?.id ?? null;
+        if (uid) {
+          const { data: urow } = await supabase
+            .from('users')
+            .select('subscription_tier')
+            .eq('user_id', uid)
+            .maybeSingle();
+          subscriptionTier = String(urow?.subscription_tier ?? authUser?.user_metadata?.subscription_tier ?? 'free').toLowerCase();
+        }
+      }
+    } catch (_e) {
+      subscriptionTier = 'free';
     }
-    const max = 200000; // safety cap
-    const lim = (Number(limit) && Number(limit)! > 0 ? Math.min(Number(limit)!, max) : max);
 
-    let query = supabase
-      .from("predictions")
-      .select("date, symbol_id, y_pred", { count: "exact" })
-      .gte("date", start!)
-      .lte("date", end!)
-      .order("date", { ascending: true })
-      .limit(lim);
+    if (!subscriptionTier || subscriptionTier === 'free') {
+      return json({ error: 'Downloads require a paid plan' }, { status: 403 });
+    }
 
+    // Universal per-request cap: 365 days (inclusive)
+    const startDateObj = new Date(`${start}T00:00:00Z`);
+    const endDateObj = new Date(`${end}T00:00:00Z`);
+    const diffDays = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (diffDays > 365) {
+      return json(
+        {
+          error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
+          code: 'RANGE_TOO_LARGE',
+          limit_days: 365,
+        },
+        { status: 400 },
+      );
+    }
+
+    // Lite users: both dates must be within the last 180 days ending on latest available predictions date
+    if (subscriptionTier === 'lite') {
+      const { data: latestRows, error: latestErr } = await supabase
+        .from('predictions')
+        .select('date')
+        .not('date', 'is', null)
+        .order('date', { ascending: false })
+        .limit(1);
+      if (latestErr) throw latestErr;
+      const latestDateStr = String(latestRows?.[0]?.date ?? '').slice(0, 10);
+      if (!latestDateStr) {
+        return json({ error: 'No predictions available to determine lookback window' }, { status: 500 });
+      }
+      const endAnchor = new Date(`${latestDateStr}T00:00:00Z`);
+      const minAnchor = new Date(endAnchor);
+      const LITE_LOOKBACK_DAYS = 180;
+      // Inclusive 180-day window ending on latestDateStr
+      minAnchor.setUTCDate(endAnchor.getUTCDate() - (LITE_LOOKBACK_DAYS - 1));
+      const liteMinStr = minAnchor.toISOString().slice(0, 10);
+      if ((start! < liteMinStr) || (end! > latestDateStr)) {
+        return json(
+          {
+            error: `Lite tier allows selecting dates within the last ${LITE_LOOKBACK_DAYS} days ending on ${latestDateStr}.`,
+            code: 'LITE_LOOKBACK_WINDOW',
+            window_start: liteMinStr,
+            window_end: latestDateStr,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    // PostgREST enforces a per-call row cap (~1000), including RPC.
+    // Page through results using range() and merge the chunks to return the full set.
     const tokenList = Array.isArray(tokens)
-      ? tokens
-          .filter((t) => typeof t === "string" && t.trim().length)
-          .map((t) => t.trim().toUpperCase())
+      ? tokens.filter((t) => typeof t === "string" && t.trim().length).map((t) => t.trim().toUpperCase())
       : null;
-    if (tokenList && tokenList.length) {
-      // Symbols are stored like "BTC_USDT_BINANCE"; allow either BASE (BTC) or full id
-      const expanded = tokenList.some((s) => s.includes("_"))
-        ? tokenList
-        : tokenList.map((t) => `${t}_USDT_BINANCE`);
-      query = query.in("symbol_id", expanded);
+
+    let base = supabase
+      .from('predictions')
+      .select('date, symbol_id, y_pred')
+      .gte('date', start!)
+      .lte('date', end!)
+      .order('date', { ascending: true })
+      .order('symbol_id', { ascending: true });
+
+    // Enforce Lite subset: if lite, restrict to top-60 list
+    if (subscriptionTier === 'lite') {
+      const { data: liteRows, error: liteErr } = await supabase
+        .from('product_lite_universe_60')
+        .select('symbol_id');
+      if (liteErr) throw liteErr;
+      const liteSymbols = new Set((liteRows ?? []).map((r: any) => String(r.symbol_id)));
+
+      let requestedSymbols: string[] | null = null;
+      if (tokenList && tokenList.length) {
+        const expanded = tokenList.some((s) => s.includes('_'))
+          ? tokenList
+          : tokenList.map((t) => `${t}_USDT_BINANCE`);
+        requestedSymbols = expanded.filter((s) => liteSymbols.has(s));
+      } else {
+        requestedSymbols = Array.from(liteSymbols);
+      }
+      if (!requestedSymbols.length) {
+        return json({ count: 0, rows: [] });
+      }
+      base = base.in('symbol_id', requestedSymbols);
+    } else {
+      // Pro/API: honor requested tokens if provided, else full universe
+      if (tokenList && tokenList.length) {
+        const expanded = tokenList.some((s) => s.includes('_'))
+          ? tokenList
+          : tokenList.map((t) => `${t}_USDT_BINANCE`);
+        base = base.in('symbol_id', expanded);
+      }
     }
 
-    const { data, error, count } = await query;
-    if (error) throw error;
-    const rows = (data ?? []).map((row: Record<string, unknown>) => ({
+    const PAGE_SIZE = 1000;
+    const merged: any[] = [];
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await base.range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      const chunk = data ?? [];
+      if (!chunk.length) break;
+      merged.push(...chunk);
+      if (chunk.length < PAGE_SIZE) break;
+    }
+
+    const rows = (merged ?? []).map((row: Record<string, unknown>) => ({
       date: String(row.date ?? "").slice(0, 10),
       symbol_id: String(row.symbol_id ?? ""),
       y_pred:
@@ -84,7 +172,7 @@ Deno.serve(async (req) => {
     })).filter((r) => r.date && r.symbol_id);
 
     return json({
-      count: typeof count === "number" ? count : rows.length,
+      count: rows.length,
       rows,
     });
   } catch (error) {

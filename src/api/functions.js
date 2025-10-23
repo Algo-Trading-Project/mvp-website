@@ -95,3 +95,8 @@ export const predictionsRange = wrapCall(
   "Failed to load predictions range",
   supabaseApi.functions.predictionsRange
 );
+
+export const getLiteTokens = wrapCall(
+  "Failed to load Lite token list",
+  supabaseApi.functions.liteTokens
+);

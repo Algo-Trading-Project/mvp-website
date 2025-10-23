@@ -48,6 +48,27 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
     const token = tokenRaw.includes('_') ? tokenRaw : `${tokenRaw}_USDT_BINANCE`;
+
+    // API access is Pro or API tiers only
+    const tier = String(user.subscription_tier ?? 'free').toLowerCase();
+    if (!(tier === 'pro' || tier === 'api')) {
+      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    }
+
+    // Universal per-request range cap: 365 days (inclusive)
+    const startObj = new Date(`${startDate}T00:00:00Z`);
+    const endObj = new Date(`${endDate}T00:00:00Z`);
+    const diffDays = Math.ceil((endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (diffDays > 365) {
+      return json({
+        error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
+        code: 'RANGE_TOO_LARGE',
+        limit_days: 365,
+      }, { status: 400 });
+    }
+
+    // No additional tier-specific restrictions for Pro/API beyond range cap
+
     const { data, error } = await supabase
       .from('ohlcv_1d')
       .select('date, symbol_id, open, high, low, close, volume')

@@ -37,11 +37,7 @@ Deno.serve(async (req) => {
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
   const endDate = normalizeDate(url.searchParams.get('end_date') ?? '');
   const tokens = parseTokens(url.searchParams.get('tokens'));
-  const limitParam = url.searchParams.get('limit');
-  const parsedLimit = limitParam ? Number(limitParam) : NaN;
-  const limit = Number.isFinite(parsedLimit)
-    ? Math.min(Math.max(parsedLimit, 1), 200000)
-    : 200000;
+  // Removed limit enforcement to return full ranges
 
   if (!startDate || !endDate) {
     return badRequest('start_date and end_date (YYYY-MM-DD) are required');
@@ -49,25 +45,54 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getServiceSupabaseClient();
-    let query = supabase
+    // Universal per-request range cap: 365 days (inclusive)
+    {
+      const startObj = new Date(`${startDate}T00:00:00Z`);
+      const endObj = new Date(`${endDate}T00:00:00Z`);
+      const diffDays = Math.ceil((endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays > 365) {
+        return json({
+          error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
+          code: 'RANGE_TOO_LARGE',
+          limit_days: 365,
+        }, { status: 400 });
+      }
+    }
+    // Build base query
+    let base = supabase
       .from('predictions')
       .select('date, symbol_id, y_pred')
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date', { ascending: true })
-      .limit(limit);
+      .order('symbol_id', { ascending: true });
 
+    // API access is Pro or API tiers only
+    const tier = String(user.subscription_tier ?? 'free').toLowerCase();
+    if (!(tier === 'pro' || tier === 'api')) {
+      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    }
+
+    // Honor token filter for Pro/API if provided
     if (tokens && tokens.length) {
       const expanded = tokens.some((s) => s.includes('_'))
         ? tokens
         : tokens.map((t) => `${t}_USDT_BINANCE`);
-      query = query.in('symbol_id', expanded);
+      base = base.in('symbol_id', expanded);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const PAGE_SIZE = 1000;
+    const merged: any[] = [];
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await base.range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      const chunk = data ?? [];
+      if (!chunk.length) break;
+      merged.push(...chunk);
+      if (chunk.length < PAGE_SIZE) break;
+    }
 
-    const rows = (data ?? []).map((row: Record<string, unknown>) => ({
+    const rows = (merged ?? []).map((row: Record<string, unknown>) => ({
       date: String(row.date ?? '').slice(0, 10),
       symbol_id: String(row.symbol_id ?? ''),
       y_pred:

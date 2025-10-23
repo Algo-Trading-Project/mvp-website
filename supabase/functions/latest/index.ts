@@ -21,6 +21,12 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
 
+    // API access is Pro or API tiers only
+    const tier = String(user.subscription_tier ?? 'free').toLowerCase();
+    if (!(tier === 'pro' || tier === 'api')) {
+      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    }
+
     const { data: latest, error: latestErr } = await supabase
       .from('predictions')
       .select('date')
