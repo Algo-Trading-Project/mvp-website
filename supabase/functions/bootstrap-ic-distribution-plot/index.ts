@@ -15,9 +15,9 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const field = 'cross_sectional_ic_1d';
+    const field = 'cs_spearman_ic_1d';
     const { data, error } = await supabase
-      .from('cross_sectional_metrics_1d')
+      .from('daily_dashboard_metrics')
       .select(`${field}`)
       .gte('date', start)
       .lte('date', end);

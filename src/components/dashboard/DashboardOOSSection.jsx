@@ -209,12 +209,11 @@ export default function DashboardOOSSection() {
         setIcSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setIcSummary(cached.summary);
         setIcSvgLoading(false);
-        return;
       }
-      const shouldShowLoader = !icSvg && !icSeries.length;
+      const shouldShowLoader = !icSvg && !icSeries.length && !cached;
       if (shouldShowLoader) setIcSvgLoading(true);
       try {
-        const data = await rollingIcPlot({ start: fallbackStart, end: endDate });
+        const data = await rollingIcPlot({ start: fallbackStart, end: endDate, __cache: false });
         setIcSvg(data?.html || null);
         setIcSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setIcSummary(data.summary);
@@ -252,12 +251,11 @@ export default function DashboardOOSSection() {
         setSpreadSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setSpreadSummary(cached.summary);
         setSpreadLoading(false);
-        return;
       }
-      const shouldShowLoader = !spreadHtml && !spreadSeries.length;
+      const shouldShowLoader = !spreadHtml && !spreadSeries.length && !cached;
       if (shouldShowLoader) setSpreadLoading(true);
       try {
-        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate });
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, __cache: false });
         setSpreadHtml(data?.html || null);
         setSpreadSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setSpreadSummary(data.summary);
@@ -309,18 +307,17 @@ export default function DashboardOOSSection() {
     const load = async () => {
       setHitError(null);
       if (!dateRange.start || !dateRange.end) { setHitHtml(null); setHitLoading(false); return; }
-      const payload = { start: dateRange.start, end: dateRange.end, window: 30 };
+      const payload = { start: dateRange.start, end: dateRange.end, window: 30, __cache: false };
       const cached = getCachedFunctionResult("rolling-hit-rate-plot", payload);
       if (cached) {
         setHitHtml(cached?.html || null);
         if (cached?.summary) setHitSummary(cached.summary);
         setHitLoading(false);
-        return;
       }
-      const shouldShowLoader = !hitHtml;
+      const shouldShowLoader = !hitHtml && !cached;
       if (shouldShowLoader) setHitLoading(true);
       try {
-        const data = await rollingHitRatePlot(payload);
+        const data = await rollingHitRatePlot({ ...payload, __cache: false });
         setHitHtml(data?.html || null);
         if (data?.summary) setHitSummary(data.summary);
       } catch (e) {

@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
     let base = supabase
       .from('predictions')
-      .select('date, symbol_id, y_pred')
+      .select('date, symbol_id, predicted_returns_1')
       .gte('date', start!)
       .lte('date', end!)
       .order('date', { ascending: true })
@@ -164,10 +164,10 @@ Deno.serve(async (req) => {
       date: String(row.date ?? "").slice(0, 10),
       symbol_id: String(row.symbol_id ?? ""),
       y_pred:
-        typeof row.y_pred === "number"
-          ? (Number.isFinite(row.y_pred) ? row.y_pred : null)
-          : typeof row.y_pred === "string"
-          ? (() => { const n = Number(row.y_pred); return Number.isFinite(n) ? n : null; })()
+        typeof (row as any).predicted_returns_1 === "number"
+          ? (Number.isFinite((row as any).predicted_returns_1) ? (row as any).predicted_returns_1 : null)
+          : typeof (row as any).predicted_returns_1 === "string"
+          ? (() => { const n = Number((row as any).predicted_returns_1); return Number.isFinite(n) ? n : null; })()
           : null,
     })).filter((r) => r.date && r.symbol_id);
 

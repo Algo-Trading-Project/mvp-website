@@ -17,70 +17,14 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Try RPC first; fall back to computing Spearman IC in-function if RPC is unavailable
-    let data: unknown[] | null = null;
-    try {
-      const rpc = await supabase.rpc('rpc_symbol_ic', {
-        start_date: start,
-        end_date: end,
-        min_points: minPoints,
-      });
-      if (rpc.error) throw rpc.error;
-      data = rpc.data as unknown[] | null;
-    } catch (_rpcErr) {
-      // Fallback: fetch raw predictions and compute per-symbol Spearman IC
-      const { data: preds, error: predsErr } = await supabase
-        .from('predictions')
-        .select('date, symbol_id, y_pred, forward_returns_1')
-        .gte('date', start)
-        .lte('date', end);
-      if (predsErr) throw predsErr;
-
-      const bySymbol: Record<string, { pred: number; ret: number }[]> = {};
-      for (const r of preds as any[]) {
-        const sym = String(r.symbol_id ?? '').split('_')[0];
-        const pred = typeof r.y_pred === 'number' ? r.y_pred : Number(r.y_pred);
-        const ret = typeof r.forward_returns_1 === 'number' ? r.forward_returns_1 : Number(r.forward_returns_1);
-        if (!sym || !Number.isFinite(pred) || !Number.isFinite(ret)) continue;
-        (bySymbol[sym] ||= []).push({ pred, ret });
-      }
-
-      const rank = (arr: number[]) => {
-        const indexed = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
-        const ranks = new Array(arr.length);
-        for (let r = 0; r < indexed.length; r++) ranks[indexed[r].i] = r / (indexed.length - 1 || 1);
-        return ranks;
-      };
-      const pearson = (a: number[], b: number[]) => {
-        const n = Math.min(a.length, b.length);
-        if (n < 2) return null;
-        const ma = a.reduce((s, v) => s + v, 0) / n;
-        const mb = b.reduce((s, v) => s + v, 0) / n;
-        let num = 0, da = 0, db = 0;
-        for (let i = 0; i < n; i++) {
-          const xa = a[i] - ma;
-          const xb = b[i] - mb;
-          num += xa * xb;
-          da += xa * xa;
-          db += xb * xb;
-        }
-        const den = Math.sqrt(da * db);
-        return den === 0 ? null : num / den;
-      };
-
-      const rows: any[] = [];
-      for (const [sym, pairs] of Object.entries(bySymbol)) {
-        if ((pairs?.length ?? 0) < minPoints) continue;
-        const predsArr = pairs.map(p => p.pred);
-        const retsArr = pairs.map(p => p.ret);
-        const rp = rank(predsArr);
-        const rr = rank(retsArr);
-        const ic = pearson(rp, rr);
-        if (ic === null || Number.isNaN(ic)) continue;
-        rows.push({ symbol: sym, spearman_ic: ic, observation_count: pairs.length });
-      }
-      data = rows;
-    }
+    // Fully SQL via RPC
+    const rpc = await supabase.rpc('rpc_symbol_ic', {
+      start_date: start,
+      end_date: end,
+      min_points: minPoints,
+    });
+    if (rpc.error) throw rpc.error;
+    const data: unknown[] | null = rpc.data as unknown[] | null;
 
     const coerceNumber = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : null;

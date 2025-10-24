@@ -11,9 +11,9 @@ Deno.serve(async (req) => {
     if (!start || !end) return json({ error: 'start and end date are required' }, { status: 400 });
 
     const supabase = getServiceSupabaseClient();
-    const field = 'cs_top_bottom_decile_spread';
+    const field = 'cs_top_bottom_decile_spread_1d';
     const { data, error } = await supabase
-      .from('cross_sectional_metrics_1d')
+      .from('daily_dashboard_metrics')
       .select(`${field}`)
       .gte('date', start)
       .lte('date', end);
@@ -50,4 +50,3 @@ Plotly.newPlot('chart', data, layout, config);
     return json({ error: e.message || String(e) }, { status: 500 });
   }
 });
-

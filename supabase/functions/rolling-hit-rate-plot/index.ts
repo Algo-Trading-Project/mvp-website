@@ -24,24 +24,7 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Directly query precomputed rolling 30d hit rate; page through results
-    const pageSize = 1000;
-    let fromIdx = 0;
-    const tbl: Array<Record<string, unknown>> = [];
-    while (true) {
-      const { data, error } = await supabase
-        .from('cross_sectional_metrics_1d')
-        .select('date, rolling_30d_hit_rate')
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: true })
-        .range(fromIdx, fromIdx + pageSize - 1);
-      if (error) throw error;
-      if (data && data.length) tbl.push(...data as Array<Record<string, unknown>>);
-      if (!data || data.length < pageSize) break;
-      fromIdx += pageSize;
-    }
-
+    // Compute rolling hit rate in SQL via RPC
     const coerceNumber = (v: unknown): number | null => {
       if (typeof v === 'number') return Number.isFinite(v) ? v : null;
       if (typeof v === 'string') {
@@ -50,19 +33,22 @@ Deno.serve(async (req) => {
       }
       return null;
     };
-
-    const rows: Row[] = (tbl ?? [])
-      .map((r: Record<string, unknown>) => ({
-        date: String(r.date ?? '').slice(0, 10),
-        rate: coerceNumber(r['rolling_30d_hit_rate']),
-      }))
-      .filter((r) => r.date && r.rate !== null);
+    const rpc = await supabase.rpc('rpc_rolling_hit_rate', {
+      start_date: start,
+      end_date: end,
+      window: windowSize,
+    });
+    if (rpc.error) throw rpc.error;
+    const rows: Row[] = (rpc.data ?? []).map((r: Record<string, unknown>) => ({
+      date: String(r.date ?? '').slice(0, 10),
+      rate: coerceNumber(r['value']),
+    })).filter((r) => r.date && r.rate !== null);
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.rate === 'number' ? r.rate : null));
 
-    const axisStart = rows.length ? rows[0].date : String(start);
-    const axisEnd = rows.length ? rows[rows.length - 1].date : String(end);
+    const axisStart = String(start);
+    const axisEnd = String(end);
 
     const finiteRates = y.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
     const yMin = finiteRates.length ? Math.min(...finiteRates) : 0;

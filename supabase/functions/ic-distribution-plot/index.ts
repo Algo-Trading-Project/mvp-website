@@ -16,12 +16,12 @@ Deno.serve(async (req) => {
         return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">Start and end date are required.</body></html>', bins: [] });
     }
 
-    const field = 'cross_sectional_ic_1d';
+    const field = 'cs_spearman_ic_1d';
 
     const supabase = getServiceSupabaseClient();
 
     const { data, error } = await supabase
-      .from('cross_sectional_metrics_1d')
+      .from('daily_dashboard_metrics')
       .select(`${field}`)
       .gte('date', start)
       .lte('date', end);

@@ -13,23 +13,13 @@ Deno.serve(async (req) => {
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     const supabase = getServiceSupabaseClient();
 
-    // Fetch all rows across the requested range, paging to bypass PostgREST row caps
-    const pageSize = 1000; // PostgREST default max rows per page
-    let fromIdx = 0;
-    const tbl: Array<Record<string, unknown>> = [];
-    while (true) {
-      const { data, error } = await supabase
-        .from('cross_sectional_metrics_1d')
-        .select('date, rolling_30d_avg_ic')
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: true })
-        .range(fromIdx, fromIdx + pageSize - 1);
-      if (error) throw error;
-      if (data && data.length) tbl.push(...data as Array<Record<string, unknown>>);
-      if (!data || data.length < pageSize) break;
-      fromIdx += pageSize;
-    }
+    // Compute rolling IC fully in SQL via RPC
+    const rpc = await supabase.rpc('rpc_rolling_ic', {
+      start_date: start,
+      end_date: end,
+      window: 30,
+    });
+    if (rpc.error) throw rpc.error;
 
     const coerceNumber = (v: unknown): number | null => {
       if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -40,18 +30,16 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    const rows = (tbl ?? [])
-      .map((r: Record<string, unknown>) => ({
-        date: String(r.date ?? '').slice(0, 10),
-        ic: coerceNumber(r['rolling_30d_avg_ic']),
-      }))
-      .filter((r) => r.date);
+    const rows = (rpc.data ?? []).map((r: Record<string, unknown>) => ({
+      date: String(r.date ?? '').slice(0, 10),
+      ic: coerceNumber(r['value']),
+    })).filter((r) => r.date);
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.ic === 'number' ? r.ic : null));
 
-    const axisStart = rows.length ? rows[0].date : String(start);
-    const axisEnd = rows.length ? rows[rows.length - 1].date : String(end);
+    const axisStart = String(start);
+    const axisEnd = String(end);
 
     const html = `<!DOCTYPE html>
 <html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>

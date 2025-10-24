@@ -11,12 +11,12 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Load strategy daily returns from precomputed cross_sectional_metrics_1d
+    // Load strategy daily returns from daily_dashboard_metrics MV
     const pageSize = 1000; let fromIdx = 0; const cross: any[] = [];
     while (true) {
       const { data, error } = await supabase
-        .from('cross_sectional_metrics_1d')
-        .select('date, cs_top_bottom_decile_spread')
+        .from('daily_dashboard_metrics')
+        .select('date, cs_top_bottom_decile_spread_1d')
         .gte('date', start)
         .lte('date', end)
         .order('date', { ascending: true })
@@ -33,9 +33,9 @@ Deno.serve(async (req) => {
     const retsAll: number[] = [];
     for (const r of cross) {
       const d = String(r.date ?? '').slice(0,10);
-      const v = typeof (r as any).cs_top_bottom_decile_spread === 'number'
-        ? (r as any).cs_top_bottom_decile_spread
-        : Number((r as any).cs_top_bottom_decile_spread ?? 0);
+      const v = typeof (r as any).cs_top_bottom_decile_spread_1d === 'number'
+        ? (r as any).cs_top_bottom_decile_spread_1d
+        : Number((r as any).cs_top_bottom_decile_spread_1d ?? 0);
       if (d) { datesAll.push(d); retsAll.push(Number.isFinite(v) ? v : 0); }
     }
 

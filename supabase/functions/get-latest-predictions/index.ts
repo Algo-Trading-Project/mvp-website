@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       }
       const { data: rows, error: rowsErr } = await supabase
         .from('predictions')
-        .select('date, symbol_id, y_pred')
+        .select('date, symbol_id, predicted_returns_1')
         .eq('date', maxDate)
         .limit(100000);
       if (rowsErr) throw rowsErr;
@@ -46,11 +46,11 @@ Deno.serve(async (req) => {
       symbol_id: String(row.symbol_id ?? ''),
       date: String(row.date ?? '').slice(0, 10),
       y_pred:
-        typeof row.y_pred === 'number'
-          ? (Number.isFinite(row.y_pred) ? row.y_pred : null)
-          : typeof row.y_pred === 'string'
+        typeof (row as any).predicted_returns_1 === 'number'
+          ? (Number.isFinite((row as any).predicted_returns_1) ? (row as any).predicted_returns_1 : null)
+          : typeof (row as any).predicted_returns_1 === 'string'
           ? (() => {
-              const num = Number(row.y_pred);
+              const num = Number((row as any).predicted_returns_1);
               return Number.isFinite(num) ? num : null;
             })()
           : null,

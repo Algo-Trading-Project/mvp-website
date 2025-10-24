@@ -14,23 +14,22 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Prefer RPC for normalized numeric fields; fall back to direct table reads if RPC missing
-    let crossData: unknown[] | null = null;
-    try {
-      const rpc = await supabase.rpc('rpc_cross_sectional_metrics_time_series', {
-        start_date: '2000-01-01',
-        end_date: '2099-12-31',
-      });
-      if (rpc.error) throw rpc.error;
-      crossData = rpc.data as unknown[] | null;
-    } catch (_rpcErr) {
-      const { data, error } = await supabase
-        .from('cross_sectional_metrics_1d')
-        .select('date, cross_sectional_ic_1d, rolling_30d_avg_ic, cs_top_bottom_decile_spread, rolling_30d_avg_top_bottom_decile_spread, rolling_30d_hit_rate')
-        .order('date', { ascending: true });
-      if (error) throw error;
-      crossData = data as unknown[] | null;
-    }
+    // Load daily metrics from MV and compute rolling metrics client-side
+    const { data: mvRows, error: mvErr } = await supabase
+      .from('daily_dashboard_metrics')
+      .select('date, cs_spearman_ic_1d, cs_top_bottom_decile_spread_1d, cs_hit_count_1d, total_count_1d')
+      .order('date', { ascending: true });
+    if (mvErr) throw mvErr;
+
+    // Rolling metrics via SQL RPCs (window=30)
+    const [rpcIc, rpcSpread, rpcHit] = await Promise.all([
+      supabase.rpc('rpc_rolling_ic', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
+      supabase.rpc('rpc_rolling_spread', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
+      supabase.rpc('rpc_rolling_hit_rate', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
+    ]);
+    if (rpcIc.error) throw rpcIc.error;
+    if (rpcSpread.error) throw rpcSpread.error;
+    if (rpcHit.error) throw rpcHit.error;
 
     const coerceNumber = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -41,13 +40,26 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    const cross = (crossData ?? []).map((row: Record<string, unknown>) => ({
+    const daily = (mvRows ?? []).map((row: Record<string, unknown>) => ({
       date: String(row.date ?? ''),
-      cross_sectional_ic_1d: coerceNumber(row.cross_sectional_ic_1d),
-      rolling_30d_avg_ic: coerceNumber(row.rolling_30d_avg_ic),
-      cs_top_bottom_decile_spread: coerceNumber(row.cs_top_bottom_decile_spread),
-      rolling_30d_avg_top_bottom_decile_spread: coerceNumber(row.rolling_30d_avg_top_bottom_decile_spread),
-      rolling_30d_hit_rate: coerceNumber(row.rolling_30d_hit_rate),
+      ic: coerceNumber(row.cs_spearman_ic_1d),
+      spread: coerceNumber(row.cs_top_bottom_decile_spread_1d),
+      hit: coerceNumber(row.cs_hit_count_1d) ?? 0,
+      cnt: coerceNumber(row.total_count_1d) ?? 0,
+    }));
+
+    // Index rolling series by date for quick merge
+    const rIc = new Map((rpcIc.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const rSp = new Map((rpcSpread.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const rHr = new Map((rpcHit.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+
+    const cross = daily.map((r) => ({
+      date: r.date,
+      cross_sectional_ic_1d: r.ic,
+      rolling_30d_avg_ic: rIc.get(r.date) ?? null,
+      cs_top_bottom_decile_spread: r.spread,
+      rolling_30d_avg_top_bottom_decile_spread: rSp.get(r.date) ?? null,
+      rolling_30d_hit_rate: rHr.get(r.date) ?? null,
     }));
 
     const { data: monthly, error: monthlyError } = await supabase
@@ -79,29 +91,23 @@ Deno.serve(async (req) => {
       n_preds: normalizeInteger(row.n_preds) ?? 0,
     }));
 
-    let latest: any[] | null = null;
-    try {
-      const rpc = await supabase.rpc('rpc_latest_cross_sectional_metrics');
-      if (rpc.error) throw rpc.error;
-      latest = rpc.data as any[] | null;
-    } catch (_rpcErr) {
-      const { data, error } = await supabase
-        .from('cross_sectional_metrics_1d')
-        .select('date, rolling_30d_avg_ic, rolling_30d_avg_top_bottom_decile_spread, rolling_30d_hit_rate')
-        .order('date', { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      latest = data as any[] | null;
-    }
-
-    const latestRow = Array.isArray(latest) && latest.length
-      ? {
-          date: String(latest[0].date ?? ''),
-          rolling_30d_avg_ic: coerceNumber(latest[0].rolling_30d_avg_ic),
-          rolling_30d_avg_top_bottom_decile_spread: coerceNumber(latest[0].rolling_30d_avg_top_bottom_decile_spread),
-          rolling_30d_hit_rate: coerceNumber(latest[0].rolling_30d_hit_rate),
-        }
-      : null;
+    // Latest non-null rolling values from merged series
+    const lastIdx = (() => {
+      for (let i = cross.length - 1; i >= 0; i--) {
+        if (
+          typeof cross[i].rolling_30d_avg_ic === 'number' ||
+          typeof cross[i].rolling_30d_avg_top_bottom_decile_spread === 'number' ||
+          typeof cross[i].rolling_30d_hit_rate === 'number'
+        ) return i;
+      }
+      return -1;
+    })();
+    const latestRow = lastIdx >= 0 ? {
+      date: cross[lastIdx].date,
+      rolling_30d_avg_ic: cross[lastIdx].rolling_30d_avg_ic,
+      rolling_30d_avg_top_bottom_decile_spread: cross[lastIdx].rolling_30d_avg_top_bottom_decile_spread,
+      rolling_30d_hit_rate: cross[lastIdx].rolling_30d_hit_rate,
+    } : null;
 
     return json({ cross, monthly: monthlyCoerced, latest: latestRow });
   } catch (error) {
