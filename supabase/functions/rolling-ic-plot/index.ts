@@ -9,11 +9,12 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, width = null, height = 360 } = await req.json();
+    const { start, end, width = null, height = 360, horizon = '1d' } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     const supabase = getServiceSupabaseClient();
 
     // Compute rolling IC fully in SQL via RPC with pagination
+    const pHorizon = (horizon === '3d') ? '3d' : '1d';
     const PAGE = 1000;
     let offset = 0;
     const merged: Array<Record<string, unknown>> = [];
@@ -24,6 +25,7 @@ Deno.serve(async (req) => {
         window: 30,
         p_limit: PAGE,
         p_offset: offset,
+        p_horizon: pHorizon,
       });
       if (rpc.error) throw rpc.error;
       const chunk = (rpc.data ?? []) as Array<Record<string, unknown>>;

@@ -6,17 +6,22 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
-    const { start, end, window = 30, height = 360 } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const start: string | undefined = body?.start;
+    const end: string | undefined = body?.end;
+    const height: number = Number(body?.height ?? 360);
+    const horizon: string = body?.horizon === '3d' ? '3d' : '1d';
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     const supabase = getServiceSupabaseClient();
-    // Try the v2 RPC (predicted_returns_1); fallback to legacy name if missing
+    // Try horizon-aware RPC; fallback to legacy signature if older schema
     let data: any[] | null = null;
     try {
-      const rpc2 = await supabase.rpc('rpc_adv_by_decile_v2', { start_date: start, end_date: end });
+      const rpc2 = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end, p_horizon: horizon });
       if (rpc2.error) throw rpc2.error;
       data = rpc2.data as any[] | null;
     } catch (_e) {
-      const rpc = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end });
+      // Legacy fallback (no horizon param, implicitly 1d)
+      const rpc = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end } as any);
       if (rpc.error) throw rpc.error;
       data = rpc.data as any[] | null;
     }
@@ -49,7 +54,7 @@ Plotly.newPlot('chart', data, layout, config);
       return json({ html: emptyHtml, data: [], params: { start, end, window } });
     }
 
-    return json({ html, data: bars, params: { start, end, window } });
+    return json({ html, data: bars, params: { start, end } });
   } catch (e) {
     if (e instanceof Error) {
       return json({ error: e.message }, { status: 500 });

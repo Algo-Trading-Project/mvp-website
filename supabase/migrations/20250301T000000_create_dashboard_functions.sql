@@ -30,6 +30,39 @@ as $$
   order by quintile;
 $$;
 
+-- Horizon-aware quintile returns (1d or 3d)
+create or replace function rpc_quintile_returns_v2(
+  start_date date,
+  end_date date,
+  p_horizon text default '1d'
+) returns table(quintile int, avg_return double precision)
+language sql
+stable
+as $$
+  with base as (
+    select date,
+           case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end as pred,
+           case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end as fwd
+    from predictions
+    where date between start_date and end_date
+      and (case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end) is not null
+      and (case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end) is not null
+  ), ranked as (
+    select date,
+           ntile(5) over (partition by date order by pred) as quintile,
+           fwd
+    from base
+  ), per_date as (
+    select date, quintile, avg(fwd) as avg_ret
+    from ranked
+    group by date, quintile
+  )
+  select quintile, avg(avg_ret) as avg_return
+  from per_date
+  group by quintile
+  order by quintile;
+$$;
+
 -- 5) Latest prediction snapshot for 1d regression model
 create or replace function rpc_latest_predictions_snapshot()
 returns table(

@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, minPoints = 30, topN = 20 } = await req.json();
+    const { start, end, minPoints = 30, topN = 20, horizon = '1d' } = await req.json();
 
     if (!start || !end) {
       return json({ error: 'start and end dates required' }, { status: 400 });
@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
         min_points: minPoints,
         p_limit: PAGE,
         p_offset: offset,
+        p_horizon: horizon === '3d' ? '3d' : '1d',
       });
       if (rpc.error) throw rpc.error;
       const chunk = (rpc.data ?? []) as any[];

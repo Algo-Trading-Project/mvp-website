@@ -7,11 +7,11 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, bins = 20, width = 980, height = 360 } = await req.json();
+    const { start, end, bins = 20, width = 980, height = 360, horizon = '1d' } = await req.json();
     if (!start || !end) return json({ error: 'start and end required' }, { status: 400 });
 
     const supabase = getServiceSupabaseClient();
-    const field = 'cs_top_bottom_decile_spread_1d';
+    const field = (horizon === '3d') ? 'cs_top_bottom_decile_spread_3d' : 'cs_top_bottom_decile_spread_1d';
     const pageSize = 1000; let fromIdx = 0; const all: any[] = [];
     while (true) {
       const { data, error } = await supabase
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
 <body><div id=\"chart\"></div>
 <script>
 const x = ${JSON.stringify(values)};
-const data = [{ type:'histogram', x, nbinsx:${bins}, marker:{ color:'#f59e0b', line:{ color:'#000', width:1 } }, hovertemplate:'Spread: %{x:.4f}<br>Count: %{y}<extra></extra>' }];
+const data = [{ type:'histogram', x, nbinsx:${bins}, marker:{ color:'#86efac', line:{ color:'#065f46', width:1 } }, hovertemplate:'Spread: %{x:.4f}<br>Count: %{y}<extra></extra>' }];
 const layout = { paper_bgcolor:'#0b1220', plot_bgcolor:'#0b1220', margin:{ l:48, r:20, t:10, b:30 }, xaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155' }, yaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155' }, shapes:[{ type:'line', x0:${mean}, x1:${mean}, y0:0, y1:1, yref:'paper', line:{ color:'#3b82f6', width:2, dash:'dash' } }] };
 const config = { responsive:true, displayModeBar:false, scrollZoom:false };
 Plotly.newPlot('chart', data, layout, config);

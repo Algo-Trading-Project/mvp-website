@@ -22,23 +22,24 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function MedianADVByDecile({ dateRange }) {
+export default function MedianADVByDecile({ dateRange, horizon='1d' }) {
   const storageKey = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end || typeof window === "undefined") return null;
-    return `median-adv:${dateRange.start}:${dateRange.end}`;
-  }, [dateRange?.start, dateRange?.end]);
+    return `median-adv:${horizon}:${dateRange.start}:${dateRange.end}`;
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   const initialCache = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end) return null;
     return getCachedFunctionResult("adv-by-decile-plot", {
       start: dateRange.start,
       end: dateRange.end,
+      horizon,
       start_date: dateRange.start,
       end_date: dateRange.end,
       window: 30,
       window_days: 30,
     });
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   const readSession = () => {
     if (!storageKey || typeof window === "undefined") return null;
@@ -63,10 +64,12 @@ export default function MedianADVByDecile({ dateRange }) {
     let cancelled = false;
     const load = async () => {
       setError(null);
+      setLoading(true);
       try {
         const payload = {
           start: dateRange.start,
           end: dateRange.end,
+          horizon,
           start_date: dateRange.start,
           end_date: dateRange.end,
           window: 30,
@@ -80,11 +83,7 @@ export default function MedianADVByDecile({ dateRange }) {
           if (storageKey && cached?.html) {
             try { window.sessionStorage?.setItem(storageKey, cached.html); } catch (err) { console.warn("Failed to persist ADV cache", err); }
           }
-          setLoading(false);
-          return;
         }
-        const shouldShowLoader = !html;
-        if (shouldShowLoader) setLoading(true);
         const res = await advByDecilePlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
@@ -101,7 +100,7 @@ export default function MedianADVByDecile({ dateRange }) {
     };
     load();
     return () => { cancelled = true; controller.abort(); };
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">

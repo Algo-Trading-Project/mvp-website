@@ -21,7 +21,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function BootstrapSpreadDistribution({ dateRange }) {
+export default function BootstrapSpreadDistribution({ dateRange, horizon='1d' }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, ci_lower: 0, ci_upper: 0 });
@@ -34,7 +34,7 @@ export default function BootstrapSpreadDistribution({ dateRange }) {
     const load = async () => {
       setLoading(true); setError(null);
       try {
-        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, samples: 10000, bins: 20 }, { signal: controller.signal });
+        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, samples: 10000, bins: 20 }, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, ci_lower: 0, ci_upper: 0 });
@@ -49,7 +49,7 @@ export default function BootstrapSpreadDistribution({ dateRange }) {
     };
     load();
     return () => { cancelled = true; controller.abort(); };
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">

@@ -11,7 +11,15 @@ export default function HeroSection() {
 
   React.useEffect(() => {
     const loadMonthly = async () => {
-      const data = await fetchMetrics({});
+      // Add a version tag to bust stale cache entries
+      const data = await fetchMetrics({ version: 2 });
+      if (data?.monthly_summary?.one_day) {
+        const s = data.monthly_summary.one_day;
+        setIcir1d(typeof s.icir_ann === 'number' ? s.icir_ann : null);
+        setPositiveShare(typeof s.positive_share === 'number' ? s.positive_share : null);
+        return;
+      }
+      // Fallback: compute from rows if summary missing
       const rows = Array.isArray(data?.monthly) ? data.monthly : [];
       const toNumber = (value) => {
         if (typeof value === "number") return Number.isNaN(value) ? null : value;

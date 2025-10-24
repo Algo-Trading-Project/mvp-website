@@ -6,25 +6,31 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     if (req.method !== 'POST') return json({ error: 'Use POST' }, { status: 405 });
-    const { start, end } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const start: string | undefined = body?.start;
+    const end: string | undefined = body?.end;
+    const horizon: string = (body?.horizon === '3d') ? '3d' : '1d';
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
 
     const supabase = getServiceSupabaseClient();
-    const { data, error } = await supabase.rpc('rpc_quintile_returns', {
+    let data: any[] | null = null;
+    const rpc2 = await supabase.rpc('rpc_quintile_returns', {
       start_date: start,
       end_date: end,
+      p_horizon: horizon,
     });
-    if (error) throw error;
+    if (rpc2.error) throw rpc2.error;
+    data = rpc2.data as any[] | null;
 
     const rows = (data ?? []).map((r: Record<string, unknown>) => ({
       quintile: Number(r.quintile),
-      avg_return_1d: typeof r.avg_return_1d === 'number' ? r.avg_return_1d : Number(r.avg_return_1d ?? 0),
+      avg_return: typeof r.avg_return === 'number' ? r.avg_return : Number(r.avg_return ?? 0),
     }))
-    .filter((r) => Number.isFinite(r.quintile) && Number.isFinite(r.avg_return_1d));
+    .filter((r) => Number.isFinite(r.quintile) && Number.isFinite(r.avg_return));
     // Ensure sorted by quintile ascending 0..4
     rows.sort((a, b) => a.quintile - b.quintile);
     const x = rows.map((d) => String(d.quintile));
-    const y = rows.map((d) => d.avg_return_1d);
+    const y = rows.map((d) => d.avg_return);
 
     const html = `<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1" />

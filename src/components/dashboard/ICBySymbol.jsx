@@ -32,24 +32,25 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function ICBySymbol({ dateRange }) {
+export default function ICBySymbol({ dateRange, horizon = '1d' }) {
   const storageBaseKey = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end || typeof window === "undefined") return null;
-    const cacheKey = `ic-by-symbol:${dateRange.start}:${dateRange.end}`;
+    const cacheKey = `ic-by-symbol:${horizon}:${dateRange.start}:${dateRange.end}`;
     return cacheKey;
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   const initialCache = React.useMemo(() => {
     if (!dateRange?.start || !dateRange?.end) return null;
     return getCachedFunctionResult("ic-by-symbol-plot", {
       start: dateRange.start,
       end: dateRange.end,
+      horizon,
       minPoints: 10,
       topN: 20,
       width: 980,
       height: 420,
     });
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   const readSessionHtml = (key) => {
     if (!key || typeof window === "undefined") return null;
@@ -82,9 +83,11 @@ export default function ICBySymbol({ dateRange }) {
     let cancelled = false;
     const load = async () => {
       setError(null);
+      setLoading(true);
       const payload = {
         start: dateRange.start,
         end: dateRange.end,
+        horizon,
         minPoints: 10,
         topN: 20,
         width: 980,
@@ -102,11 +105,7 @@ export default function ICBySymbol({ dateRange }) {
         if (storageBaseKey && cached?.html_bottom) {
           try { window.sessionStorage?.setItem(`${storageBaseKey}:bottom`, cached.html_bottom); } catch (err) { console.warn("Failed to persist IC bottom cache", err); }
         }
-        setLoading(false);
-        return;
       }
-      const shouldShowLoader = !htmlTop && !htmlBottom;
-      if (shouldShowLoader) setLoading(true);
       try {
         const data = await icBySymbolPlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
@@ -131,7 +130,7 @@ export default function ICBySymbol({ dateRange }) {
         });
       } finally {
         if (cancelled || controller.signal.aborted) return;
-        if (shouldShowLoader) setLoading(false);
+        setLoading(false);
       }
     };
     load();
@@ -139,7 +138,7 @@ export default function ICBySymbol({ dateRange }) {
       cancelled = true;
       controller.abort();
     };
-  }, [dateRange]);
+  }, [dateRange, horizon]);
 
   const Plot = ({ html, title }) => {
     if (loading) return <ChartCardSkeleton height={420} />;

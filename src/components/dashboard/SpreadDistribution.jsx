@@ -21,7 +21,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function SpreadDistribution({ dateRange }) {
+export default function SpreadDistribution({ dateRange, horizon='1d' }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, std: 0, sharpe_ann: 0 });
@@ -34,7 +34,7 @@ export default function SpreadDistribution({ dateRange }) {
     const load = async () => {
       setLoading(true); setError(null);
       try {
-        const res = await spreadDistributionPlot({ start: dateRange.start, end: dateRange.end, bins: 20, width: 980, height: 360 }, { signal: controller.signal });
+        const res = await spreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, bins: 20, width: 980, height: 360 }, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, std: 0, sharpe_ann: 0 });
@@ -49,7 +49,7 @@ export default function SpreadDistribution({ dateRange }) {
     };
     load();
     return () => { cancelled = true; controller.abort(); };
-  }, [dateRange?.start, dateRange?.end]);
+  }, [dateRange?.start, dateRange?.end, horizon]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
@@ -64,7 +64,7 @@ export default function SpreadDistribution({ dateRange }) {
             <InfoTooltip title="Mean Spread" description="Average daily top‑minus‑bottom decile spread across tokens in the selected period." />
             <span>Mean</span>
           </div>
-          <div className="text-sm font-semibold">{Number.isFinite(summary.mean) ? summary.mean.toFixed(3) : '—'}</div>
+          <div className="text-sm font-semibold">{Number.isFinite(summary.mean) ? summary.mean.toFixed(4) : '—'}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
           <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">

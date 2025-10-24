@@ -31,7 +31,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function ICDistribution({ dateRange }) {
+export default function ICDistribution({ dateRange, horizon='1d' }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, std: 0, pos: 0 });
@@ -55,6 +55,7 @@ export default function ICDistribution({ dateRange }) {
           {
             start: dateRange.start,
             end: dateRange.end,
+            horizon,
             bins: 20,
             width: 980,
             height: 360,
@@ -89,7 +90,7 @@ export default function ICDistribution({ dateRange }) {
       cancelled = true;
       controller.abort();
     };
-  }, [dateRange]);
+  }, [dateRange, horizon]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
@@ -107,7 +108,7 @@ export default function ICDistribution({ dateRange }) {
             <InfoTooltip title="Mean IC" description="Average daily IC over the selected range. IC measures rank correlation between predictions and next‑day returns." />
             <span>Mean</span>
           </div>
-          <div className="text-sm font-semibold">{summary.mean?.toFixed(3)}</div>
+          <div className="text-sm font-semibold">{summary.mean?.toFixed(4)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
           <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">

@@ -7,14 +7,15 @@ create or replace function rpc_rolling_ic(
   end_date date,
   window integer default 30,
   p_limit integer default 1000,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_horizon text default '1d'
 )
 returns table(date date, value double precision)
 language sql
 stable
 as $$
   select d.date,
-         avg(d.cs_spearman_ic_1d) over (
+         avg(case when p_horizon = '3d' then d.cs_spearman_ic_3d else d.cs_spearman_ic_1d end) over (
            order by d.date
            rows between (window - 1) preceding and current row
          ) as value
@@ -30,14 +31,15 @@ create or replace function rpc_rolling_spread(
   end_date date,
   window integer default 30,
   p_limit integer default 1000,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_horizon text default '1d'
 )
 returns table(date date, value double precision)
 language sql
 stable
 as $$
   select d.date,
-         avg(d.cs_top_bottom_decile_spread_1d) over (
+         avg(case when p_horizon = '3d' then d.cs_top_bottom_decile_spread_3d else d.cs_top_bottom_decile_spread_1d end) over (
            order by d.date
            rows between (window - 1) preceding and current row
          ) as value
@@ -53,20 +55,21 @@ create or replace function rpc_rolling_hit_rate(
   end_date date,
   "window" integer default 30,
   p_limit integer default 1000,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_horizon text default '1d'
 )
 returns table(date date, value double precision)
 language sql
 stable
 as $$
   select d.date,
-         case when sum(d.total_count_1d) over (
+         case when sum(case when p_horizon='3d' then d.total_count_3d else d.total_count_1d end) over (
                     order by d.date rows between ("window" - 1) preceding and current row
                   ) > 0
-              then (sum(d.cs_hit_count_1d) over (
+              then (sum(case when p_horizon='3d' then d.cs_hit_count_3d else d.cs_hit_count_1d end) over (
                       order by d.date rows between ("window" - 1) preceding and current row
                     ))::double precision
-                   / nullif(sum(d.total_count_1d) over (
+                   / nullif(sum(case when p_horizon='3d' then d.total_count_3d else d.total_count_1d end) over (
                               order by d.date rows between ("window" - 1) preceding and current row
                             ), 0)
               else null end as value
@@ -83,7 +86,8 @@ create or replace function rpc_symbol_ic(
   end_date date,
   min_points integer default 30,
   p_limit integer default 1000,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_horizon text default '1d'
 )
 returns table(symbol text, spearman_ic double precision, observation_count integer)
 language sql
@@ -91,16 +95,16 @@ stable
 as $$
   with base as (
     select split_part(symbol_id, '_', 1) as symbol,
-           predicted_returns_1,
-           forward_returns_1
+           case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end as pred,
+           case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end as ret
     from predictions
     where date between start_date and end_date
-      and predicted_returns_1 is not null
-      and forward_returns_1 is not null
+      and (case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end) is not null
+      and (case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end) is not null
   ), r as (
     select symbol,
-           percent_rank() over (partition by symbol order by predicted_returns_1) as r_pred,
-           percent_rank() over (partition by symbol order by forward_returns_1)  as r_ret
+           rank() over (partition by symbol order by pred) as r_pred,
+           rank() over (partition by symbol order by ret)  as r_ret
     from base
   )
   select symbol,
@@ -116,7 +120,8 @@ $$;
 -- Median ADV 30 by prediction decile (v2) using predicted_returns_1
 create or replace function rpc_adv_by_decile(
   start_date date,
-  end_date date
+  end_date date,
+  p_horizon text default '1d'
 ) returns table(decile int, median_adv_30 double precision)
 language sql
 stable
@@ -125,10 +130,13 @@ as $$
     select
       date,
       symbol_id,
-      ntile(10) over (partition by date order by predicted_returns_1) as cs_decile
+      ntile(10) over (
+        partition by date
+        order by case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end
+      ) as cs_decile
     from predictions
     where date between start_date and end_date
-      and predicted_returns_1 is not null
+      and (case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end) is not null
   ),
   vols as (
     select

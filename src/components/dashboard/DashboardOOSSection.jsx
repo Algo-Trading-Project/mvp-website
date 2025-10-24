@@ -92,9 +92,11 @@ export default function DashboardOOSSection() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(storedDefaultRange ? false : true);
   const [dateRange, setDateRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
+  const [horizon, setHorizon] = useState('1d');
   const [availableRange, setAvailableRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
 
   const [monthlyRows, setMonthlyRows] = useState([]);
+  const [monthlySummary, setMonthlySummary] = useState(null);
 
   const [icSvg, setIcSvg] = React.useState(initialIcCache?.html || null);
   const [icSvgLoading, setIcSvgLoading] = React.useState(initialIcCache ? false : true);
@@ -121,7 +123,8 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       const [metrics, coverageInfo] = await Promise.all([
-        fetchMetrics({}).catch((e) => { console.error("Failed to fetch metrics", e); return { cross: [], monthly: [] }; }),
+        // Add a version tag to avoid stale cached monthly stats
+        fetchMetrics({ version: 2 }).catch((e) => { console.error("Failed to fetch metrics", e); return { cross: [], monthly: [] }; }),
         predictionsCoverage({ monthsBack: 240 }).catch((error) => {
           console.error("Failed to load predictions coverage", error);
           return null;
@@ -185,6 +188,7 @@ export default function DashboardOOSSection() {
       }
 
       setMonthlyRows(metrics?.monthly || []);
+      setMonthlySummary(metrics?.monthly_summary || null);
 
       setLoading(false);
     };
@@ -203,17 +207,16 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const cached = getCachedFunctionResult("rolling-ic-plot", { start: fallbackStart, end: endDate });
+      // Always show loader on range/model changes to avoid flicker
+      setIcSvgLoading(true);
+      const cached = getCachedFunctionResult("rolling-ic-plot", { start: fallbackStart, end: endDate, horizon });
       if (cached) {
         setIcSvg(cached?.html || null);
         setIcSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setIcSummary(cached.summary);
-        setIcSvgLoading(false);
       }
-      const shouldShowLoader = !icSvg && !icSeries.length && !cached;
-      if (shouldShowLoader) setIcSvgLoading(true);
       try {
-        const data = await rollingIcPlot({ start: fallbackStart, end: endDate, __cache: false });
+        const data = await rollingIcPlot({ start: fallbackStart, end: endDate, horizon, __cache: false });
         setIcSvg(data?.html || null);
         setIcSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setIcSummary(data.summary);
@@ -225,13 +228,13 @@ export default function DashboardOOSSection() {
         setIcSeries([]);
         setIcSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        if (shouldShowLoader) setIcSvgLoading(false);
+        setIcSvgLoading(false);
       }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
     }
-  }, [dateRange.start, dateRange.end, allRows]);
+  }, [dateRange.start, dateRange.end, allRows, horizon]);
 
   // Load Plotly HTML for Decile Spread
   React.useEffect(() => {
@@ -245,17 +248,15 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate });
+      setSpreadLoading(true);
+      const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate, horizon });
       if (cached) {
         setSpreadHtml(cached?.html || null);
         setSpreadSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setSpreadSummary(cached.summary);
-        setSpreadLoading(false);
       }
-      const shouldShowLoader = !spreadHtml && !spreadSeries.length && !cached;
-      if (shouldShowLoader) setSpreadLoading(true);
       try {
-        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, __cache: false });
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, horizon, __cache: false });
         setSpreadHtml(data?.html || null);
         setSpreadSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setSpreadSummary(data.summary);
@@ -267,28 +268,21 @@ export default function DashboardOOSSection() {
         setSpreadSeries([]);
         setSpreadSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        if (shouldShowLoader) setSpreadLoading(false);
+        setSpreadLoading(false);
       }
     };
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
     }
-  }, [dateRange.start, dateRange.end, allRows]);
+  }, [dateRange.start, dateRange.end, allRows, horizon]);
 
   // Load Quintile Returns plot
   React.useEffect(() => {
     const load = async () => {
       setQuintileError(null);
       if (!dateRange.start || !dateRange.end) { setQuintileHtml(null); setQuintileLoading(false); return; }
-      const payload = { start: dateRange.start, end: dateRange.end };
-      const cached = getCachedFunctionResult("quintile-returns-plot", payload);
-      if (cached) {
-        setQuintileHtml(cached?.html || null);
-        setQuintileLoading(false);
-        return;
-      }
-      const shouldShowLoader = !quintileHtml;
-      if (shouldShowLoader) setQuintileLoading(true);
+      const payload = { start: dateRange.start, end: dateRange.end, horizon };
+      setQuintileLoading(true);
       try {
         const data = await quintileReturnsPlot(payload);
         setQuintileHtml(data?.html || null);
@@ -296,26 +290,19 @@ export default function DashboardOOSSection() {
         setQuintileHtml(null);
         setQuintileError(e?.message || 'Unable to load quintile returns plot');
       } finally {
-        if (shouldShowLoader) setQuintileLoading(false);
+        setQuintileLoading(false);
       }
     };
     load();
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, horizon]);
 
   // Load Rolling Hit Rate plot
   React.useEffect(() => {
     const load = async () => {
       setHitError(null);
       if (!dateRange.start || !dateRange.end) { setHitHtml(null); setHitLoading(false); return; }
-      const payload = { start: dateRange.start, end: dateRange.end, window: 30, __cache: false };
-      const cached = getCachedFunctionResult("rolling-hit-rate-plot", payload);
-      if (cached) {
-        setHitHtml(cached?.html || null);
-        if (cached?.summary) setHitSummary(cached.summary);
-        setHitLoading(false);
-      }
-      const shouldShowLoader = !hitHtml && !cached;
-      if (shouldShowLoader) setHitLoading(true);
+      const payload = { start: dateRange.start, end: dateRange.end, window: 30, horizon, __cache: false };
+      setHitLoading(true);
       try {
         const data = await rollingHitRatePlot({ ...payload, __cache: false });
         setHitHtml(data?.html || null);
@@ -325,11 +312,11 @@ export default function DashboardOOSSection() {
         setHitError(e?.message || 'Unable to load rolling hit rate plot');
         setHitSummary({ last: null, last_date: null, deltas: { d1: null, d7: null, d30: null } });
       } finally {
-        if (shouldShowLoader) setHitLoading(false);
+        setHitLoading(false);
       }
     };
     load();
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, horizon]);
 
 
   // Summaries from backend functions (already computed within filtered range)
@@ -358,6 +345,18 @@ export default function DashboardOOSSection() {
 
   // Monthly aggregates derived from the 1d regression metrics
   const globalStats = React.useMemo(() => {
+    // Prefer server-computed monthly summaries when available
+    if (monthlySummary) {
+      const sum = horizon === '3d' ? monthlySummary.three_day : monthlySummary.one_day;
+      if (sum && (sum.mean != null || sum.std != null || sum.positive_share != null || sum.icir_ann != null)) {
+        return {
+          meanIc: typeof sum.mean === 'number' ? sum.mean : null,
+          stdIc: typeof sum.std === 'number' ? sum.std : null,
+          positiveProp: typeof sum.positive_share === 'number' ? sum.positive_share : null,
+          icirAnn: typeof sum.icir_ann === 'number' ? sum.icir_ann : null,
+        };
+      }
+    }
     const toNumber = (value) => {
       if (typeof value === "number") return Number.isNaN(value) ? null : value;
       if (typeof value === "string" && value.trim() !== "") {
@@ -392,7 +391,7 @@ export default function DashboardOOSSection() {
       positiveProp,
       icirAnn,
     };
-  }, [monthlyRows]);
+  }, [monthlyRows, monthlySummary, horizon]);
 
   const minDateForInputs = React.useMemo(() => {
     if (availableRange.start && availableRange.start > MIN_OOS_DATE) {
@@ -404,7 +403,18 @@ export default function DashboardOOSSection() {
   // NEW: top control bar (date pickers) - compact, right-aligned, no background
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-400">Model</label>
+          <select
+            value={horizon}
+            onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
+            className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+          >
+            <option value="1d">1‑Day</option>
+            <option value="3d">3‑Day</option>
+          </select>
+        </div>
         <label className="text-xs text-slate-400">From</label>
         <input
           type="date"
@@ -673,7 +683,7 @@ export default function DashboardOOSSection() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Regression <span className="gradient-text">Performance</span></h1>
           <p className="text-slate-400 mt-2">
-            Out‑of‑sample rolling performance metrics for our 1‑day regression model. Data available starting from 2020-01-01.
+            Out‑of‑sample rolling performance metrics for our {horizon === '3d' ? '3‑day' : '1‑day'} regression model. Data available starting from 2020-01-01.
           </p>
         </div>
 
@@ -683,7 +693,7 @@ export default function DashboardOOSSection() {
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">
         <div className="text-center mt-8">
-          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC (1‑Day)</h3>
+          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC ({horizon})</h3>
           {monthlyBadges}
         </div>
           {rollingBadges}
@@ -698,8 +708,8 @@ export default function DashboardOOSSection() {
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Information Coefficient"
-                    description="30‑day average of the daily cross‑sectional Information Coefficient between predictions and next-day returns." />
-                  Rolling 30‑Day Information Coefficient (1d)
+                    description="30‑day average of the daily cross‑sectional Information Coefficient between predictions and forward returns for the selected horizon." />
+                  Rolling 30‑Day Information Coefficient ({horizon})
                 </span>
               </div>
               <div className="h-auto">
@@ -721,8 +731,8 @@ export default function DashboardOOSSection() {
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Decile Spread"
-                    description="30‑day average of the cross‑sectional top minus bottom decile performance (1‑day horizon)." />
-                  Rolling 30‑Day Avg. Top–Bottom Decile Spread (1d)
+                    description="30‑day average of the cross‑sectional top minus bottom decile performance for the selected horizon." />
+                  Rolling 30‑Day Avg. Top–Bottom Decile Spread ({horizon})
                 </span>
               </div>
               <div className="h-auto">
@@ -761,7 +771,7 @@ export default function DashboardOOSSection() {
           </div>
 
           {/* New: IC by Symbol -- Now uses dateRange */}
-          <ICBySymbol dateRange={dateRange} />
+          <ICBySymbol dateRange={dateRange} horizon={horizon} />
 
           {/* New plots: Quintile Returns + Capacity proxy */}
           <div className="grid md:grid-cols-2 gap-6">
@@ -784,17 +794,17 @@ export default function DashboardOOSSection() {
                 <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
             </div>
-            <MedianADVByDecile dateRange={dateRange} />
+            <MedianADVByDecile dateRange={dateRange} horizon={horizon} />
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-6">
-              <ICDistribution dateRange={dateRange} />
-              <SpreadDistribution dateRange={dateRange} />
+              <ICDistribution dateRange={dateRange} horizon={horizon} />
+              <SpreadDistribution dateRange={dateRange} horizon={horizon} />
             </div>
             <div className="space-y-6">
-              <BootstrapICDistribution dateRange={dateRange} />
-              <BootstrapSpreadDistribution dateRange={dateRange} />
+              <BootstrapICDistribution dateRange={dateRange} horizon={horizon} />
+              <BootstrapSpreadDistribution dateRange={dateRange} horizon={horizon} />
             </div>
           </div>
         </div>

@@ -77,19 +77,7 @@ Deno.serve(async (req) => {
       rolling_30d_hit_rate: mapHr.get(r.date) ?? null,
     }));
 
-    const { data: monthly, error: monthlyError } = await supabase
-      .from('monthly_performance_metrics')
-      .select(`
-        year,
-        month,
-        information_coefficient_1d,
-        n_preds
-      `)
-      .order('year', { ascending: true })
-      .order('month', { ascending: true });
-
-    if (monthlyError) throw monthlyError;
-
+    // Normalize integers
     const normalizeInteger = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? Math.trunc(value) : null;
       if (typeof value === 'string') {
@@ -99,11 +87,26 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    const monthlyCoerced = (monthly ?? []).map((row: Record<string, unknown>) => ({
+    // Load monthly performance metrics and compute summary stats for badges
+    const { data: monthlyRows, error: monthlyError } = await supabase
+      .from('monthly_performance_metrics')
+      .select(`
+        year,
+        month,
+        information_coefficient_1d,
+        information_coefficient_3d,
+        n_preds
+      `)
+      .order('year', { ascending: true })
+      .order('month', { ascending: true });
+    if (monthlyError) throw monthlyError;
+
+    const monthlyCoerced = (monthlyRows ?? []).map((row: Record<string, unknown>) => ({
       year: normalizeInteger(row.year),
       month: normalizeInteger(row.month),
-      information_coefficient_1d: coerceNumber(row.information_coefficient_1d),
-      n_preds: normalizeInteger(row.n_preds) ?? 0,
+      information_coefficient_1d: coerceNumber((row as any).information_coefficient_1d ?? (row as any).ic_1d ?? (row as any).ic),
+      information_coefficient_3d: coerceNumber((row as any).information_coefficient_3d ?? (row as any).ic_3d ?? null),
+      n_preds: normalizeInteger((row as any).n_preds ?? (row as any).n) ?? 0,
     }));
 
     // Latest non-null rolling values from merged series
@@ -124,7 +127,26 @@ Deno.serve(async (req) => {
       rolling_30d_hit_rate: cross[lastIdx].rolling_30d_hit_rate,
     } : null;
 
-    return json({ cross, monthly: monthlyCoerced, latest: latestRow });
+    // Compute monthly summaries for badges
+    const computeSummary = (vals: number[]) => {
+      const clean = vals.filter((v) => typeof v === 'number' && Number.isFinite(v));
+      if (!clean.length) return { mean: null, std: null, positive_share: null, icir_ann: null } as const;
+      const mean = clean.reduce((a, b) => a + b, 0) / clean.length;
+      const variance = clean.length > 1 ? clean.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (clean.length - 1) : 0;
+      const std = Math.sqrt(variance);
+      const positive_share = clean.filter((v) => v > 0).length / clean.length;
+      const icir_ann = std ? (mean / std) * Math.sqrt(12) : null;
+      return { mean, std, positive_share, icir_ann } as const;
+    };
+    const vals1d = monthlyCoerced.map((r) => r.information_coefficient_1d as number | null).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const vals3d = monthlyCoerced.map((r) => r.information_coefficient_3d as number | null).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const monthly_summary = {
+      one_day: computeSummary(vals1d),
+      three_day: computeSummary(vals3d),
+      count: { one_day: vals1d.length, three_day: vals3d.length },
+    } as const;
+
+    return json({ cross, monthly: monthlyCoerced, monthly_summary, latest: latestRow });
   } catch (error) {
     console.error('Function error:', error);
     return json({

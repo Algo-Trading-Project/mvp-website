@@ -15,6 +15,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const start: string | undefined = body?.start;
     const end: string | undefined = body?.end;
+    const horizon: string = (body?.horizon === '3d') ? '3d' : '1d';
     const windowSize: number = Number(body?.window ?? 30); // Kept for compatibility; data is precomputed at 30d
     const height = Number(body?.height ?? 360);
 
@@ -41,6 +42,7 @@ Deno.serve(async (req) => {
         window: windowSize,
         p_limit: PAGE,
         p_offset: offset,
+        p_horizon: horizon,
       });
       if (rpc.error) throw rpc.error;
       const chunk = (rpc.data ?? []) as Array<Record<string, unknown>>;
