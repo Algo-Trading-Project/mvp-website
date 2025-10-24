@@ -14,7 +14,7 @@ import {
 import PerformancePublicSkeleton from "@/components/skeletons/PerformancePublicSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
+import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot, monthlyIcSummary } from "@/api/functions";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
@@ -44,6 +44,23 @@ export default function DashboardOOSSection() {
       console.warn("Failed to read dashboard default range cache", err);
     }
     return null;
+  }, []);
+
+  // Fetch monthly IC summary (1d/3d aggregates) for badges
+  React.useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const res = await monthlyIcSummary({});
+        if (!cancelled && res && (res.one_day || res.three_day)) {
+          setMonthlySummary({ one_day: res.one_day, three_day: res.three_day });
+        }
+      } catch (err) {
+        console.warn('monthlyIcSummary failed', err);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
   }, []);
 
   const cloneSummary = (summary) => ({
@@ -188,7 +205,9 @@ export default function DashboardOOSSection() {
       }
 
       setMonthlyRows(metrics?.monthly || []);
-      setMonthlySummary(metrics?.monthly_summary || null);
+      if (metrics?.monthly_summary && (metrics.monthly_summary.one_day || metrics.monthly_summary.three_day)) {
+        setMonthlySummary(metrics.monthly_summary);
+      }
 
       setLoading(false);
     };

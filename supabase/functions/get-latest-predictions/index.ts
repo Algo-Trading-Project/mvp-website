@@ -13,47 +13,23 @@ Deno.serve(async (req) => {
     }
 
     const supabase = getServiceSupabaseClient();
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const horizon = (body?.horizon === '3d') ? '3d' : '1d';
 
-    // Try RPC; if unavailable, fall back to querying the latest date directly
-    let data: unknown[] | null = null;
-    try {
-      const rpc = await supabase.rpc('rpc_latest_predictions_snapshot');
-      if (rpc.error) throw rpc.error;
-      data = rpc.data as unknown[] | null;
-    } catch (_rpcErr) {
-      // Find latest date
-      const { data: latest, error: latestErr } = await supabase
-        .from('predictions')
-        .select('date')
-        .not('date', 'is', null)
-        .order('date', { ascending: false })
-        .limit(1);
-      if (latestErr) throw latestErr;
-      const maxDate = latest?.[0]?.date;
-      if (!maxDate) {
-        return json({ date: null, rows: [] });
-      }
-      const { data: rows, error: rowsErr } = await supabase
-        .from('predictions')
-        .select('date, symbol_id, predicted_returns_1')
-        .eq('date', maxDate)
-        .limit(100000);
-      if (rowsErr) throw rowsErr;
-      data = rows as unknown[] | null;
-    }
+    // Only use RPC; no table fallbacks
+    const rpc = await supabase.rpc('rpc_latest_predictions_snapshot', { p_horizon: horizon });
+    if (rpc.error) throw rpc.error;
+    const data = rpc.data as unknown[] | null;
 
     const rows = (data ?? []).map((row: Record<string, unknown>) => ({
       symbol_id: String(row.symbol_id ?? ''),
       date: String(row.date ?? '').slice(0, 10),
-      y_pred:
-        typeof (row as any).predicted_returns_1 === 'number'
-          ? (Number.isFinite((row as any).predicted_returns_1) ? (row as any).predicted_returns_1 : null)
-          : typeof (row as any).predicted_returns_1 === 'string'
-          ? (() => {
-              const num = Number((row as any).predicted_returns_1);
-              return Number.isFinite(num) ? num : null;
-            })()
-          : null,
+      y_pred: (() => {
+        const v = (row as any).predicted_return;
+        if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+        if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : null; }
+        return null;
+      })(),
     })).filter((row) => row.symbol_id && row.date);
 
     if (!rows.length) {

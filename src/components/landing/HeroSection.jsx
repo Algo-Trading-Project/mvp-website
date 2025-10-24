@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Cpu, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { fetchMetrics } from "@/api/functions";
+import { monthlyIcSummary } from "@/api/functions";
 
 export default function HeroSection() {
   const [icir1d, setIcir1d] = React.useState(null);
@@ -11,39 +11,14 @@ export default function HeroSection() {
 
   React.useEffect(() => {
     const loadMonthly = async () => {
-      // Add a version tag to bust stale cache entries
-      const data = await fetchMetrics({ version: 2 });
-      if (data?.monthly_summary?.one_day) {
-        const s = data.monthly_summary.one_day;
-        setIcir1d(typeof s.icir_ann === 'number' ? s.icir_ann : null);
-        setPositiveShare(typeof s.positive_share === 'number' ? s.positive_share : null);
-        return;
+      const data = await monthlyIcSummary({}).catch(() => null);
+      if (data?.one_day) {
+        setIcir1d(typeof data.one_day.icir_ann === 'number' ? data.one_day.icir_ann : null);
+        setPositiveShare(typeof data.one_day.positive_share === 'number' ? data.one_day.positive_share : null);
+      } else {
+        setIcir1d(null);
+        setPositiveShare(null);
       }
-      // Fallback: compute from rows if summary missing
-      const rows = Array.isArray(data?.monthly) ? data.monthly : [];
-      const toNumber = (value) => {
-        if (typeof value === "number") return Number.isNaN(value) ? null : value;
-        if (typeof value === "string" && value.trim() !== "") {
-          const num = Number(value);
-          return Number.isNaN(num) ? null : num;
-        }
-        return null;
-      };
-      const vals1d = rows.map(r => toNumber(r.information_coefficient_1d)).filter(v => v !== null);
-      const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-      const std = (arr) => {
-        if (arr.length < 2) return 0;
-        const m = mean(arr);
-        const variance = arr.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (arr.length - 1);
-        return Math.sqrt(variance);
-      };
-      const icStd = std(vals1d);
-      const icMean = mean(vals1d);
-      const icir = icStd > 0 ? (icMean / icStd) * Math.sqrt(12) : null;
-      const positives = vals1d.filter(v => v > 0).length;
-      const share = vals1d.length ? positives / vals1d.length : null;
-      setIcir1d(icir);
-      setPositiveShare(share);
     };
     loadMonthly();
   }, []);

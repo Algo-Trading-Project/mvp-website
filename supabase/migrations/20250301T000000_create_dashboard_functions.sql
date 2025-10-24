@@ -63,27 +63,30 @@ as $$
   order by quintile;
 $$;
 
--- 5) Latest prediction snapshot for 1d regression model
-create or replace function rpc_latest_predictions_snapshot()
+-- Latest prediction snapshot (horizon-aware)
+create or replace function rpc_latest_predictions_snapshot(
+  p_horizon text default '1d'
+)
 returns table(
   date date,
   symbol_id text,
-  predicted_returns_1 double precision
+  predicted_return double precision
 )
 language sql
+stable
 as $$
 with latest as (
   select max(date) as max_date
   from predictions
-  where predicted_returns_1 is not null
+  where (case when p_horizon = '3d' then predicted_returns_3 else predicted_returns_1 end) is not null
 )
 select
   p.date,
   p.symbol_id,
-  p.predicted_returns_1
+  (case when p_horizon = '3d' then p.predicted_returns_3 else p.predicted_returns_1 end) as predicted_return
 from predictions p
 join latest l on p.date = l.max_date
-where p.predicted_returns_1 is not null
+where (case when p_horizon = '3d' then p.predicted_returns_3 else p.predicted_returns_1 end) is not null
   and p.symbol_id is not null;
 $$;
 

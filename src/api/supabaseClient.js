@@ -241,6 +241,7 @@ const authClient = {
   spreadDistributionPlot: "spread-distribution-plot",
   bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
   advByDecilePlot: "adv-by-decile-plot",
+  monthlyIcSummary: "monthly-ic-summary",
   predictionsCoverage: "predictions-coverage",
   listPredictionDates: "list-prediction-dates",
   predictionsRange: "predictions-range",

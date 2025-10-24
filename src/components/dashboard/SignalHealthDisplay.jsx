@@ -30,11 +30,11 @@ export default function SignalHealthDisplay({ title, data }) {
           {/* Rolling Hit Rate - 2 decimal places for percentage */}
           <div>
             <h4 className="flex items-center justify-center space-x-2 text-base font-medium mb-4 text-center">
-              <Target className="w-4 h-4 text-emerald-400" />
+              <Target className="w-4 h-4 text-amber-400" />
               <span>Rolling Hit Rate (30‑day)</span>
             </h4>
             <div className="text-center p-3 bg-slate-800/60 rounded-md">
-              <div className="text-lg font-semibold text-emerald-400">
+              <div className="text-lg font-semibold text-amber-400">
                 {formatNumber(data.hit_rate_30d, (val) => `${(val * 100).toFixed(2)}%`)}
               </div>
             </div>
@@ -43,11 +43,11 @@ export default function SignalHealthDisplay({ title, data }) {
           {/* Average Top-Bottom Decile Spread - 2 decimal places for percentage */}
           <div>
             <h4 className="flex items-center justify-center space-x-2 text-base font-medium mb-4 text-center">
-              <TrendingUp className="w-4 h-4 text-amber-400" />
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
               <span>Avg. Top‑Bottom Decile Spread (30‑day)</span>
             </h4>
             <div className="text-center p-3 bg-slate-800/60 rounded-md">
-              <div className="text-lg font-semibold text-amber-300">
+              <div className="text-lg font-semibold text-emerald-300">
                 {formatNumber(data.top_bottom_spread_30d, (val) => `${(val * 100).toFixed(2)}%`)}
               </div>
             </div>

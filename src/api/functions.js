@@ -86,6 +86,11 @@ export const predictionsCoverage = wrapCall(
   supabaseApi.functions.predictionsCoverage
 );
 
+export const monthlyIcSummary = wrapCall(
+  "Failed to load monthly IC summary",
+  supabaseApi.functions.monthlyIcSummary
+);
+
 export const listPredictionDates = wrapCall(
   "Failed to list prediction dates",
   supabaseApi.functions.listPredictionDates

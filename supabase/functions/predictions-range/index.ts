@@ -7,6 +7,7 @@ type Payload = {
   end?: string;
   tokens?: string[] | null;
   limit?: number | null;
+  horizon?: '1d' | '3d' | 'both' | string | null;
 };
 
 const isIsoDate = (v: string | undefined | null) =>
@@ -21,7 +22,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { start, end, tokens, limit }: Payload = await req.json().catch(() => ({} as Payload));
+    const { start, end, tokens, limit, horizon }: Payload = await req.json().catch(() => ({} as Payload));
     if (!isIsoDate(start) || !isIsoDate(end)) {
       return json({ error: "start and end must be YYYY-MM-DD" }, { status: 400 });
     }
@@ -110,9 +111,17 @@ Deno.serve(async (req) => {
       ? tokens.filter((t) => typeof t === "string" && t.trim().length).map((t) => t.trim().toUpperCase())
       : null;
 
+    const pHorizon = (typeof horizon === 'string' && (horizon === '3d' || horizon === 'both')) ? horizon as '3d' | 'both' : '1d';
+
     let base = supabase
       .from('predictions')
-      .select('date, symbol_id, predicted_returns_1')
+      .select(
+        pHorizon === 'both'
+          ? 'date, symbol_id, predicted_returns_1, predicted_returns_3'
+          : (pHorizon === '3d'
+              ? 'date, symbol_id, predicted_returns_3'
+              : 'date, symbol_id, predicted_returns_1')
+      )
       .gte('date', start!)
       .lte('date', end!)
       .order('date', { ascending: true })
@@ -160,21 +169,35 @@ Deno.serve(async (req) => {
       if (chunk.length < PAGE_SIZE) break;
     }
 
-    const rows = (merged ?? []).map((row: Record<string, unknown>) => ({
-      date: String(row.date ?? "").slice(0, 10),
-      symbol_id: String(row.symbol_id ?? ""),
-      y_pred:
-        typeof (row as any).predicted_returns_1 === "number"
-          ? (Number.isFinite((row as any).predicted_returns_1) ? (row as any).predicted_returns_1 : null)
-          : typeof (row as any).predicted_returns_1 === "string"
-          ? (() => { const n = Number((row as any).predicted_returns_1); return Number.isFinite(n) ? n : null; })()
-          : null,
-    })).filter((r) => r.date && r.symbol_id);
+    const mapNumber = (v: unknown): number | null => {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+      if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : null; }
+      return null;
+    };
 
-    return json({
-      count: rows.length,
-      rows,
-    });
+    let rows: any[] = [];
+    if (pHorizon === 'both') {
+      rows = (merged ?? []).map((row: Record<string, unknown>) => ({
+        date: String(row.date ?? "").slice(0, 10),
+        symbol_id: String(row.symbol_id ?? ""),
+        predicted_returns_1: mapNumber((row as any).predicted_returns_1),
+        predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+      })).filter((r) => r.date && r.symbol_id);
+    } else if (pHorizon === '3d') {
+      rows = (merged ?? []).map((row: Record<string, unknown>) => ({
+        date: String(row.date ?? "").slice(0, 10),
+        symbol_id: String(row.symbol_id ?? ""),
+        predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+      })).filter((r) => r.date && r.symbol_id);
+    } else {
+      rows = (merged ?? []).map((row: Record<string, unknown>) => ({
+        date: String(row.date ?? "").slice(0, 10),
+        symbol_id: String(row.symbol_id ?? ""),
+        predicted_returns_1: mapNumber((row as any).predicted_returns_1),
+      })).filter((r) => r.date && r.symbol_id);
+    }
+
+    return json({ count: rows.length, rows, horizon: pHorizon });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }

@@ -6,12 +6,12 @@ import { createPageUrl } from "@/utils";
 import { getLatestPredictions } from "@/api/functions";
 import { toast } from "sonner";
 
-export const TOP_SIGNALS_CACHE_KEY = "top-signals-cache-v1";
+export const getTopSignalsCacheKey = (horizon = '1d') => `top-signals-cache-v2:${horizon}`;
 
-const loadSignalsCache = () => {
+const loadSignalsCache = (cacheKey) => {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage?.getItem(TOP_SIGNALS_CACHE_KEY);
+    const raw = window.sessionStorage?.getItem(cacheKey);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (error) {
@@ -20,13 +20,13 @@ const loadSignalsCache = () => {
   }
 };
 
-const persistSignalsCache = (snapshot) => {
+const persistSignalsCache = (cacheKey, snapshot) => {
   if (typeof window === "undefined") return;
   try {
     if (snapshot) {
-      window.sessionStorage?.setItem(TOP_SIGNALS_CACHE_KEY, JSON.stringify(snapshot));
+      window.sessionStorage?.setItem(cacheKey, JSON.stringify(snapshot));
     } else {
-      window.sessionStorage?.removeItem(TOP_SIGNALS_CACHE_KEY);
+      window.sessionStorage?.removeItem(cacheKey);
     }
   } catch (error) {
     console.warn("Failed to persist top signals cache", error);
@@ -71,8 +71,9 @@ const SignalTableSkeleton = ({ title, icon: Icon, iconColor }) => (
   </div>
 );
 
-export default function TopSignals({ subscription, loading = false, onLoadingChange = () => {} }) {
-  const cacheRef = React.useRef(loadSignalsCache());
+export default function TopSignals({ subscription, horizon = '1d', loading = false, onLoadingChange = () => {} }) {
+  const cacheKey = getTopSignalsCacheKey(horizon);
+  const cacheRef = React.useRef(loadSignalsCache(cacheKey));
   const cached = cacheRef.current;
 
   const [topSignals, setTopSignals] = React.useState(cached?.topSignals ?? []);
@@ -91,7 +92,7 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
       }
 
       try {
-        const data = await getLatestPredictions({}, { signal: abortSignal });
+        const data = await getLatestPredictions({ horizon }, { signal: abortSignal });
         if (abortSignal?.aborted) return;
 
         const lastDate = data?.date;
@@ -156,7 +157,7 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
           lastUpdated: new Date().toISOString(),
         };
         cacheRef.current = snapshot;
-        persistSignalsCache(snapshot);
+        persistSignalsCache(cacheKey, snapshot);
       } catch (err) {
         if (abortSignal?.aborted) return;
         console.error("Failed to load latest predictions", err);
@@ -186,7 +187,7 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
     const hasCache = Boolean(cacheRef.current);
     loadSignals(controller.signal, { suppressLoading: hasCache });
     return () => controller.abort();
-  }, [loadSignals]);
+  }, [loadSignals, horizon]);
 
   const getPercentileColor = (percentile) => {
     if (percentile >= 95) return "text-emerald-400";
@@ -282,7 +283,7 @@ export default function TopSignals({ subscription, loading = false, onLoadingCha
                     <div className={`font-semibold text-sm ${getReturnColor(signal.pred_return)}`}>
                       {pct(signal.pred_return, 1)}
                     </div>
-                    <div className="text-xs text-slate-400">1d Pred</div>
+                    <div className="text-xs text-slate-400">{horizon === '3d' ? '3d Pred' : '1d Pred'}</div>
                   </div>
                   <div className="px-3 text-center">
                     <div className={`font-semibold text-sm ${getPercentileColor(signal.percentile)}`}>

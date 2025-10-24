@@ -1,4 +1,5 @@
 # TODO: implement daily refresh of daily_dashboard_metrics materialized view
+# TODO: implement daily refresh of model_performance_metrics_monthly_agg materialized view
 
 cross_sectional_metrics_1d schema (
 date

@@ -8,27 +8,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 
-function toCSV(rows) {
-  const headers = ["date", "symbol", "y_pred"];
+function toCSV(rows, horizon = '1d') {
+  const both = horizon === 'both';
+  const headers = both
+    ? ["date", "symbol", "predicted_returns_1", "predicted_returns_3"]
+    : ["date", "symbol", horizon === '3d' ? "predicted_returns_3" : "predicted_returns_1"];
   const lines = [headers.join(",")];
   rows.forEach(r => {
-    const line = [
-      r.date,
-      r.symbol,
-      r.y_pred ?? ""
-    ].join(",");
+    const line = both
+      ? [r.date, r.symbol, (r.predicted_returns_1 ?? ""), (r.predicted_returns_3 ?? "")].join(",")
+      : [r.date, r.symbol, (horizon === '3d' ? (r.predicted_returns_3 ?? "") : (r.predicted_returns_1 ?? ""))].join(",");
     lines.push(line);
   });
   return lines.join("\n");
 }
 
-async function fetchPredictionsForDate(date) {
-  const res = await predictionsRange({ start: date, end: date, limit: 200000 });
+async function fetchPredictionsForDate(date, horizon = '1d') {
+  const res = await predictionsRange({ start: date, end: date, limit: 200000, horizon });
   const rows = Array.isArray(res?.rows) ? res.rows : [];
+  if (horizon === 'both') {
+    return rows.map((r) => ({
+      date: r.date,
+      symbol: String(r.symbol_id || "").split("_")[0],
+      predicted_returns_1: r.predicted_returns_1,
+      predicted_returns_3: r.predicted_returns_3,
+    }));
+  }
   return rows.map((r) => ({
     date: r.date,
     symbol: String(r.symbol_id || "").split("_")[0],
-    y_pred: r.y_pred,
+    predicted_returns_1: r.predicted_returns_1,
+    predicted_returns_3: r.predicted_returns_3,
   }));
 }
 
@@ -53,6 +63,7 @@ export default function SignalsHub() {
 
   const [latestDate, setLatestDate] = React.useState("");
   const [todayLoading, setTodayLoading] = React.useState(false);
+  const [horizon, setHorizon] = React.useState('1d'); // '1d' | '3d' | 'both'
 
   const [range, setRange] = React.useState({ start: "", end: "" });
   const [rangeLoading, setRangeLoading] = React.useState(false);
@@ -181,7 +192,7 @@ export default function SignalsHub() {
         return;
       }
       // Pro+/API: fetch the day’s universe and list bases
-      const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000 });
+      const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000, horizon: '1d' });
       const rows = Array.isArray(res?.rows) ? res.rows : [];
       const unique = Array.from(
         new Set(rows.map((r) => String(r.symbol_id || "").split("_")[0]).filter(Boolean))
@@ -278,9 +289,10 @@ export default function SignalsHub() {
     }
     if (!latestDate) return;
     setTodayLoading(true);
-    const rows = await fetchPredictionsForDate(latestDate);
-    const csv = toCSV(rows);
-    saveFile(csv, `predictions_${latestDate}.csv`);
+    const rows = await fetchPredictionsForDate(latestDate, horizon);
+    const csv = toCSV(rows, horizon);
+    const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
+    saveFile(csv, `predictions_${latestDate}${suffix}.csv`);
     setTodayLoading(false);
   };
 
@@ -290,9 +302,10 @@ export default function SignalsHub() {
       setShowUpgradeModal(true);
       return;
     }
-    const rows = await fetchPredictionsForDate(date);
-    const csv = toCSV(rows);
-    saveFile(csv, `predictions_${date}.csv`);
+    const rows = await fetchPredictionsForDate(date, horizon);
+    const csv = toCSV(rows, horizon);
+    const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
+    saveFile(csv, `predictions_${date}${suffix}.csv`);
   };
 
   const handleTokenFilterClick = () => {
@@ -331,29 +344,46 @@ export default function SignalsHub() {
 
     setRangeLoading(true);
     const tokenFilter = selectedTokens;
-    const payload = { start: range.start, end: range.end, limit: 200000 };
+    const payload = { start: range.start, end: range.end, limit: 200000, horizon };
     if (tokenFilter && tokenFilter.length) {
       // Use short symbols (BTC) — server expands to *_USD
       Object.assign(payload, { tokens: tokenFilter });
     }
     const res = await predictionsRange(payload);
-    const allRows = (res?.rows || []).map((r) => ({
-      date: r.date,
-      symbol: String(r.symbol_id || "").split("_")[0],
-      y_pred: r.y_pred,
-    }));
+    let allRows = [];
+    if (horizon === 'both') {
+      allRows = (res?.rows || []).map((r) => ({
+        date: r.date,
+        symbol: String(r.symbol_id || "").split("_")[0],
+        predicted_returns_1: r.predicted_returns_1,
+        predicted_returns_3: r.predicted_returns_3,
+      }));
+    } else if (horizon === '3d') {
+      allRows = (res?.rows || []).map((r) => ({
+        date: r.date,
+        symbol: String(r.symbol_id || "").split("_")[0],
+        predicted_returns_3: r.predicted_returns_3,
+      }));
+    } else {
+      allRows = (res?.rows || []).map((r) => ({
+        date: r.date,
+        symbol: String(r.symbol_id || "").split("_")[0],
+        predicted_returns_1: r.predicted_returns_1,
+      }));
+    }
 
     // For free users, always filter to free tier tokens
     const tokensToFilter = selectedTokens;
     if (tokensToFilter && tokensToFilter.length > 0) {
       const setTokens = new Set(tokensToFilter.map((s) => s.toUpperCase()));
       const filtered = allRows.filter(r => setTokens.has(r.symbol.toUpperCase()));
-      const csv = toCSV(filtered);
-      const suffix = isFreeUser ? "_free_tier" : "_filtered";
+      const csv = toCSV(filtered, horizon);
+      const suffix = (isFreeUser ? "_free_tier" : "_filtered") + (horizon === 'both' ? '_both' : `_${horizon}`);
       saveFile(csv, `predictions_${range.start}_to_${range.end}${suffix}.csv`);
     } else {
-      const csv = toCSV(allRows);
-      saveFile(csv, `predictions_${range.start}_to_${range.end}.csv`);
+      const csv = toCSV(allRows, horizon);
+      const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
+      saveFile(csv, `predictions_${range.start}_to_${range.end}${suffix}.csv`);
     }
     
     setRangeLoading(false);
@@ -392,6 +422,7 @@ export default function SignalsHub() {
               <Calendar className="w-4 h-4" />
               <span>Latest: {latestDate || "Loading..."}</span>
             </div>
+            
             <span
               className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border ${
                 freshness.tone === 'ok'
@@ -465,6 +496,20 @@ export default function SignalsHub() {
                       min="2020-01-01"
                       onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}
                     />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2 mb-1">
+                      <label className="block text-sm font-medium text-slate-300">Model</label>
+                    </div>
+                    <select
+                      className="w-44 h-9 bg-slate-800 border border-slate-600 rounded-md px-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={horizon}
+                      onChange={(e) => setHorizon(['1d','3d','both'].includes(e.target.value) ? e.target.value : '1d')}
+                    >
+                      <option value="1d">1‑Day</option>
+                      <option value="3d">3‑Day</option>
+                      <option value="both">Both</option>
+                    </select>
                   </div>
                 </div>
 

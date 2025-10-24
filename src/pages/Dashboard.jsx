@@ -5,11 +5,11 @@ import { Download, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
-import { fetchMetrics } from "@/api/functions";
+import { getSupabaseClient } from "@/api/supabaseClient";
 import { toast } from "sonner";
 
 import SignalHealthDisplay from "../components/dashboard/SignalHealthDisplay";
-import TopSignals, { TOP_SIGNALS_CACHE_KEY } from "../components/dashboard/TopSignals";
+import TopSignals, { getTopSignalsCacheKey } from "../components/dashboard/TopSignals";
 
 // Import subpage components
 import DashboardOOSSection from "../components/dashboard/DashboardOOSSection";
@@ -47,7 +47,7 @@ const persistDashboardCache = (snapshot) => {
 
 export default function Dashboard() {
   const MODEL_VERSION = "Model v1.3";
-  const MODEL_RELEASED_AT = "Retrained 2025-08-22";
+  const MODEL_RELEASED_AT = "Retrained 2025-08-01";
   const cacheRef = useRef(loadDashboardCache());
   const cached = cacheRef.current;
   const [activeTab, setActiveTab] = useState("regression"); // default to regression to avoid blank page
@@ -55,9 +55,10 @@ export default function Dashboard() {
   const [contentLoading, setContentLoading] = useState(() => (cached ? false : true));
   const [metricsRows, setMetricsRows] = useState(() => cached?.metricsRows ?? []);
   const [metricsLoading, setMetricsLoading] = useState(() => (cached ? false : true));
+  const [horizon, setHorizon] = useState('1d');
   const [signalsLoading, setSignalsLoading] = useState(() => {
     if (typeof window === "undefined") return true;
-    return window.sessionStorage?.getItem(TOP_SIGNALS_CACHE_KEY) ? false : true;
+    return window.sessionStorage?.getItem(getTopSignalsCacheKey('1d')) ? false : true;
   });
   const [metricsError, setMetricsError] = useState(null);
   const [latestSnapshot, setLatestSnapshot] = useState(() => cached?.latestSnapshot ?? null);
@@ -87,73 +88,81 @@ export default function Dashboard() {
     check();
   }, []);
 
-  // Load metrics data (no auth required)
+  // Load latest overview metrics directly from daily_dashboard_metrics (no Edge Function)
   useEffect(() => {
-    const loadMetrics = async () => {
-      if (!cacheRef.current) {
-        setMetricsLoading(true);
-      }
+    const loadLatest = async () => {
+      if (!cacheRef.current) setMetricsLoading(true);
       setMetricsError(null);
       try {
-        const data = await fetchMetrics({});
-        const normalize = (value) => {
-          if (typeof value === "number") return Number.isFinite(value) ? value : null;
-          if (typeof value === "string") {
-            const num = Number(value);
-            return Number.isFinite(num) ? num : null;
-          }
+        const supabase = getSupabaseClient();
+        // Fetch recent rows (>=30) and compute 30d metrics client-side to avoid schema drift
+        const { data, error } = await supabase
+          .from('daily_dashboard_metrics')
+          .select(`date,
+            ic:${horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d'},
+            spread:${horizon === '3d' ? 'cs_top_bottom_decile_spread_3d' : 'cs_top_bottom_decile_spread_1d'},
+            hitCount:${horizon === '3d' ? 'cs_hit_count_3d' : 'cs_hit_count_1d'},
+            totalCount:${horizon === '3d' ? 'total_count_3d' : 'total_count_1d'}`)
+          .order('date', { ascending: false })
+          .limit(90);
+        if (error) throw error;
+        const normalize = (v) => {
+          if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+          if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : null; }
           return null;
         };
+        const rowsDesc = Array.isArray(data) ? data : [];
+        // Take the most recent rows, then compute 30d metrics over non-null values
+        const rows = rowsDesc
+          .map((r) => ({
+            date: String(r.date ?? ''),
+            ic: normalize(r.ic),
+            spread: normalize(r.spread),
+            hitCount: normalize(r.hitCount) ?? 0,
+            totalCount: normalize(r.totalCount) ?? 0,
+          }))
+          .filter((r) => r.date)
+          .slice(0, 90)
+          .reverse(); // oldest→newest
 
-        const rows = Array.isArray(data?.cross) ? [...data.cross] : [];
-        rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+        const lastN = (n) => rows.slice(Math.max(0, rows.length - n));
+        const last30 = lastN(30);
 
-        const mapped = rows.map((r) => ({
-          date: r.date,
-          rolling_30d_ic_1d: normalize(r.rolling_30d_avg_ic ?? r.rolling_30d_ic_1d),
-          rolling_30d_avg_top_bottom_decile_spread_1d: normalize(
-            r.rolling_30d_avg_top_bottom_decile_spread ?? r.top_bottom_spread
-          ),
-          rolling_30d_hit_rate_1d: normalize(r.rolling_30d_hit_rate ?? r.hit_rate),
-        }));
-
-        setMetricsRows(mapped);
-        const snapshotLatest = data?.latest
-          ? {
-              rolling_ic_30d: normalize(data.latest.rolling_30d_avg_ic),
-              top_bottom_spread_30d: normalize(data.latest.rolling_30d_avg_top_bottom_decile_spread),
-              hit_rate_30d: normalize(data.latest.rolling_30d_hit_rate),
-            }
-          : null;
-        setLatestSnapshot(snapshotLatest);
-
-        cacheRef.current = {
-          metricsRows: mapped,
-          latestSnapshot: snapshotLatest,
-          fetchedAt: Date.now(),
+        const avg = (arr) => {
+          const vals = arr.filter((v) => typeof v === 'number' && Number.isFinite(v));
+          if (!vals.length) return null;
+          return vals.reduce((a, b) => a + b, 0) / vals.length;
         };
+        const ic30 = avg(last30.map((r) => r.ic));
+        const sp30 = avg(last30.map((r) => r.spread));
+        const hit30 = (() => {
+          const num = last30.reduce((s, r) => s + (typeof r.hitCount === 'number' ? r.hitCount : 0), 0);
+          const den = last30.reduce((s, r) => s + (typeof r.totalCount === 'number' ? r.totalCount : 0), 0);
+          if (!den) return null;
+          return num / den;
+        })();
+
+        const snapshotLatest = {
+          rolling_ic_30d: ic30,
+          top_bottom_spread_30d: sp30,
+          hit_rate_30d: hit30,
+        };
+        setLatestSnapshot(snapshotLatest);
+        cacheRef.current = { metricsRows: [], latestSnapshot: snapshotLatest, fetchedAt: Date.now() };
         persistDashboardCache(cacheRef.current);
       } catch (error) {
-        console.error("Failed to fetch metrics:", error);
-        if (!cacheRef.current) {
-          setMetricsRows([]); // Clear data on error when no cache
-          setLatestSnapshot(null);
-        } else {
-          setMetricsRows(cacheRef.current.metricsRows ?? []);
-          setLatestSnapshot(cacheRef.current.latestSnapshot ?? null);
-        }
-        const message = error?.message || "Unable to load dashboard metrics.";
+        console.error('Failed to load latest overview metrics', error);
+        setLatestSnapshot(null);
+        setMetricsRows([]);
+        const message = error?.message || 'Unable to load latest overview metrics.';
         setMetricsError(message);
-        toast.error("Metrics data could not be loaded", {
-          id: "dashboard-metrics-error",
-          description: message,
-        });
+        toast.error('Metrics data could not be loaded', { id: 'dashboard-metrics-error', description: message });
       } finally {
         setMetricsLoading(false);
       }
     };
-    loadMetrics();
-  }, []); // Remove dependency on auth status
+    loadLatest();
+  }, [horizon]);
 
   useEffect(() => {
     if (cacheRef.current) {
@@ -232,14 +241,25 @@ export default function Dashboard() {
                 {metricsError}
               </div>
             ) : null}
-            {/* Horizon toggle removed; 1d-only */}
+            {/* Model toggle */}
+            <div className="flex items-center justify-end mb-4">
+              <label className="text-xs text-slate-400 mr-2">Model</label>
+              <select
+                value={horizon}
+                onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
+                className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+              >
+                <option value="1d">1‑Day</option>
+                <option value="3d">3‑Day</option>
+              </select>
+            </div>
 
             <div className="grid lg:grid-cols-1 gap-6 mb-8">
               {currentModelData && (
-                <SignalHealthDisplay title="1-Day Model Health (Most Recent Data)" data={currentModelData} />
+                <SignalHealthDisplay title={`${horizon === '3d' ? '3-Day' : '1-Day'} Model Health (Most Recent Data)`} data={currentModelData} />
               )}
             </div>
-            <TopSignals subscription={subscription} loading={signalsLoading} onLoadingChange={setSignalsLoading} />
+            <TopSignals subscription={subscription} horizon={horizon} loading={signalsLoading} onLoadingChange={setSignalsLoading} />
           </>
         );
       case "regression":
