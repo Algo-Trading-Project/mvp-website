@@ -15,14 +15,7 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    // Compute rolling spread in SQL via RPC
-    const rpc = await supabase.rpc('rpc_rolling_spread', {
-      start_date: start,
-      end_date: end,
-      window: 30,
-    });
-    if (rpc.error) throw rpc.error;
-
+    // Compute rolling spread in SQL via RPC (paged)
     const coerceNumber = (v: unknown): number | null => {
       if (typeof v === 'number') return Number.isFinite(v) ? v : null;
       if (typeof v === 'string') {
@@ -31,8 +24,23 @@ Deno.serve(async (req) => {
       }
       return null;
     };
+    const PAGE = 1000; let offset = 0; const merged: Array<Record<string, unknown>> = [];
+    while (true) {
+      const rpc = await supabase.rpc('rpc_rolling_spread', {
+        start_date: start,
+        end_date: end,
+        window: 30,
+        p_limit: PAGE,
+        p_offset: offset,
+      });
+      if (rpc.error) throw rpc.error;
+      const chunk = (rpc.data ?? []) as Array<Record<string, unknown>>;
+      if (chunk.length) merged.push(...chunk);
+      if (chunk.length < PAGE) break;
+      offset += PAGE;
+    }
 
-    const rows = (rpc.data ?? []).map((r: Record<string, unknown>) => ({
+    const rows = (merged ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? '').slice(0, 10),
       spread: coerceNumber(r['value']),
     })).filter((r) => r.date);

@@ -12,14 +12,21 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
     const field = 'cs_top_bottom_decile_spread_1d';
-    const { data, error } = await supabase
-      .from('daily_dashboard_metrics')
-      .select(`${field}`)
-      .gte('date', start)
-      .lte('date', end);
-    if (error) throw error;
+    const pageSize = 1000; let fromIdx = 0; const all: any[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('daily_dashboard_metrics')
+        .select(`${field}`)
+        .gte('date', start)
+        .lte('date', end)
+        .range(fromIdx, fromIdx + pageSize - 1);
+      if (error) throw error;
+      if (data?.length) all.push(...data);
+      if (!data || data.length < pageSize) break;
+      fromIdx += pageSize;
+    }
 
-    const values = (data ?? []).map((r: Record<string, unknown>) => Number(r[field])).filter((v) => Number.isFinite(v));
+    const values = (all ?? []).map((r: Record<string, unknown>) => Number(r[field])).filter((v) => Number.isFinite(v));
     if (!values.length) return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No spread data in range.</body></html>' });
 
     const mean = values.reduce((a,b)=>a+b,0) / values.length;

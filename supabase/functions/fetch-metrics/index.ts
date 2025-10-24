@@ -15,21 +15,36 @@ Deno.serve(async (req) => {
     const supabase = getServiceSupabaseClient();
 
     // Load daily metrics from MV and compute rolling metrics client-side
-    const { data: mvRows, error: mvErr } = await supabase
-      .from('daily_dashboard_metrics')
-      .select('date, cs_spearman_ic_1d, cs_top_bottom_decile_spread_1d, cs_hit_count_1d, total_count_1d')
-      .order('date', { ascending: true });
-    if (mvErr) throw mvErr;
+    // Page through MV rows to avoid PostgREST row cap
+    const PAGE = 1000; let fromIdx = 0; const mvRows: any[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('daily_dashboard_metrics')
+        .select('date, cs_spearman_ic_1d, cs_top_bottom_decile_spread_1d, cs_hit_count_1d, total_count_1d')
+        .order('date', { ascending: true })
+        .range(fromIdx, fromIdx + PAGE - 1);
+      if (error) throw error;
+      if (data?.length) mvRows.push(...data);
+      if (!data || data.length < PAGE) break;
+      fromIdx += PAGE;
+    }
 
     // Rolling metrics via SQL RPCs (window=30)
-    const [rpcIc, rpcSpread, rpcHit] = await Promise.all([
-      supabase.rpc('rpc_rolling_ic', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
-      supabase.rpc('rpc_rolling_spread', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
-      supabase.rpc('rpc_rolling_hit_rate', { start_date: '2000-01-01', end_date: '2099-12-31', window: 30 }),
+    // Page through rolling series via RPCs
+    async function fetchRolling(name: string) {
+      let offset = 0; const acc: any[] = []; const page = 1000;
+      while (true) {
+        const rpc = await supabase.rpc(name, { start_date: '2000-01-01', end_date: '2099-12-31', window: 30, p_limit: page, p_offset: offset });
+        if (rpc.error) throw rpc.error; const chunk = (rpc.data ?? []) as any[];
+        if (chunk.length) acc.push(...chunk); if (chunk.length < page) break; offset += page;
+      }
+      return acc;
+    }
+    const [rIc, rSp, rHr] = await Promise.all([
+      fetchRolling('rpc_rolling_ic'),
+      fetchRolling('rpc_rolling_spread'),
+      fetchRolling('rpc_rolling_hit_rate'),
     ]);
-    if (rpcIc.error) throw rpcIc.error;
-    if (rpcSpread.error) throw rpcSpread.error;
-    if (rpcHit.error) throw rpcHit.error;
 
     const coerceNumber = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -49,17 +64,17 @@ Deno.serve(async (req) => {
     }));
 
     // Index rolling series by date for quick merge
-    const rIc = new Map((rpcIc.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
-    const rSp = new Map((rpcSpread.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
-    const rHr = new Map((rpcHit.data ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const mapIc = new Map((rIc ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const mapSp = new Map((rSp ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const mapHr = new Map((rHr ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
 
     const cross = daily.map((r) => ({
       date: r.date,
       cross_sectional_ic_1d: r.ic,
-      rolling_30d_avg_ic: rIc.get(r.date) ?? null,
+      rolling_30d_avg_ic: mapIc.get(r.date) ?? null,
       cs_top_bottom_decile_spread: r.spread,
-      rolling_30d_avg_top_bottom_decile_spread: rSp.get(r.date) ?? null,
-      rolling_30d_hit_rate: rHr.get(r.date) ?? null,
+      rolling_30d_avg_top_bottom_decile_spread: mapSp.get(r.date) ?? null,
+      rolling_30d_hit_rate: mapHr.get(r.date) ?? null,
     }));
 
     const { data: monthly, error: monthlyError } = await supabase

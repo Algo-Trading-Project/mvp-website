@@ -9,9 +9,17 @@ Deno.serve(async (req) => {
     const { start, end, window = 30, height = 360 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
     const supabase = getServiceSupabaseClient();
-    const rpc = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end });
-    if (rpc.error) throw rpc.error;
-    const data = rpc.data as any[] | null;
+    // Try the v2 RPC (predicted_returns_1); fallback to legacy name if missing
+    let data: any[] | null = null;
+    try {
+      const rpc2 = await supabase.rpc('rpc_adv_by_decile_v2', { start_date: start, end_date: end });
+      if (rpc2.error) throw rpc2.error;
+      data = rpc2.data as any[] | null;
+    } catch (_e) {
+      const rpc = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end });
+      if (rpc.error) throw rpc.error;
+      data = rpc.data as any[] | null;
+    }
     const bars = (data ?? [])
       .map((r: Record<string, unknown>) => ({
         decile: Number(r.decile),

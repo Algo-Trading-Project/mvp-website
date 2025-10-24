@@ -20,15 +20,21 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
 
-    const { data, error } = await supabase
-      .from('daily_dashboard_metrics')
-      .select(`${field}`)
-      .gte('date', start)
-      .lte('date', end);
+    const pageSize = 1000; let fromIdx = 0; const rowsAll: any[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('daily_dashboard_metrics')
+        .select(`${field}`)
+        .gte('date', start)
+        .lte('date', end)
+        .range(fromIdx, fromIdx + pageSize - 1);
+      if (error) throw error;
+      if (data?.length) rowsAll.push(...data);
+      if (!data || data.length < pageSize) break;
+      fromIdx += pageSize;
+    }
 
-    if (error) throw error;
-
-    const rows = data ?? [];
+    const rows = rowsAll ?? [];
 
     if (!rows.length) {
       return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No IC data in selected range.</body></html>', bins: [] });

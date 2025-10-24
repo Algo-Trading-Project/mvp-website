@@ -1,3 +1,5 @@
+# TODO: implement daily refresh of daily_dashboard_metrics materialized view
+
 cross_sectional_metrics_1d schema (
 date
 cross_sectional_ic_1d

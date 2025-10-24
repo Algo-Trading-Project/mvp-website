@@ -33,13 +33,22 @@ Deno.serve(async (req) => {
       }
       return null;
     };
-    const rpc = await supabase.rpc('rpc_rolling_hit_rate', {
-      start_date: start,
-      end_date: end,
-      window: windowSize,
-    });
-    if (rpc.error) throw rpc.error;
-    const rows: Row[] = (rpc.data ?? []).map((r: Record<string, unknown>) => ({
+    const PAGE = 1000; let offset = 0; const merged: Array<Record<string, unknown>> = [];
+    while (true) {
+      const rpc = await supabase.rpc('rpc_rolling_hit_rate', {
+        start_date: start,
+        end_date: end,
+        window: windowSize,
+        p_limit: PAGE,
+        p_offset: offset,
+      });
+      if (rpc.error) throw rpc.error;
+      const chunk = (rpc.data ?? []) as Array<Record<string, unknown>>;
+      if (chunk.length) merged.push(...chunk);
+      if (chunk.length < PAGE) break;
+      offset += PAGE;
+    }
+    const rows: Row[] = (merged ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? '').slice(0, 10),
       rate: coerceNumber(r['value']),
     })).filter((r) => r.date && r.rate !== null);

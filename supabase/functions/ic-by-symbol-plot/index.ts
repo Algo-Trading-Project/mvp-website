@@ -18,13 +18,23 @@ Deno.serve(async (req) => {
     const supabase = getServiceSupabaseClient();
 
     // Fully SQL via RPC
-    const rpc = await supabase.rpc('rpc_symbol_ic', {
-      start_date: start,
-      end_date: end,
-      min_points: minPoints,
-    });
-    if (rpc.error) throw rpc.error;
-    const data: unknown[] | null = rpc.data as unknown[] | null;
+    // Page symbol IC results to avoid row caps
+    const PAGE = 1000; let offset = 0; const acc: any[] = [];
+    while (true) {
+      const rpc = await supabase.rpc('rpc_symbol_ic', {
+        start_date: start,
+        end_date: end,
+        min_points: minPoints,
+        p_limit: PAGE,
+        p_offset: offset,
+      });
+      if (rpc.error) throw rpc.error;
+      const chunk = (rpc.data ?? []) as any[];
+      if (chunk.length) acc.push(...chunk);
+      if (!chunk.length || chunk.length < PAGE) break;
+      offset += PAGE;
+    }
+    const data: unknown[] | null = acc;
 
     const coerceNumber = (value: unknown) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : null;

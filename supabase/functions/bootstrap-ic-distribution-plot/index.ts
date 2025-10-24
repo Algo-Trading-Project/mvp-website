@@ -16,15 +16,21 @@ Deno.serve(async (req) => {
     const supabase = getServiceSupabaseClient();
 
     const field = 'cs_spearman_ic_1d';
-    const { data, error } = await supabase
-      .from('daily_dashboard_metrics')
-      .select(`${field}`)
-      .gte('date', start)
-      .lte('date', end);
+    const pageSize = 1000; let fromIdx = 0; const rowsAll: any[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('daily_dashboard_metrics')
+        .select(`${field}`)
+        .gte('date', start)
+        .lte('date', end)
+        .range(fromIdx, fromIdx + pageSize - 1);
+      if (error) throw error;
+      if (data?.length) rowsAll.push(...data);
+      if (!data || data.length < pageSize) break;
+      fromIdx += pageSize;
+    }
 
-    if (error) throw error;
-
-    const dailyIcs = (data ?? []).map((row: Record<string, unknown>) => Number(row[field]))
+    const dailyIcs = (rowsAll ?? []).map((row: Record<string, unknown>) => Number(row[field]))
       .filter((value) => Number.isFinite(value));
     if (dailyIcs.length === 0) {
         return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data in range.</body></html>' });
