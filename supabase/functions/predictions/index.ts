@@ -37,6 +37,38 @@ Deno.serve(async (req) => {
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
   const endDate = normalizeDate(url.searchParams.get('end_date') ?? '');
   const tokens = parseTokens(url.searchParams.get('tokens'));
+
+  // Parse strict horizon from query params: horizon=1d, horizon=3d, or both
+  const rawHorizon = url.searchParams.getAll('horizon');
+  const parseHorizonStrict = (h: string[]): '1d' | '3d' | 'both' => {
+    if (!h.length) return '1d';
+    const parts: string[] = [];
+    for (const item of h) {
+      const segs = String(item || '')
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+      parts.push(...segs);
+    }
+    if (parts.includes('both')) return 'both';
+    const allowed = new Set(['1d','3d']);
+    for (const v of parts) {
+      if (!allowed.has(v)) {
+        throw new Error("Invalid horizon. Allowed values: '1d', '3d' (or both).");
+      }
+    }
+    const has1 = parts.includes('1d');
+    const has3 = parts.includes('3d');
+    if (has1 && has3) return 'both';
+    if (has3) return '3d';
+    return '1d';
+  };
+  let horizon: '1d' | '3d' | 'both';
+  try {
+    horizon = parseHorizonStrict(rawHorizon);
+  } catch (e) {
+    return json({ error: (e as Error).message }, { status: 400 });
+  }
   // Removed limit enforcement to return full ranges
 
   if (!startDate || !endDate) {
@@ -59,9 +91,14 @@ Deno.serve(async (req) => {
       }
     }
     // Build base query
+    const targetCol = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
+    const selectCols = horizon === 'both'
+      ? 'date, symbol_id, predicted_returns_1, predicted_returns_3'
+      : `date, symbol_id, ${targetCol}`;
+
     let base = supabase
       .from('predictions')
-      .select('date, symbol_id, predicted_returns_1')
+      .select(selectCols)
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date', { ascending: true })
@@ -92,25 +129,42 @@ Deno.serve(async (req) => {
       if (chunk.length < PAGE_SIZE) break;
     }
 
-    const rows = (merged ?? []).map((row: Record<string, unknown>) => ({
-      date: String(row.date ?? '').slice(0, 10),
-      symbol_id: String(row.symbol_id ?? ''),
-      y_pred:
-        typeof (row as any).predicted_returns_1 === 'number'
-          ? (Number.isFinite((row as any).predicted_returns_1) ? (row as any).predicted_returns_1 : null)
-          : typeof (row as any).predicted_returns_1 === 'string'
-          ? (() => {
-              const num = Number((row as any).predicted_returns_1);
-              return Number.isFinite(num) ? num : null;
-            })()
-          : null,
-    })).filter((row) => row.symbol_id && row.date);
+    const mapNumber = (v: unknown): number | null => {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+      if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : null; }
+      return null;
+    };
+
+    const dataRows = (merged ?? []).map((row: Record<string, unknown>) => {
+      const common = {
+        date: String(row.date ?? '').slice(0, 10),
+        symbol_id: String(row.symbol_id ?? ''),
+      };
+      if (horizon === 'both') {
+        return {
+          ...common,
+          predicted_returns_1: mapNumber((row as any).predicted_returns_1),
+          predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+        };
+      }
+      if (horizon === '3d') {
+        return {
+          ...common,
+          predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+        };
+      }
+      return {
+        ...common,
+        predicted_returns_1: mapNumber((row as any).predicted_returns_1),
+      };
+    }).filter((row) => (row as any).symbol_id && (row as any).date);
 
     return json({
-      range: { start_date: startDate, end_date: endDate },
+      start_date: startDate,
+      end_date: endDate,
       tokens: tokens ?? null,
-      count: rows.length,
-      rows,
+      count: dataRows.length,
+      data: dataRows,
       metadata: {
         user_id: user.user_id,
         subscription_tier: user.subscription_tier,

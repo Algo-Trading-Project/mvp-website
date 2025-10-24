@@ -179,8 +179,13 @@ export default function TopSignals({ subscription, horizon = '1d', loading = fal
         onLoadingChange(false);
       }
     },
-    [onLoadingChange]
+    [onLoadingChange, horizon, cacheKey]
   );
+
+  // Refresh cache reference when horizon changes
+  React.useEffect(() => {
+    cacheRef.current = loadSignalsCache(cacheKey);
+  }, [cacheKey]);
 
   React.useEffect(() => {
     const controller = new AbortController();

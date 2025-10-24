@@ -7,7 +7,7 @@ type Payload = {
   end?: string;
   tokens?: string[] | null;
   limit?: number | null;
-  horizon?: '1d' | '3d' | 'both' | string | null;
+  horizon?: '1d' | '3d' | 'both' | string | string[] | null;
 };
 
 const isIsoDate = (v: string | undefined | null) =>
@@ -111,7 +111,38 @@ Deno.serve(async (req) => {
       ? tokens.filter((t) => typeof t === "string" && t.trim().length).map((t) => t.trim().toUpperCase())
       : null;
 
-    const pHorizon = (typeof horizon === 'string' && (horizon === '3d' || horizon === 'both')) ? horizon as '3d' | 'both' : '1d';
+    const parseHorizonStrict = (h: unknown): '1d' | '3d' | 'both' => {
+      const allowed = new Set(['1d','3d']);
+      if (Array.isArray(h)) {
+        const values = h
+          .map((v) => String(v).toLowerCase())
+          .flatMap(s => s.split(',').map(t => t.trim()).filter(Boolean));
+        if (values.includes('both')) return 'both';
+        for (const v of values) {
+          if (!allowed.has(v)) {
+            throw new Error("Invalid horizon. Allowed values: '1d', '3d' (or both).");
+          }
+        }
+        const has1 = values.includes('1d');
+        const has3 = values.includes('3d');
+        if (has1 && has3) return 'both';
+        if (has3) return '3d';
+        return '1d';
+      }
+      const s = String(h || '').toLowerCase();
+      if (!s) return '1d';
+      if (s === '1d') return '1d';
+      if (s === '3d') return '3d';
+      if (s === 'both') return 'both';
+      if (s === '1d,3d' || s === '3d,1d') return 'both';
+      throw new Error("Invalid horizon. Allowed values: '1d', '3d' (or both).");
+    };
+    let pHorizon: '1d' | '3d' | 'both';
+    try {
+      pHorizon = parseHorizonStrict(horizon);
+    } catch (e) {
+      return json({ error: (e as Error).message }, { status: 400 });
+    }
 
     let base = supabase
       .from('predictions')
@@ -197,7 +228,7 @@ Deno.serve(async (req) => {
       })).filter((r) => r.date && r.symbol_id);
     }
 
-    return json({ count: rows.length, rows, horizon: pHorizon });
+    return json({ count: rows.length, data: rows });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
