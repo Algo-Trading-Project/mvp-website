@@ -7,11 +7,17 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, samples = 10000, bins = 20, horizon = '1d' } = await req.json();
+    const { start, end, samples = 10000, bins = 20, horizon = '1d', top_pct = 0.1 } = await req.json();
     if (!start || !end) return json({ error: 'start and end date are required' }, { status: 400 });
+    const pct = Number(top_pct);
+    if (!(pct === 0.1 || pct === 0.05)) {
+      return json({ error: "Invalid top_pct. Allowed: 0.1 or 0.05" }, { status: 400 });
+    }
 
     const supabase = getServiceSupabaseClient();
-    const field = (horizon === '3d') ? 'cs_top_bottom_decile_spread_3d' : 'cs_top_bottom_decile_spread_1d';
+    const field = (horizon === '3d')
+      ? (pct === 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
+      : (pct === 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
     const pageSize = 1000; let fromIdx = 0; const all: any[] = [];
     while (true) {
       const { data, error } = await supabase

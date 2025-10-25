@@ -10,8 +10,12 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, width = null, height = 360, horizon = '1d' } = await req.json();
+    const { start, end, width = null, height = 360, horizon = '1d', top_pct = 0.1 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
+    const pct = Number(top_pct);
+    if (!(pct === 0.1 || pct === 0.05)) {
+      return json({ error: "Invalid top_pct. Allowed: 0.1 or 0.05" }, { status: 400 });
+    }
 
     const supabase = getServiceSupabaseClient();
 
@@ -33,6 +37,7 @@ Deno.serve(async (req) => {
         p_limit: PAGE,
         p_offset: offset,
         p_horizon: horizon === '3d' ? '3d' : '1d',
+        p_top_pct: pct,
       });
       if (rpc.error) throw rpc.error;
       const chunk = (rpc.data ?? []) as Array<Record<string, unknown>>;
