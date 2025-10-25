@@ -87,28 +87,6 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    // Load monthly performance metrics and compute summary stats for badges
-    const { data: monthlyRows, error: monthlyError } = await supabase
-      .from('monthly_performance_metrics')
-      .select(`
-        year,
-        month,
-        information_coefficient_1d,
-        information_coefficient_3d,
-        n_preds
-      `)
-      .order('year', { ascending: true })
-      .order('month', { ascending: true });
-    if (monthlyError) throw monthlyError;
-
-    const monthlyCoerced = (monthlyRows ?? []).map((row: Record<string, unknown>) => ({
-      year: normalizeInteger(row.year),
-      month: normalizeInteger(row.month),
-      information_coefficient_1d: coerceNumber((row as any).information_coefficient_1d ?? (row as any).ic_1d ?? (row as any).ic),
-      information_coefficient_3d: coerceNumber((row as any).information_coefficient_3d ?? (row as any).ic_3d ?? null),
-      n_preds: normalizeInteger((row as any).n_preds ?? (row as any).n) ?? 0,
-    }));
-
     // Latest non-null rolling values from merged series
     const lastIdx = (() => {
       for (let i = cross.length - 1; i >= 0; i--) {
@@ -127,26 +105,80 @@ Deno.serve(async (req) => {
       rolling_30d_hit_rate: cross[lastIdx].rolling_30d_hit_rate,
     } : null;
 
-    // Compute monthly summaries for badges
-    const computeSummary = (vals: number[]) => {
-      const clean = vals.filter((v) => typeof v === 'number' && Number.isFinite(v));
-      if (!clean.length) return { mean: null, std: null, positive_share: null, icir_ann: null } as const;
-      const mean = clean.reduce((a, b) => a + b, 0) / clean.length;
-      const variance = clean.length > 1 ? clean.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (clean.length - 1) : 0;
-      const std = Math.sqrt(variance);
-      const positive_share = clean.filter((v) => v > 0).length / clean.length;
-      const icir_ann = std ? (mean / std) * Math.sqrt(12) : null;
-      return { mean, std, positive_share, icir_ann } as const;
-    };
-    const vals1d = monthlyCoerced.map((r) => r.information_coefficient_1d as number | null).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const vals3d = monthlyCoerced.map((r) => r.information_coefficient_3d as number | null).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const monthly_summary = {
-      one_day: computeSummary(vals1d),
-      three_day: computeSummary(vals3d),
-      count: { one_day: vals1d.length, three_day: vals3d.length },
+    // Monthly performance metrics: read from materialized view model_performance_metrics_monthly_agg
+    let monthly_summary = {
+      one_day: { mean: null, std: null, positive_share: null, icir_ann: null },
+      three_day: { mean: null, std: null, positive_share: null, icir_ann: null },
+      count: { one_day: null as number | null, three_day: null as number | null },
     } as const;
+    try {
+      const { data: mon, error: monErr } = await supabase
+        .from('model_performance_metrics_monthly_agg')
+        .select(`
+          avg_monthly_mean_cs_spearman_ic_1d,
+          std_monthly_mean_cs_spearman_ic_1d,
+          annualized_icir_1d,
+          pct_months_mean_cs_ic_above_0_1d,
+          avg_monthly_mean_cs_spearman_ic_3d,
+          std_monthly_mean_cs_spearman_ic_3d,
+          annualized_icir_3d,
+          pct_months_mean_cs_ic_above_0_3d
+        `)
+        .limit(1)
+        .maybeSingle();
+      if (monErr) throw monErr;
+      const row = (mon || {}) as Record<string, unknown>;
+      monthly_summary = {
+        one_day: {
+          mean: coerceNumber(row.avg_monthly_mean_cs_spearman_ic_1d),
+          std: coerceNumber(row.std_monthly_mean_cs_spearman_ic_1d),
+          icir_ann: coerceNumber(row.annualized_icir_1d),
+          positive_share: coerceNumber(row.pct_months_mean_cs_ic_above_0_1d),
+        },
+        three_day: {
+          mean: coerceNumber(row.avg_monthly_mean_cs_spearman_ic_3d),
+          std: coerceNumber(row.std_monthly_mean_cs_spearman_ic_3d),
+          icir_ann: coerceNumber(row.annualized_icir_3d),
+          positive_share: coerceNumber(row.pct_months_mean_cs_ic_above_0_3d),
+        },
+        count: { one_day: null, three_day: null },
+      } as const;
+    } catch (_e) {
+      // leave monthly_summary as nulls; UI will still render daily metrics
+    }
 
-    return json({ cross, monthly: monthlyCoerced, monthly_summary, latest: latestRow });
+    // Compute simple global means for homepage badges (robust to empty arrays)
+    const nums = (arr: Array<number | null | undefined>) => arr.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const mean = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+    // Prefer SQL aggregates for robustness; fallback to client means
+    let mean_daily_ic_1d = null as number | null;
+    let mean_daily_spread_1d = null as number | null;
+    try {
+      const { data: agg, error: aggErr } = await supabase
+        .from('daily_dashboard_metrics')
+        .select('avg_ic:avg(cs_spearman_ic_1d), avg_spread:avg(cs_top_bottom_decile_spread_1d)')
+        .single();
+      if (aggErr) throw aggErr;
+      const mic = typeof (agg as any)?.avg_ic === 'number' ? (agg as any).avg_ic : Number((agg as any)?.avg_ic ?? NaN);
+      const msp = typeof (agg as any)?.avg_spread === 'number' ? (agg as any).avg_spread : Number((agg as any)?.avg_spread ?? NaN);
+      mean_daily_ic_1d = Number.isFinite(mic) ? mic : null;
+      mean_daily_spread_1d = Number.isFinite(msp) ? msp : null;
+    } catch (_e) {
+      // Fallback to client-side means
+      mean_daily_ic_1d = mean(nums(cross.map((r: any) => r.cross_sectional_ic_1d)));
+      mean_daily_spread_1d = mean(nums(cross.map((r: any) => r.cs_top_bottom_decile_spread)));
+    }
+
+    return json({
+      cross,
+      monthly: [],
+      monthly_summary,
+      latest: latestRow,
+      global_means: {
+        mean_daily_ic_1d,
+        mean_daily_spread_1d,
+      },
+    });
   } catch (error) {
     console.error('Function error:', error);
     return json({

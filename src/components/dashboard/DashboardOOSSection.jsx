@@ -814,9 +814,9 @@ export default function DashboardOOSSection() {
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
-                    title="Quintile Returns"
-                    description="Per‑day, assets are binned into quintiles by predicted return. Bars show the average 1‑day forward return across days for each quintile." />
-                  Average Returns by Cross-Sectional Prediction Quintile
+                    title="Decile Returns"
+                    description="Per‑day, assets are binned into deciles by predicted return. Bars show the average forward return across days for each decile." />
+                  Average Returns by Cross-Sectional Prediction Decile
                 </span>
               </div>
               {quintileLoading ? (

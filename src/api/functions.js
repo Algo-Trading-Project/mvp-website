@@ -105,3 +105,8 @@ export const getLiteTokens = wrapCall(
   "Failed to load Lite token list",
   supabaseApi.functions.liteTokens
 );
+
+export const sampleSignals = wrapCall(
+  "Failed to download sample signals",
+  supabaseApi.functions.sampleSignals
+);

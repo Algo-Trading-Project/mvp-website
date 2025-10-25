@@ -14,22 +14,22 @@ Deno.serve(async (req) => {
 
     const supabase = getServiceSupabaseClient();
     let data: any[] | null = null;
-    const rpc2 = await supabase.rpc('rpc_quintile_returns', {
+    const rpc = await supabase.rpc('rpc_quintile_returns', {
       start_date: start,
       end_date: end,
       p_horizon: horizon,
     });
-    if (rpc2.error) throw rpc2.error;
-    data = rpc2.data as any[] | null;
+    if (rpc.error) throw rpc.error;
+    data = rpc.data as any[] | null;
 
     const rows = (data ?? []).map((r: Record<string, unknown>) => ({
-      quintile: Number(r.quintile),
-      avg_return: typeof r.avg_return === 'number' ? r.avg_return : Number(r.avg_return ?? 0),
+      decile: Number((r as any).decile ?? (r as any).quintile),
+      avg_return: typeof (r as any).avg_return === 'number' ? (r as any).avg_return : Number((r as any).avg_return ?? 0),
     }))
-    .filter((r) => Number.isFinite(r.quintile) && Number.isFinite(r.avg_return));
-    // Ensure sorted by quintile ascending 0..4
-    rows.sort((a, b) => a.quintile - b.quintile);
-    const x = rows.map((d) => String(d.quintile));
+    .filter((r) => Number.isFinite(r.decile) && Number.isFinite(r.avg_return));
+    // Ensure sorted by decile ascending 1..10
+    rows.sort((a, b) => a.decile - b.decile);
+    const x = rows.map((d) => d.decile);
     const y = rows.map((d) => d.avg_return);
 
     const html = `<!DOCTYPE html>
@@ -38,10 +38,10 @@ Deno.serve(async (req) => {
 <style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id="chart"></div>
 <script>
-const data = [{ type: 'bar', x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, marker: { color: '#6366f1' }, hovertemplate: 'Quintile %{x}<br>Avg Return: %{y:.4%}<extra></extra>' }];
+const data = [{ type: 'bar', x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, marker: { color: '#6366f1' }, hovertemplate: 'Decile %{x}<br>Avg Return: %{y:.4%}<extra></extra>' }];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
   yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
-  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' }, height: 360 };
+  xaxis: { title:'Decile', tickmode:'linear', dtick:1, tick0:1, gridcolor: '#334155', tickfont: { color: '#94a3b8' }, titlefont: { color:'#cbd5e1' } }, height: 360 };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);

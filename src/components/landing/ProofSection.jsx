@@ -11,7 +11,7 @@ export default function ProofSection() {
         <div className="text-center">
           <p className="font-semibold text-blue-400">Proof, Not Promises</p>
           <h2 className="text-3xl sm:text-4xl font-bold mt-2">Alpha You Can Verify</h2>
-          <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-400">
+          <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-300">
             We’re tired of black boxes. Our performance is public, with downloadable historical predictions so you can run your own analysis.
           </p>
         </div>
@@ -20,21 +20,21 @@ export default function ProofSection() {
           <div className="bg-slate-800/50 p-8 rounded-lg text-center">
             <Zap className="mx-auto h-10 w-10 text-amber-400" />
             <h3 className="mt-6 text-lg font-semibold">Live Performance</h3>
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-slate-300">
               Track our models’ live alpha and beta on our public dashboard, updated daily.
             </p>
           </div>
           <div className="bg-slate-800/50 p-8 rounded-lg text-center">
             <ShieldCheck className="mx-auto h-10 w-10 text-emerald-400" />
             <h3 className="mt-6 text-lg font-semibold">Out-of-Sample</h3>
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-slate-300">
               All performance metrics are calculated on data the model has never seen. No backtests.
             </p>
           </div>
           <div className="bg-slate-800/50 p-8 rounded-lg text-center">
             <Download className="mx-auto h-10 w-10 text-cyan-400" />
             <h3 className="mt-6 text-lg font-semibold">Downloadable History</h3>
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-slate-300">
               Get free access to yesterday's full signal dataset to verify our methodology.
             </p>
           </div>

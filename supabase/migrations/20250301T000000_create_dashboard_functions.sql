@@ -1,66 +1,35 @@
--- Quintile average returns by predictions within a date range
+-- Decile average returns by predictions within a date range (horizon-aware)
 create or replace function rpc_quintile_returns(
-  start_date date,
-  end_date date
-) returns table(quintile int, avg_return_1d double precision)
-language sql
-stable
-as $$
-  with base as (
-    select date, predicted_returns_1, forward_returns_1
-    from predictions
-    where date between start_date and end_date
-      and predicted_returns_1 is not null and forward_returns_1 is not null
-  ),
-  ranked as (
-    select
-      date,
-      ntile(5) over (partition by date order by predicted_returns_1) as quintile,
-      forward_returns_1
-    from base
-  ),
-  per_date as (
-    select date, quintile, avg(forward_returns_1) as avg_ret
-    from ranked
-    group by date, quintile
-  )
-  select quintile, avg(avg_ret) as avg_return_1d
-  from per_date
-  group by quintile
-  order by quintile;
-$$;
-
--- Horizon-aware quintile returns (1d or 3d)
-create or replace function rpc_quintile_returns_v2(
   start_date date,
   end_date date,
   p_horizon text default '1d'
-) returns table(quintile int, avg_return double precision)
+) returns table(decile int, avg_return double precision)
 language sql
 stable
 as $$
   with base as (
-    select date,
-           case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end as pred,
-           case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end as fwd
+    select
+      date,
+      case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end as pred,
+      case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end as fwd
     from predictions
     where date between start_date and end_date
       and (case when p_horizon='3d' then predicted_returns_3 else predicted_returns_1 end) is not null
       and (case when p_horizon='3d' then forward_returns_3 else forward_returns_1 end) is not null
   ), ranked as (
     select date,
-           ntile(5) over (partition by date order by pred) as quintile,
+           ntile(10) over (partition by date order by pred) as decile,
            fwd
     from base
   ), per_date as (
-    select date, quintile, avg(fwd) as avg_ret
+    select date, decile, avg(fwd) as avg_ret
     from ranked
-    group by date, quintile
+    group by date, decile
   )
-  select quintile, avg(avg_ret) as avg_return
+  select decile, avg(avg_ret) as avg_return
   from per_date
-  group by quintile
-  order by quintile;
+  group by decile
+  order by decile;
 $$;
 
 -- Latest prediction snapshot (horizon-aware)

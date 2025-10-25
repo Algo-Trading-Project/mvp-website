@@ -49,7 +49,7 @@ export default function ProductSection() {
                 </div>
                 <h3 className="text-xl font-semibold">{c.title}</h3>
               </div>
-              <p className="text-slate-400 text-sm mb-4">{c.audience}</p>
+              <p className="text-slate-300 text-sm mb-4">{c.audience}</p>
               <ul className="space-y-2 text-slate-300 text-sm mb-6">
                 {c.bullets.map((b, i) => <li key={i}>• {b}</li>)}
               </ul>

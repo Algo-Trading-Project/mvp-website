@@ -243,6 +243,7 @@ const authClient = {
   advByDecilePlot: "adv-by-decile-plot",
   monthlyIcSummary: "monthly-ic-summary",
   predictionsCoverage: "predictions-coverage",
+  sampleSignals: "sample-signals",
   listPredictionDates: "list-prediction-dates",
   predictionsRange: "predictions-range",
   liteTokens: "lite-tokens",
