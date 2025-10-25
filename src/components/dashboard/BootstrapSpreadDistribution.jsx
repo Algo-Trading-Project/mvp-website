@@ -21,7 +21,7 @@ const InfoTooltip = ({ title, description }) => {
   );
 };
 
-export default function BootstrapSpreadDistribution({ dateRange, horizon='1d' }) {
+export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', topPct = 0.1 }) {
   const [html, setHtml] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState({ mean: 0, ci_lower: 0, ci_upper: 0 });
@@ -34,7 +34,7 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d' })
     const load = async () => {
       setLoading(true); setError(null);
       try {
-        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, samples: 10000, bins: 20 }, { signal: controller.signal });
+        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, samples: 10000, bins: 20 }, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, ci_lower: 0, ci_upper: 0 });
@@ -49,13 +49,13 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d' })
     };
     load();
     return () => { cancelled = true; controller.abort(); };
-  }, [dateRange?.start, dateRange?.end, horizon]);
+  }, [dateRange?.start, dateRange?.end, horizon, topPct]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center mb-2 gap-2">
-        <InfoTooltip title="Bootstrapped Distribution of Mean Daily Decile Spread" description="Histogram of 10,000 mean spreads from resampled daily spread series. Shows variability of the mean decile spread." />
-        <div className="font-semibold text-sm">Bootstrapped Distribution of Mean Daily Decile Spread</div>
+        <InfoTooltip title="Bootstrapped Distribution of Mean Daily Spread" description="Histogram of 10,000 mean spreads from resampled daily spread series using the selected percentile (10% or 5%)." />
+        <div className="font-semibold text-sm">{`Bootstrapped Distribution of Mean Daily Spread (${topPct === 0.05 ? '5%' : '10%'})`}</div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">

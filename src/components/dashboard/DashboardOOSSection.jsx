@@ -111,7 +111,7 @@ export default function DashboardOOSSection() {
   const [dateRange, setDateRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
   const [horizon, setHorizon] = useState('1d');
   const [availableRange, setAvailableRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
-
+  const [topPct, setTopPct] = useState(0.1);
   const [monthlyRows, setMonthlyRows] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState(null);
 
@@ -268,14 +268,14 @@ export default function DashboardOOSSection() {
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
       setSpreadLoading(true);
-      const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate, horizon });
+      const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate, horizon, top_pct: topPct });
       if (cached) {
         setSpreadHtml(cached?.html || null);
         setSpreadSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setSpreadSummary(cached.summary);
       }
       try {
-        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, horizon, __cache: false });
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, horizon, top_pct: topPct, __cache: false });
         setSpreadHtml(data?.html || null);
         setSpreadSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setSpreadSummary(data.summary);
@@ -293,7 +293,7 @@ export default function DashboardOOSSection() {
     if ((dateRange.start && dateRange.end) || (dateRange.start && allRows.length)) {
       load();
     }
-  }, [dateRange.start, dateRange.end, allRows, horizon]);
+  }, [dateRange.start, dateRange.end, allRows, horizon, topPct]);
 
   // Load Quintile Returns plot
   React.useEffect(() => {
@@ -419,46 +419,6 @@ export default function DashboardOOSSection() {
     return MIN_OOS_DATE;
   }, [availableRange.start]);
 
-  // NEW: top control bar (date pickers) - compact, right-aligned, no background
-  const controlBar = (
-    <div className="flex w-full items-center justify-end mb-4">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400">Model</label>
-          <select
-            value={horizon}
-            onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
-            className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
-          >
-            <option value="1d">1‑Day</option>
-            <option value="3d">3‑Day</option>
-          </select>
-        </div>
-        <label className="text-xs text-slate-400">From</label>
-        <input
-          type="date"
-          value={dateRange.start}
-          min={minDateForInputs}
-          max={dateRange.end || todayIso}
-          onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
-          disabled={loading}
-          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
-        />
-        <label className="text-xs text-slate-400 ml-2">To</label>
-        <input
-          type="date"
-          value={dateRange.end}
-          min={minDateForInputs}
-          max={todayIso}
-          onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
-          disabled={loading}
-          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
-        />
-      </div>
-    </div>
-  );
-
-
   // Info tooltip component with hover functionality and no focus outline
   const InfoTooltip = ({ title, description }) => {
     const [open, setOpen] = React.useState(false);
@@ -485,6 +445,62 @@ export default function DashboardOOSSection() {
       </Popover>
     );
   };
+
+  // NEW: top control bar (date pickers) - compact, right-aligned, no background
+  const controlBar = (
+    <div className="flex w-full items-center justify-end mb-4">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-400">Model</label>
+          <select
+            value={horizon}
+            onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
+            className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+          >
+            <option value="1d">1‑Day</option>
+            <option value="3d">3‑Day</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-400">Spread</label>
+          <select
+            value={topPct}
+            onChange={(e) => setTopPct(Number(e.target.value) === 0.05 ? 0.05 : 0.1)}
+            className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+          >
+            <option value={0.1}>Top/Bottom 10%</option>
+            <option value={0.05}>Top/Bottom 5%</option>
+          </select>
+          <InfoTooltip
+            title="Top/Bottom Spread Percentile"
+            description="Controls the fraction of assets used for top and bottom groups in spread metrics (10% = decile; 5% = stronger tails)." />
+        </div>
+        <label className="text-xs text-slate-400">From</label>
+        <input
+          type="date"
+          value={dateRange.start}
+          min={minDateForInputs}
+          max={dateRange.end || todayIso}
+          onChange={(e) => setDateRange((r) => ({ ...r, start: e.target.value }))}
+          disabled={loading}
+          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+        />
+        <label className="text-xs text-slate-400 ml-2">To</label>
+        <input
+          type="date"
+          value={dateRange.end}
+          min={minDateForInputs}
+          max={todayIso}
+          onChange={(e) => setDateRange((r) => ({ ...r, end: e.target.value }))}
+          disabled={loading}
+          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+        />
+      </div>
+    </div>
+  );
+
+
+  
 
   // Individual monthly badges summarising the 1d regression model
   const monthlyBadges = (
@@ -606,13 +622,13 @@ export default function DashboardOOSSection() {
         </div>
       </div>
 
-      {/* Decile spread */}
+      {/* Top/Bottom spread */}
       <div className="text-center">
         <h4 className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
           <InfoTooltip
-            title="Rolling Decile Spread (30d avg)"
-            description="30‑day average of daily cross‑sectional top‑minus‑bottom decile performance. Higher suggests more tradable signal." />
-          <span>Decile Spread (30d)</span>
+            title="Rolling Spread (30d avg)"
+            description="30‑day average of daily cross‑sectional top‑minus‑bottom performance using the selected percentile (10% or 5%)." />
+          <span>{`Spread (30d • ${topPct === 0.05 ? '5%' : '10%'})`}</span>
         </h4>
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <div className="flex items-center justify-center gap-4">
@@ -749,9 +765,9 @@ export default function DashboardOOSSection() {
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
                   <InfoTooltip
-                    title="Rolling Decile Spread"
-                    description="30‑day average of the cross‑sectional top minus bottom decile performance for the selected horizon." />
-                  Rolling 30‑Day Avg. Top–Bottom Decile Spread ({horizon})
+                    title="Rolling Top–Bottom Spread"
+                    description="30‑day average of the cross‑sectional top minus bottom performance using the selected percentile (10% or 5%)." />
+                  {`Rolling 30‑Day Avg. Top–Bottom Spread (${topPct === 0.05 ? '5%' : '10%'} • ${horizon})`}
                 </span>
               </div>
               <div className="h-auto">
@@ -819,11 +835,11 @@ export default function DashboardOOSSection() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-6">
               <ICDistribution dateRange={dateRange} horizon={horizon} />
-              <SpreadDistribution dateRange={dateRange} horizon={horizon} />
+              <SpreadDistribution dateRange={dateRange} horizon={horizon} topPct={topPct} />
             </div>
             <div className="space-y-6">
               <BootstrapICDistribution dateRange={dateRange} horizon={horizon} />
-              <BootstrapSpreadDistribution dateRange={dateRange} horizon={horizon} />
+              <BootstrapSpreadDistribution dateRange={dateRange} horizon={horizon} topPct={topPct} />
             </div>
           </div>
         </div>
