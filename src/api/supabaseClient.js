@@ -244,6 +244,8 @@ const authClient = {
   monthlyIcSummary: "monthly-ic-summary",
   predictionsCoverage: "predictions-coverage",
   sampleSignals: "sample-signals",
+  rawDaily: "raw-daily",
+  rawMonthly: "raw-monthly",
   listPredictionDates: "list-prediction-dates",
   predictionsRange: "predictions-range",
   liteTokens: "lite-tokens",

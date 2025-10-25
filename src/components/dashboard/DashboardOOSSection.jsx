@@ -14,6 +14,8 @@ import {
 import PerformancePublicSkeleton from "@/components/skeletons/PerformancePublicSkeleton";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { rawDaily, rawMonthly } from "@/api/functions";
 import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot, monthlyIcSummary } from "@/api/functions";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
@@ -135,6 +137,14 @@ export default function DashboardOOSSection() {
   const [hitLoading, setHitLoading] = React.useState(initialHitCache ? false : true);
   const [hitError, setHitError] = React.useState(null);
   const [hitSummary, setHitSummary] = React.useState(cloneSummary(initialHitCache?.summary));
+  const [rawDailyRows, setRawDailyRows] = React.useState([]);
+  const [rawDailyLoading, setRawDailyLoading] = React.useState(false);
+  const [rawDailyPage, setRawDailyPage] = React.useState(1);
+  const RAW_PAGE_SIZE = 200;
+  const [rawMonthlyRow, setRawMonthlyRow] = React.useState(null);
+  // Which table to show SQL for: 'daily' | 'monthly' | null
+  const [sqlTable, setSqlTable] = React.useState(null);
+  const [copiedSql, setCopiedSql] = React.useState(null);
 
 
   React.useEffect(() => {
@@ -315,6 +325,132 @@ export default function DashboardOOSSection() {
     load();
   }, [dateRange.start, dateRange.end, horizon]);
 
+  // Load Raw Data (daily + monthly)
+  React.useEffect(() => {
+    const load = async () => {
+      if (!dateRange.start || !dateRange.end) return;
+      setRawDailyLoading(true);
+      try {
+        const [dailyRes, monthlyRes] = await Promise.all([
+          rawDaily({ start: dateRange.start, end: dateRange.end, page: rawDailyPage, page_size: RAW_PAGE_SIZE }),
+          rawMonthly({}),
+        ]);
+        setRawDailyRows(Array.isArray(dailyRes?.rows) ? dailyRes.rows : []);
+        setRawMonthlyRow(monthlyRes?.row || null);
+      } catch (_e) {
+        setRawDailyRows([]);
+        setRawMonthlyRow(null);
+      } finally {
+        setRawDailyLoading(false);
+      }
+    };
+    load();
+  }, [dateRange.start, dateRange.end, rawDailyPage]);
+
+  // Reset daily raw table to first page whenever the date range changes
+  React.useEffect(() => {
+    setRawDailyPage(1);
+  }, [dateRange.start, dateRange.end]);
+
+  const dailySql = `create materialized view daily_dashboard_metrics as
+with
+  dates as (
+    select distinct
+      date
+    from
+      predictions
+  ),
+  cs_pred_rankings_1d as (
+    select
+      date,
+      symbol_id,
+      forward_returns_1,
+      predicted_returns_1,
+      RANK() over (partition by date order by predicted_returns_1) as cs_pred_rank_1d,
+      RANK() over (partition by date order by forward_returns_1) as cs_forward_return_rank_1d,
+      PERCENT_RANK() over (partition by date order by predicted_returns_1) as cs_pred_percentile_1d
+    from predictions
+    where predicted_returns_1 is not null and forward_returns_1 is not null
+  ),
+  cs_metrics_1d as (
+    select
+      date,
+      CORR(cs_pred_rank_1d, cs_forward_return_rank_1d) as cs_spearman_ic_1d,
+      AVG(forward_returns_1) filter (where cs_pred_percentile_1d >= 0.9)
+        - AVG(forward_returns_1) filter (where cs_pred_percentile_1d <= 0.1) as cs_top_bottom_decile_spread_1d,
+      AVG(forward_returns_1) filter (where cs_pred_percentile_1d >= 0.95)
+        - AVG(forward_returns_1) filter (where cs_pred_percentile_1d <= 0.05) as cs_top_bottom_p05_spread_1d,
+      SUM(case when SIGN(predicted_returns_1) = SIGN(forward_returns_1) then 1 else 0 end) as cs_hit_count_1d,
+      COUNT(forward_returns_1) as total_count_1d
+    from cs_pred_rankings_1d group by date
+  ),
+  cs_pred_rankings_3d as (
+    select
+      date,
+      symbol_id,
+      forward_returns_3,
+      predicted_returns_3,
+      RANK() over (partition by date order by predicted_returns_3) as cs_pred_rank_3d,
+      RANK() over (partition by date order by forward_returns_3) as cs_forward_return_rank_3d,
+      PERCENT_RANK() over (partition by date order by predicted_returns_3) as cs_pred_percentile_3d
+    from predictions
+    where predicted_returns_3 is not null and forward_returns_3 is not null
+  ),
+  cs_metrics_3d as (
+    select
+      date,
+      CORR(cs_pred_rank_3d, cs_forward_return_rank_3d) as cs_spearman_ic_3d,
+      AVG(forward_returns_3) filter (where cs_pred_percentile_3d >= 0.9)
+        - AVG(forward_returns_3) filter (where cs_pred_percentile_3d <= 0.1) as cs_top_bottom_decile_spread_3d,
+      AVG(forward_returns_3) filter (where cs_pred_percentile_3d >= 0.95)
+        - AVG(forward_returns_3) filter (where cs_pred_percentile_3d <= 0.05) as cs_top_bottom_p05_spread_3d,
+      SUM(case when SIGN(predicted_returns_3) = SIGN(forward_returns_3) then 1 else 0 end) as cs_hit_count_3d,
+      COUNT(forward_returns_3) as total_count_3d
+    from cs_pred_rankings_3d group by date
+  ),
+  cs_metrics_joined as (
+    select d.date,
+      m1d.cs_spearman_ic_1d,
+      m1d.cs_top_bottom_decile_spread_1d,
+      m1d.cs_top_bottom_p05_spread_1d,
+      m1d.cs_hit_count_1d,
+      m1d.total_count_1d,
+      m3d.cs_spearman_ic_3d,
+      m3d.cs_top_bottom_decile_spread_3d,
+      m3d.cs_top_bottom_p05_spread_3d,
+      m3d.cs_hit_count_3d,
+      m3d.total_count_3d
+    from dates d
+    left join cs_metrics_1d m1d on d.date = m1d.date
+    left join cs_metrics_3d m3d on d.date = m3d.date
+  )
+select * from cs_metrics_joined;`;
+
+  const monthlySql = `CREATE MATERIALIZED VIEW model_performance_metrics_monthly_agg as
+with base as (
+  select date_part('year', date)::text || '-' || to_char(date, 'MM') as year_month,
+         cs_spearman_ic_1d,
+         cs_spearman_ic_3d
+  from public.daily_dashboard_metrics
+), monthly_metrics_temp as (
+  select year_month,
+         AVG(cs_spearman_ic_1d) as monthly_mean_cs_spearman_ic_1d,
+         AVG(cs_spearman_ic_3d) as monthly_mean_cs_spearman_ic_3d
+  from base
+  group by year_month
+  order by year_month
+)
+select
+  AVG(monthly_mean_cs_spearman_ic_1d) as avg_monthly_mean_cs_spearman_ic_1d,
+  STDDEV(monthly_mean_cs_spearman_ic_1d) as std_monthly_mean_cs_spearman_ic_1d,
+  AVG(monthly_mean_cs_spearman_ic_1d) / STDDEV(monthly_mean_cs_spearman_ic_1d) * SQRT(12) as annualized_icir_1d,
+  AVG(case when monthly_mean_cs_spearman_ic_1d > 0 then 1 else 0 end) as pct_months_mean_cs_ic_above_0_1d,
+  AVG(monthly_mean_cs_spearman_ic_3d) as avg_monthly_mean_cs_spearman_ic_3d,
+  STDDEV(monthly_mean_cs_spearman_ic_3d) as std_monthly_mean_cs_spearman_ic_3d,
+  AVG(monthly_mean_cs_spearman_ic_3d) / STDDEV(monthly_mean_cs_spearman_ic_3d) * SQRT(12) as annualized_icir_3d,
+  AVG(case when monthly_mean_cs_spearman_ic_3d > 0 then 1 else 0 end) as pct_months_mean_cs_ic_above_0_3d
+from monthly_metrics_temp;`;
+
   // Load Rolling Hit Rate plot
   React.useEffect(() => {
     const load = async () => {
@@ -358,8 +494,60 @@ export default function DashboardOOSSection() {
   };
 
   const deltaClass = (val) => {
-    if (val === null || typeof val !== "number" || Number.isNaN(val)) return "text-slate-400";
+    if (val === null || typeof val !== "number" || Number.isNaN(val)) return "text-slate-300";
     return val >= 0 ? "text-emerald-400" : "text-red-400";
+  };
+
+  // Lightweight SQL syntax highlighter for the Show SQL dialog
+  const highlightSql = (sql) => {
+    if (!sql) return "";
+    const escape = (s) => s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    let out = escape(sql);
+    // Comments -- ...
+    out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
+    // Strings '...'
+    out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
+    // Numbers
+    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
+    // Functions (identifier followed by parenthesis)
+    out = out.replace(/\b([a-z_][a-z0-9_]*)\s*(?=\()/gi, `<span class=\"fn\">$1</span>`);
+    // Keywords
+    const KW = [
+      'select','from','where','group','by','order','join','left','right','inner','outer','on','as','with','create','materialized','view','case','when','then','else','end','avg','stddev','sum','count','rank','percent_rank','over','partition','union','all','distinct','and','or','not','between','like','desc','asc','limit','offset','window'
+    ];
+    const kwRe = new RegExp(`\\b(${KW.join('|')})\\b`, 'gi');
+    out = out.replace(kwRe, (m) => `<span class=\"kw\">${m.toUpperCase()}</span>`);
+    return out;
+  };
+  const renderSql = (sql) => (
+    <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Liberation Mono\', \'Courier New\', monospace; color: #e5e7eb; }
+        .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+        .sql-pre .fn { color: #a78bfa; }
+        .sql-pre .str { color: #fca5a5; }
+        .sql-pre .num { color: #fdba74; }
+        .sql-pre .com { color: #94a3b8; font-style: italic; }
+      ` }} />
+      <pre className="sql-pre p-3 text-xs whitespace-pre leading-5" dangerouslySetInnerHTML={{ __html: highlightSql(sql) }} />
+    </div>
+  );
+
+  // Simple clipboard copy helper for SQL dialog
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_e) {
+      const ta = document.createElement('textarea');
+      ta.value = text || '';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } finally { ta.remove(); }
+    }
   };
 
   // Monthly aggregates derived from the 1d regression metrics
@@ -427,7 +615,7 @@ export default function DashboardOOSSection() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
-            className="text-slate-400 hover:text-slate-300 transition-colors focus:outline-none focus-visible:outline-none"
+            className="text-slate-300 hover:text-slate-200 transition-colors focus:outline-none focus-visible:outline-none"
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >
@@ -451,7 +639,7 @@ export default function DashboardOOSSection() {
     <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400">Model</label>
+          <label className="text-xs text-slate-300">Model</label>
           <select
             value={horizon}
             onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
@@ -462,7 +650,7 @@ export default function DashboardOOSSection() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400">Spread</label>
+          <label className="text-xs text-slate-300">Spread</label>
           <select
             value={topPct}
             onChange={(e) => setTopPct(Number(e.target.value) === 0.05 ? 0.05 : 0.1)}
@@ -475,7 +663,7 @@ export default function DashboardOOSSection() {
             title="Top/Bottom Spread Percentile"
             description="Controls the fraction of assets used for top and bottom groups in spread metrics (10% = decile; 5% = stronger tails)." />
         </div>
-        <label className="text-xs text-slate-400">From</label>
+        <label className="text-xs text-slate-300">From</label>
         <input
           type="date"
           value={dateRange.start}
@@ -485,7 +673,7 @@ export default function DashboardOOSSection() {
           disabled={loading}
           className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
         />
-        <label className="text-xs text-slate-400 ml-2">To</label>
+        <label className="text-xs text-slate-300 ml-2">To</label>
         <input
           type="date"
           value={dateRange.end}
@@ -506,7 +694,7 @@ export default function DashboardOOSSection() {
   const monthlyBadges = (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+        <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
             title="Mean IC"
             description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
@@ -516,7 +704,7 @@ export default function DashboardOOSSection() {
         <div className="text-xl font-bold text-white mt-1">{globalStats.meanIc != null ? globalStats.meanIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+        <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
             title="Standard Deviation of IC"
             description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
@@ -526,7 +714,7 @@ export default function DashboardOOSSection() {
         <div className="text-xl font-bold text-white mt-1">{globalStats.stdIc != null ? globalStats.stdIc.toFixed(3) : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+        <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
             title="Positive Months"
             description="Proportion of months with a positive average Information Coefficient."
@@ -536,7 +724,7 @@ export default function DashboardOOSSection() {
         <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp != null ? `${(globalStats.positiveProp * 100).toFixed(1)}%` : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+        <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
             title="IC Information Ratio (annualized)"
             description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)." />
@@ -597,21 +785,21 @@ export default function DashboardOOSSection() {
             </div>
             <div className="flex flex-col gap-1">
                 <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d1)}`}>
-                  {icDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
+                  {icDeltas.d1 === null ? <span className="text-slate-300">1d: —</span> : <>
                     <ArrowUpRight className={`w-3 h-3 ${icDeltas.d1 >= 0 ? "" : "hidden"}`} />
                     <ArrowDownRight className={`w-3 h-3 ${icDeltas.d1 < 0 ? "" : "hidden"}`} />
                     <span className="font-medium">1d: {formatDelta(icDeltas.d1, { asPct: false, decimals: 4 })}</span>
                   </>}
                 </div>
                 <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d7)}`}>
-                  {icDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                  {icDeltas.d7 === null ? <span className="text-slate-300">7d: —</span> : <>
                     <ArrowUpRight className={`w-3 h-3 ${icDeltas.d7 >= 0 ? "" : "hidden"}`} />
                     <ArrowDownRight className={`w-3 h-3 ${icDeltas.d7 < 0 ? "" : "hidden"}`} />
                     <span className="font-medium">7d: {formatDelta(icDeltas.d7, { asPct: false, decimals: 4 })}</span>
                   </>}
                 </div>
                 <div className={`flex items-center gap-1 text-xs ${deltaClass(icDeltas.d30)}`}>
-                  {icDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
+                  {icDeltas.d30 === null ? <span className="text-slate-300">30d: —</span> : <>
                     <ArrowUpRight className={`w-3 h-3 ${icDeltas.d30 >= 0 ? "" : "hidden"}`} />
                     <ArrowDownRight className={`w-3 h-3 ${icDeltas.d30 < 0 ? "" : "hidden"}`} />
                     <span className="font-medium">30d: {formatDelta(icDeltas.d30, { asPct: false, decimals: 4 })}</span>
@@ -619,6 +807,7 @@ export default function DashboardOOSSection() {
                 </div>
               </div>
           </div>
+          {/* Raw Data section moved to bottom */}
         </div>
       </div>
 
@@ -637,21 +826,21 @@ export default function DashboardOOSSection() {
             </div>
             <div className="flex flex-col gap-1">
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d1)}`}>
-                {spreadDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
+                {spreadDeltas.d1 === null ? <span className="text-slate-300">1d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(spreadDeltas.d1, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d7)}`}>
-                {spreadDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                {spreadDeltas.d7 === null ? <span className="text-slate-300">7d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d7 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d7 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">7d: {formatDelta(spreadDeltas.d7, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(spreadDeltas.d30)}`}>
-                {spreadDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
+                {spreadDeltas.d30 === null ? <span className="text-slate-300">30d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${spreadDeltas.d30 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${spreadDeltas.d30 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">30d: {formatDelta(spreadDeltas.d30, { asPct: true, decimals: 2 })}</span>
@@ -677,21 +866,21 @@ export default function DashboardOOSSection() {
             </div>
             <div className="flex flex-col gap-1">
               <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d1)}`}>
-                {hitDeltas.d1 === null ? <span className="text-slate-400">1d: —</span> : <>
+                {hitDeltas.d1 === null ? <span className="text-slate-300">1d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d1 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d1 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">1d: {formatDelta(hitDeltas.d1, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d7)}`}>
-                {hitDeltas.d7 === null ? <span className="text-slate-400">7d: —</span> : <>
+                {hitDeltas.d7 === null ? <span className="text-slate-300">7d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d7 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d7 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">7d: {formatDelta(hitDeltas.d7, { asPct: true, decimals: 2 })}</span>
                 </>}
               </div>
               <div className={`flex items-center gap-1 text-xs ${deltaClass(hitDeltas.d30)}`}>
-                {hitDeltas.d30 === null ? <span className="text-slate-400">30d: —</span> : <>
+                {hitDeltas.d30 === null ? <span className="text-slate-300">30d: —</span> : <>
                   <ArrowUpRight className={`w-3 h-3 ${hitDeltas.d30 >= 0 ? "" : "hidden"}`} />
                   <ArrowDownRight className={`w-3 h-3 ${hitDeltas.d30 < 0 ? "" : "hidden"}`} />
                   <span className="font-medium">30d: {formatDelta(hitDeltas.d30, { asPct: true, decimals: 2 })}</span>
@@ -717,11 +906,12 @@ export default function DashboardOOSSection() {
         {/* Title with clearer spacing */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Regression <span className="gradient-text">Performance</span></h1>
-          <p className="text-slate-400 mt-2">
+          <p className="text-slate-300 mt-2">
             Out‑of‑sample rolling performance metrics for our {horizon === '3d' ? '3‑day' : '1‑day'} regression model. Data available starting from 2020-01-01.
           </p>
         </div>
 
+        {/* Raw Data section moved below charts */}
         {/* Control bar above everything */}
         {controlBar}
 
@@ -755,7 +945,7 @@ export default function DashboardOOSSection() {
                 ) : icSvg ? (
                   <iframe srcDoc={icSvg} title="Rolling 30-Day IC" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
                 ) : (
-                  <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+                  <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
               </div>
             </div>
@@ -778,7 +968,7 @@ export default function DashboardOOSSection() {
                 ) : spreadHtml ? (
                   <iframe srcDoc={spreadHtml} title="Rolling 30-Day Decile Spread" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
                 ) : (
-                  <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+                  <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
               </div>
             </div>
@@ -800,7 +990,7 @@ export default function DashboardOOSSection() {
               ) : hitHtml ? (
                 <iframe srcDoc={hitHtml} title="Rolling Hit Rate" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
               ) : (
-                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+                <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
             </div>
           </div>
@@ -826,7 +1016,7 @@ export default function DashboardOOSSection() {
               ) : quintileHtml ? (
                 <iframe srcDoc={quintileHtml} title="Quintile Returns" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
               ) : (
-                <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
+                <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
             </div>
             <MedianADVByDecile dateRange={dateRange} horizon={horizon} />
@@ -844,7 +1034,175 @@ export default function DashboardOOSSection() {
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 mt-6">
+        {/* Raw Data (bottom of dashboard, under distribution plots) */}
+        <div className="mt-12">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-white">Raw Data</h3>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200">daily_dashboard_metrics</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={rawDailyLoading}
+                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    onClick={() => {
+                      const cols = rawDailyRows.length ? Object.keys(rawDailyRows[0]) : [];
+                      const lines = [cols.join(',')];
+                      rawDailyRows.forEach((r) => lines.push(cols.map((c) => String(r[c] ?? '')).join(',')));
+                      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `daily_dashboard_metrics_${dateRange.start}_to_${dateRange.end}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >Download CSV</button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    onClick={() => setSqlTable('daily')}
+                  >Show SQL</button>
+                </div>
+              </div>
+              <div className="text-xs text-slate-300 mb-2 flex items-center gap-2">
+                <InfoTooltip
+                  title="Daily Dashboard Metrics"
+                  description="Per‑day cross‑sectional metrics for 1‑day and 3‑day models (IC, top–bottom spreads 10%/5%, hit/total counts). These power the rolling 30‑day plots and the histogram‑based plots above." />
+                <span>Daily cross‑sectional metrics by date.</span>
+              </div>
+              <div className="relative overflow-auto border border-slate-800 rounded-md h-[360px]">
+                {rawDailyLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 z-10">
+                    <span className="text-slate-300 text-sm">Loading…</span>
+                  </div>
+                )}
+                <table className="min-w-full text-xs">
+                  <thead className="bg-slate-800 sticky top-0">
+                    <tr>
+                      {(rawDailyRows.length ? Object.keys(rawDailyRows[0]) : ['date']).map((c) => (
+                        <th key={c} className="text-left px-2 py-2 text-slate-300 whitespace-nowrap">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rawDailyRows.length ? (
+                      rawDailyRows.map((row, i) => (
+                        <tr key={i} className="border-t border-slate-800">
+                          {Object.keys(rawDailyRows[0]).map((c) => (
+                            <td key={c} className="px-2 py-1 text-slate-300 whitespace-nowrap">{String(row[c] ?? '')}</td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (
+                      !rawDailyLoading ? (
+                        <tr><td className="px-2 py-3 text-slate-300" colSpan={12}>No rows</td></tr>
+                      ) : null
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-2">
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => setRawDailyPage((p) => Math.max(1, p - 1))}
+                  disabled={rawDailyPage === 1 || rawDailyLoading}
+                >Prev</button>
+                <span className="text-xs text-slate-300">Page {rawDailyPage}</span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => setRawDailyPage((p) => p + 1)}
+                  disabled={rawDailyLoading || (rawDailyRows.length < RAW_PAGE_SIZE)}
+                >Next</button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm text-slate-200">model_performance_metrics_monthly_agg</span>
+                <div className="flex items-center gap-2">
+                  <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => {
+                    const row = rawMonthlyRow || {};
+                    const cols = Object.keys(row);
+                    const lines = [cols.join(',')];
+                    if (cols.length) lines.push(cols.map((c) => String(row[c] ?? '')).join(','));
+                    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'model_performance_metrics_monthly_agg.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                  }}
+                >Download CSV</button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    onClick={() => setSqlTable('monthly')}
+                  >Show SQL</button>
+                </div>
+              </div>
+              <div className="text-xs text-slate-300 mb-2 flex items-center gap-2">
+                <InfoTooltip
+                  title="Monthly IC Aggregates"
+                  description="Aggregated Information Coefficient statistics (mean, std, annualized ICIR, and positive‑month share) for 1‑day and 3‑day models. These power the Monthly IC badges at the top of the dashboard." />
+                <span>Monthly IC summary statistics.</span>
+              </div>
+              <div className="relative overflow-auto border border-slate-800 rounded-md h-[360px]">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-slate-800 sticky top-0">
+                    <tr>
+                      {(rawMonthlyRow ? Object.keys(rawMonthlyRow) : [
+                        'avg_monthly_mean_cs_spearman_ic_1d', 'std_monthly_mean_cs_spearman_ic_1d', 'annualized_icir_1d', 'pct_months_mean_cs_ic_above_0_1d',
+                        'avg_monthly_mean_cs_spearman_ic_3d', 'std_monthly_mean_cs_spearman_ic_3d', 'annualized_icir_3d', 'pct_months_mean_cs_ic_above_0_3d'
+                      ]).map((c) => (
+                        <th key={c} className="text-left px-2 py-2 text-slate-300 whitespace-nowrap">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {(rawMonthlyRow ? Object.keys(rawMonthlyRow) : []).map((c) => (
+                        <td key={c} className="px-2 py-1 text-slate-300 whitespace-nowrap">{String(rawMonthlyRow?.[c] ?? '')}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <Dialog open={!!sqlTable} onOpenChange={(open) => { if (!open) setSqlTable(null); }}>
+            <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
+              <DialogHeader>
+                <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_monthly_agg'}</DialogTitle>
+              </DialogHeader>
+              <div className="flex justify-end mb-2">
+                <button
+                  className={`text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${copiedSql ? 'opacity-80' : ''}`}
+                  onClick={async () => {
+                    await copyToClipboard(sqlTable === 'daily' ? dailySql : monthlySql);
+                    setCopiedSql(sqlTable);
+                    setTimeout(() => setCopiedSql(null), 2000);
+                  }}
+                >{copiedSql === sqlTable ? 'Copied' : 'Copy SQL'}</button>
+              </div>
+              {sqlTable === 'daily' ? (
+                renderSql(dailySql)
+              ) : sqlTable === 'monthly' ? (
+                renderSql(monthlySql)
+              ) : null}
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="text-xs text-slate-300 mt-6">
           Past performance is not indicative of future results. This page is provided for informational and educational purposes only.
         </div>
       </div>

@@ -110,3 +110,13 @@ export const sampleSignals = wrapCall(
   "Failed to download sample signals",
   supabaseApi.functions.sampleSignals
 );
+
+export const rawDaily = wrapCall(
+  "Failed to load raw daily metrics",
+  supabaseApi.functions.rawDaily
+);
+
+export const rawMonthly = wrapCall(
+  "Failed to load raw monthly metrics",
+  supabaseApi.functions.rawMonthly
+);
