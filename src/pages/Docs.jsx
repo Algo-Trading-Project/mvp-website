@@ -42,14 +42,14 @@ const ENDPOINT_SAMPLE_CONFIG = [
     title: "Historical Predictions",
     method: "GET",
     path: "/predictions",
-    queryHint: "?start_date=2025-08-31&end_date=2025-08-31&tokens=1000SATS_USDT_BINANCE",
+    queryHint: "?start_date=2025-08-31&end_date=2025-08-31&tokens=ETH",
   },
   {
     id: "ohlcv",
     title: "OHLCV",
     method: "GET",
     path: "/ohlcv",
-    queryHint: "?token=1000SATS_USDT_BINANCE&start_date=2025-08-31&end_date=2025-08-31",
+    queryHint: "?tokens=ETH&start_date=2025-08-31&end_date=2025-08-31",
   },
   {
     id: "universe",
@@ -90,7 +90,7 @@ url = "${url}"
 params = {
     "start_date": "2025-08-31",
     "end_date": "2025-08-31",
-    "tokens": "1000SATS_USDT_BINANCE"
+    "tokens": "ETH"
 }
 ${pythonBaseHeaders}
 
@@ -101,7 +101,7 @@ print(response.json())`;
 
 url = "${url}"
 params = {
-    "token": "1000SATS_USDT_BINANCE",
+    "tokens": "ETH,BTC",
     "start_date": "2025-08-31",
     "end_date": "2025-08-31"
 }
@@ -127,7 +127,7 @@ ${jsHeaders}
 const params = new URLSearchParams({
   start_date: "2025-08-31",
   end_date: "2025-08-31",
-  tokens: "1000SATS_USDT_BINANCE"
+  tokens: "ETH"
 });
 
 const response = await fetch(\`\${url}?\${params.toString()}\`, {
@@ -142,7 +142,7 @@ console.log(data);`;
 ${jsHeaders}
 
 const params = new URLSearchParams({
-  token: "1000SATS_USDT_BINANCE",
+  tokens: "ETH,BTC",
   start_date: "2025-08-31",
   end_date: "2025-08-31"
 });

@@ -20,6 +20,16 @@ function parseNumeric(value: unknown): number | null {
   return null;
 }
 
+function parseTokens(param: string | null): string[] | null {
+  if (!param) return null;
+  const list = param
+    .split(',')
+    .map((token) => token.trim().toUpperCase())
+    .filter(Boolean)
+    .map((t) => t.split('_')[0]);
+  return list.length ? Array.from(new Set(list)) : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -31,23 +41,22 @@ Deno.serve(async (req) => {
 
   const auth = await authenticateApiRequest(req);
   if (!auth.ok) return auth.response;
-  const { user, keyHash } = auth;
+  const { user } = auth;
 
   const url = new URL(req.url);
-  const tokenRaw = (url.searchParams.get('token') ?? url.searchParams.get('symbol') ?? '').trim().toUpperCase();
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
   const endDate = normalizeDate(url.searchParams.get('end_date') ?? '');
-
-  if (!tokenRaw) {
-    return badRequest('token query parameter is required');
-  }
+  // Optional 'tokens' parameter (comma-separated list). If omitted, return all tokens.
+  const requestedTokens = parseTokens(url.searchParams.get('tokens'));
   if (!startDate || !endDate) {
     return badRequest('start_date and end_date (YYYY-MM-DD) are required');
   }
 
   try {
     const supabase = getServiceSupabaseClient();
-    const token = tokenRaw.includes('_') ? tokenRaw : `${tokenRaw}_USDT_BINANCE`;
+    const expandedTokens = requestedTokens && requestedTokens.length
+      ? requestedTokens.map((t) => `${t}_USDT_BINANCE`)
+      : null;
 
     // API access is Pro or API tiers only
     const tier = String(user.subscription_tier ?? 'free').toLowerCase();
@@ -66,21 +75,36 @@ Deno.serve(async (req) => {
         limit_days: 365,
       }, { status: 400 });
     }
+    if (startObj.getTime() > endObj.getTime()) {
+      return json({ error: 'start_date must be <= end_date' }, { status: 400 });
+    }
 
     // No additional tier-specific restrictions for Pro/API beyond range cap
 
-    const { data, error } = await supabase
+    // Build base query and page through results
+    let base = supabase
       .from('ohlcv_1d')
       .select('date, symbol_id, open, high, low, close, volume')
-      .eq('symbol_id', token)
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date', { ascending: true })
-      .limit(200000);
+      .order('symbol_id', { ascending: true });
+    if (expandedTokens && expandedTokens.length) {
+      base = base.in('symbol_id', expandedTokens);
+    }
 
-    if (error) throw error;
+    const PAGE_SIZE = 1000;
+    const merged: any[] = [];
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await base.range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      const chunk = data ?? [];
+      if (!chunk.length) break;
+      merged.push(...chunk);
+      if (chunk.length < PAGE_SIZE) break;
+    }
 
-    const rows = (data ?? [])
+    const dataRows = (merged ?? [])
       .map((row: Record<string, unknown>) => ({
         date: String(row.date ?? '').slice(0, 10),
         symbol_id: String(row.symbol_id ?? ''),
@@ -93,16 +117,11 @@ Deno.serve(async (req) => {
       .filter((row) => row.symbol_id && row.date);
 
     return json({
-      token,
-      range: { start_date: startDate, end_date: endDate },
-      count: rows.length,
-      rows,
-      metadata: {
-        user_id: user.user_id,
-        subscription_tier: user.subscription_tier,
-        api_key_hash: keyHash,
-        api_key_valid: true,
-      },
+      start_date: startDate,
+      end_date: endDate,
+      tokens: requestedTokens ?? null,
+      count: dataRows.length,
+      data: dataRows,
     });
   } catch (error) {
     return internalError(error);

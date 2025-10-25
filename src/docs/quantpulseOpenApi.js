@@ -52,22 +52,13 @@ const spec = {
       },
     },
     schemas: {
-      Metadata: {
-        type: "object",
-        properties: {
-          user_id: { type: "string", format: "uuid" },
-          subscription_tier: { type: "string" },
-          api_key_hash: { type: "string", description: "SHA-256 hash of the provided API key." },
-          api_key_valid: { type: "boolean" },
-        },
-        required: ["user_id", "subscription_tier", "api_key_hash", "api_key_valid"],
-      },
       PredictionRow: {
         type: "object",
         properties: {
           date: { type: "string", format: "date" },
           symbol_id: { type: "string", description: "Instrument identifier (e.g., BTC_USDT_BINANCE)." },
-          y_pred: { type: "number", nullable: true, description: "Prediction score (higher implies stronger signal)." },
+          predicted_returns_1: { type: "number", nullable: true, description: "1-day predicted return (if requested)." },
+          predicted_returns_3: { type: "number", nullable: true, description: "3-day predicted return (if requested)." },
         },
         required: ["date", "symbol_id"],
       },
@@ -89,71 +80,55 @@ const spec = {
         properties: {
           date: { type: "string", format: "date", nullable: true },
           count: { type: "integer" },
-          rows: {
+          data: {
             type: "array",
             items: { $ref: "#/components/schemas/PredictionRow" },
           },
-          metadata: { $ref: "#/components/schemas/Metadata" },
         },
-        required: ["count", "rows", "metadata"],
+        required: ["count", "data"],
       },
       PredictionsResponse: {
         type: "object",
         properties: {
-          range: {
-            type: "object",
-            properties: {
-              start_date: { type: "string", format: "date" },
-              end_date: { type: "string", format: "date" },
-            },
-            required: ["start_date", "end_date"],
-          },
+          start_date: { type: "string", format: "date" },
+          end_date: { type: "string", format: "date" },
           tokens: {
             type: "array",
             items: { type: "string" },
             nullable: true,
           },
           count: { type: "integer" },
-          rows: {
+          data: {
             type: "array",
             items: { $ref: "#/components/schemas/PredictionRow" },
           },
-          metadata: { $ref: "#/components/schemas/Metadata" },
         },
-        required: ["range", "count", "rows", "metadata"],
+        required: ["start_date", "end_date", "count", "data"],
       },
       OhlcvResponse: {
         type: "object",
         properties: {
-          token: { type: "string" },
-          range: {
-            type: "object",
-            properties: {
-              start_date: { type: "string", format: "date" },
-              end_date: { type: "string", format: "date" },
-            },
-            required: ["start_date", "end_date"],
-          },
+          start_date: { type: "string", format: "date" },
+          end_date: { type: "string", format: "date" },
+          tokens: { type: "array", items: { type: "string" }, nullable: true },
           count: { type: "integer" },
-          rows: {
+          data: {
             type: "array",
             items: { $ref: "#/components/schemas/OHLCVRow" },
           },
-          metadata: { $ref: "#/components/schemas/Metadata" },
         },
-        required: ["token", "range", "count", "rows", "metadata"],
+        required: ["start_date", "end_date", "count", "data"],
       },
       UniverseResponse: {
         type: "object",
         properties: {
           count: { type: "integer" },
-          tokens: {
+          data: {
             type: "array",
             items: { type: "string" },
           },
-          metadata: { $ref: "#/components/schemas/Metadata" },
         },
-        required: ["count", "tokens", "metadata"],
+        required: ["count", "data"],
       },
       ErrorResponse: {
         type: "object",
@@ -185,21 +160,14 @@ const spec = {
         required: false,
         schema: { type: "string" },
         description:
-          "Comma-separated list of instrument identifiers (e.g., `BTC_USDT_BINANCE,ETH_USDT_BINANCE`).",
+          "Comma-separated base tickers (e.g., `BTC,ETH`). Internally expands to full symbol identifiers for filtering.",
       },
-      Limit: {
-        name: "limit",
+      Horizon: {
+        name: "horizon",
         in: "query",
         required: false,
-        schema: { type: "integer", minimum: 1, maximum: 200000 },
-        description: "Maximum rows to return. Defaults to 200,000.",
-      },
-      TokenParam: {
-        name: "token",
-        in: "query",
-        required: true,
         schema: { type: "string" },
-        description: "Instrument identifier (e.g., `BTC_USDT_BINANCE`).",
+        description: "Prediction horizon: `1d`, `3d`, or `both`. Defaults to `1d`.",
       },
     },
   },
@@ -209,6 +177,9 @@ const spec = {
         tags: ["Predictions"],
         summary: "Latest prediction snapshot",
         description: "Returns all prediction rows for the most recent processed date.",
+        parameters: [
+          { $ref: "#/components/parameters/Horizon" },
+        ],
         responses: {
           200: {
             description: "Snapshot retrieved.",
@@ -244,7 +215,7 @@ const spec = {
           { $ref: "#/components/parameters/StartDate" },
           { $ref: "#/components/parameters/EndDate" },
           { $ref: "#/components/parameters/Tokens" },
-          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Horizon" },
         ],
         responses: {
           200: {
@@ -281,9 +252,9 @@ const spec = {
       get: {
         tags: ["Reference Data"],
         summary: "Daily OHLCV series",
-        description: "Retrieve normalized OHLCV values for a token across a date range.",
+        description: "Retrieve normalized OHLCV values for one or more tokens across a date range.",
         parameters: [
-          { $ref: "#/components/parameters/TokenParam" },
+          { $ref: "#/components/parameters/Tokens" },
           { $ref: "#/components/parameters/StartDate" },
           { $ref: "#/components/parameters/EndDate" },
         ],
@@ -297,7 +268,7 @@ const spec = {
             },
           },
           400: {
-            description: "Missing token or dates.",
+            description: "Missing or invalid dates.",
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } },
             },

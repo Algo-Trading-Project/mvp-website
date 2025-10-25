@@ -16,7 +16,9 @@ function parseTokens(param: string | null): string[] | null {
   const list = param
     .split(',')
     .map((token) => token.trim().toUpperCase())
-    .filter(Boolean);
+    .filter(Boolean)
+    // Force base-only tokens by taking segment before first underscore
+    .map((t) => t.split('_')[0]);
   return list.length ? Array.from(new Set(list)) : null;
 }
 
@@ -31,7 +33,7 @@ Deno.serve(async (req) => {
 
   const auth = await authenticateApiRequest(req);
   if (!auth.ok) return auth.response;
-  const { user, keyHash } = auth;
+  const { user } = auth;
 
   const url = new URL(req.url);
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
@@ -89,6 +91,9 @@ Deno.serve(async (req) => {
           limit_days: 365,
         }, { status: 400 });
       }
+      if (startObj.getTime() > endObj.getTime()) {
+        return json({ error: 'start_date must be <= end_date' }, { status: 400 });
+      }
     }
     // Build base query
     const targetCol = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
@@ -112,9 +117,7 @@ Deno.serve(async (req) => {
 
     // Honor token filter for Pro/API if provided
     if (tokens && tokens.length) {
-      const expanded = tokens.some((s) => s.includes('_'))
-        ? tokens
-        : tokens.map((t) => `${t}_USDT_BINANCE`);
+      const expanded = tokens.map((t) => `${t}_USDT_BINANCE`);
       base = base.in('symbol_id', expanded);
     }
 
@@ -165,12 +168,6 @@ Deno.serve(async (req) => {
       tokens: tokens ?? null,
       count: dataRows.length,
       data: dataRows,
-      metadata: {
-        user_id: user.user_id,
-        subscription_tier: user.subscription_tier,
-        api_key_hash: keyHash,
-        api_key_valid: true,
-      },
     });
   } catch (error) {
     return internalError(error);

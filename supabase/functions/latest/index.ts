@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
   if (!auth.ok) {
     return auth.response;
   }
-  const { user, keyHash } = auth;
+  const { user } = auth;
 
   try {
     const supabase = getServiceSupabaseClient();
@@ -110,7 +110,6 @@ Deno.serve(async (req) => {
       .limit(1);
     if (latestErr) throw latestErr;
     const latestDate = latest?.[0]?.date;
-    if (!latestDate) return json({ date: null, rows: [] });
 
     const { data, error } = await supabase
       .from('predictions')
