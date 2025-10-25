@@ -25,7 +25,7 @@ function toCSV(rows, horizon = '1d') {
 
 async function fetchPredictionsForDate(date, horizon = '1d') {
   const res = await predictionsRange({ start: date, end: date, limit: 200000, horizon });
-  const rows = Array.isArray(res?.rows) ? res.rows : [];
+  const rows = Array.isArray(res?.data) ? res.data : [];
   if (horizon === 'both') {
     return rows.map((r) => ({
       date: r.date,
@@ -193,7 +193,7 @@ export default function SignalsHub() {
       }
       // Pro+/API: fetch the day’s universe and list bases
       const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000, horizon: '1d' });
-      const rows = Array.isArray(res?.rows) ? res.rows : [];
+      const rows = Array.isArray(res?.data) ? res.data : [];
       const unique = Array.from(
         new Set(rows.map((r) => String(r.symbol_id || "").split("_")[0]).filter(Boolean))
       ).sort((a, b) => a.localeCompare(b));
@@ -352,20 +352,20 @@ export default function SignalsHub() {
     const res = await predictionsRange(payload);
     let allRows = [];
     if (horizon === 'both') {
-      allRows = (res?.rows || []).map((r) => ({
+      allRows = (res?.data || []).map((r) => ({
         date: r.date,
         symbol: String(r.symbol_id || "").split("_")[0],
         predicted_returns_1: r.predicted_returns_1,
         predicted_returns_3: r.predicted_returns_3,
       }));
     } else if (horizon === '3d') {
-      allRows = (res?.rows || []).map((r) => ({
+      allRows = (res?.data || []).map((r) => ({
         date: r.date,
         symbol: String(r.symbol_id || "").split("_")[0],
         predicted_returns_3: r.predicted_returns_3,
       }));
     } else {
-      allRows = (res?.rows || []).map((r) => ({
+      allRows = (res?.data || []).map((r) => ({
         date: r.date,
         symbol: String(r.symbol_id || "").split("_")[0],
         predicted_returns_1: r.predicted_returns_1,

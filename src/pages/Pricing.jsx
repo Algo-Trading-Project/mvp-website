@@ -2,13 +2,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Check, Crown, Zap, Building, Database } from "lucide-react";
+import { Check, Crown, Zap, Building } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User } from "@/api/entities";
 import { StripeApi } from "@/api/stripe";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+// Removed tabs picker (signals only)
 import { toast } from "sonner";
 
 const AUTH_CACHE_KEY = "pricing-authed";
@@ -75,7 +75,6 @@ export default function Pricing() {
         "Top & bottom deciles for ~12 majors (CSV)",
         "24‑hour delay on files",
         "Email/Discord alerts on rebalance",
-        "Schema: symbol_id, date, decile_rank_1d (top/bottom)",
         "Access to public OOS dashboard (read‑only)"
       ],
       cta: "Start with Lite",
@@ -89,7 +88,6 @@ export default function Pricing() {
       features: [
         "Full daily ranks/scores across ~391 assets",
         "12–24 months history downloads (CSV)",
-        "Schema: symbol_id, date, y_pred, score_percentile",
         "Fee‑adjusted deciles, turnover & capacity metrics",
         "Access to OOS visuals & methodology"
       ],
@@ -105,7 +103,6 @@ export default function Pricing() {
       features: [
         "Programmatic ranks/scores + optional weights",
         "Point‑in‑time retrieval & historical archives",
-        "Schema: symbol_id, date, score, weight, confidence",
         "Higher rate limits + webhooks",
         "Versioned model cards & monitoring"
       ],
@@ -129,101 +126,7 @@ export default function Pricing() {
     }
   ];
 
-  const dataRaw = [
-    {
-      name: "OHLCV Starter",
-      icon: Database,
-      monthlyPrice: 129,
-      description: "EOD OHLCV for top 50 assets. Cleaned, normalized symbols/venues.",
-      features: [
-        "Daily OHLCV (EOD) for top 50 assets",
-        "Normalized symbols & venues",
-        "CSV downloads + documentation"
-      ],
-      cta: "Start Data Starter"
-    },
-    {
-      name: "OHLCV Pro (1‑min bars)",
-      icon: Database,
-      monthlyPrice: 349,
-      description: "1‑min + daily OHLCV for 150+ assets. Schema guarantees, bulk downloads.",
-      features: [
-        "1‑minute & daily OHLCV for 150+ assets",
-        "Venue normalization & schema guarantees",
-        "Bulk download tooling"
-      ],
-      cta: "Choose Data Pro",
-      popular: true
-    },
-    {
-      name: "OHLCV + Select Tick",
-      icon: Database,
-      monthlyPrice: 699,
-      description: "Add curated tick/trade feeds for top venues. S3 pre‑signed or query‑in‑cloud.",
-      features: [
-        "Everything in Pro",
-        "Curated tick/trade feeds for top venues",
-        "S3 pre‑signed or query‑in‑cloud options"
-      ],
-      cta: "Choose Data + Tick"
-    },
-    {
-      name: "Enterprise Data",
-      icon: Building,
-      monthlyPrice: null,
-      customNote: "Custom",
-      description: "Expanded tick + order‑book snapshots, custom retention/backfills, native sharing.",
-      features: [
-        "Expanded coverage & snapshots",
-        "Custom pipelines and retention",
-        "Warehouse/native sharing & SLAs"
-      ],
-      cta: "Contact Sales",
-      contact: true
-    }
-  ];
-
-  const bundlesRaw = [
-    {
-      name: "Starter Bundle",
-      icon: Database,
-      monthlyPrice: 199, // Signals Pro ($139) + OHLCV Starter ($129) = $268 → ~25% off
-      description: "Signals Pro + OHLCV Starter at a clear discount.",
-      features: [
-        "Signals Pro (full ranks & history)",
-        "OHLCV Starter (top 50 EOD)",
-        "Email/Discord alerts + downloads"
-      ],
-      cta: "Choose Starter Bundle",
-      popular: true
-    },
-    {
-      name: "Pro Bundle",
-      icon: Crown,
-      monthlyPrice: 899, // Signals API ($449) + OHLCV Pro ($349) + Select Tick ($699) = $1,497 → ~40% off
-      description: "Signals API + OHLCV Pro + Select Tick — desk‑level access.",
-      features: [
-        "Signals API (programmatic ranks/scores/weights)",
-        "OHLCV Pro (1‑min + EOD)",
-        "Curated tick/trade feeds + webhooks"
-      ],
-      cta: "Choose Pro Bundle"
-    },
-    {
-      name: "Desk All‑Access",
-      icon: Building,
-      monthlyPrice: null,
-      customNote: "Custom",
-      description: "Custom bundles for teams and funds via AWS Marketplace/private offer.",
-      features: [
-        "Private endpoints & SLAs",
-        "Custom universe & cadence",
-        "Bulk history per data‑month + integration help"
-      ],
-      cta: "Contact Sales",
-      contact: true
-    }
-  ];
+  // Market data and bundle plans removed (Signals only)
 
   // Compute annual prices with 15% discount
   const addAnnual = (plans) =>
@@ -233,8 +136,6 @@ export default function Pricing() {
     });
 
   const signalsPlans = addAnnual(signalsRaw);
-  const dataPlans = addAnnual(dataRaw);
-  const bundlePlans = addAnnual(bundlesRaw);
 
   const getPrice = (plan) => (plan.price ? plan.price[billingCycle] : null);
   const getSavings = (plan) =>
@@ -397,26 +298,10 @@ export default function Pricing() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="signals" className="space-y-8">
-          <TabsList className="bg-slate-900 border border-slate-800 rounded-md">
-            <TabsTrigger value="signals" className="data-[state=inactive]:text-white">ML Signals</TabsTrigger>
-            <TabsTrigger value="data" className="data-[state=inactive]:text-white">Market Data</TabsTrigger>
-            <TabsTrigger value="bundles" className="data-[state=inactive]:text-white">Bundles</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="signals">
-            <PlanGrid plans={signalsPlans} />
-          </TabsContent>
-
-          <TabsContent value="data">
-            <PlanGrid plans={dataPlans} />
-          </TabsContent>
-
-          <TabsContent value="bundles">
-            <PlanGrid plans={bundlePlans} />
-          </TabsContent>
-        </Tabs>
+        {/* Signals Only */}
+        <div className="space-y-8">
+          <PlanGrid plans={signalsPlans} />
+        </div>
 
         {/* Details */}
         <div className="mt-16 max-w-4xl mx-auto">

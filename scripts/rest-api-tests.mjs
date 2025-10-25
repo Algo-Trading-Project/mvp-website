@@ -74,15 +74,6 @@ if (!apiKey) {
 
 const expectedApiKeyHash = createHash("sha256").update(apiKey).digest("hex");
 
-const logApiKeyValidation = (label, metadata) => {
-  const hash = metadata?.api_key_hash ?? null;
-  const match = hash ? hash === expectedApiKeyHash : false;
-  console.log(
-    `[${label}] api_key_hash=${hash ?? "null"} match=${match ? "true" : "false"}`,
-  );
-  return { hash, match };
-};
-
 const results = [];
 
 const capture = async (label, fn) => {
@@ -143,20 +134,17 @@ await capture("GET /latest", async () => {
   if (!json || typeof json !== "object") {
     throw new Error("Missing JSON payload");
   }
-  if (!Array.isArray(json.rows)) {
-    throw new Error("Expected rows array");
+  if (!Array.isArray(json.data)) {
+    throw new Error("Expected data array");
   }
-  if (json.rows.length === 0) {
+  if (json.data.length === 0) {
     console.warn("Warning: /latest returned zero rows.");
   }
-  logApiKeyValidation("/latest", json.metadata);
   latestSnapshot = json;
   return {
-    rows: json.rows.length,
+    rows: json.data.length,
     date: json.date ?? null,
-    sampleSymbol: json.rows[0]?.symbol_id ?? null,
-    api_key_hash: json.metadata?.api_key_hash ?? null,
-    api_key_match: json.metadata?.api_key_hash === expectedApiKeyHash,
+    sampleSymbol: json.data[0]?.symbol_id ?? null,
   };
 });
 
@@ -165,22 +153,21 @@ await capture("GET /universe", async () => {
   if (!json || typeof json !== "object") {
     throw new Error("Missing JSON payload");
   }
-  if (!Array.isArray(json.tokens)) {
-    throw new Error("Expected tokens array");
+  if (!Array.isArray(json.data)) {
+    throw new Error("Expected data array");
   }
-  const rawTokens = json.tokens;
+  const rawTokens = json.data;
   const normalizedTokens = rawTokens.map((token) => String(token).trim().toUpperCase());
   universeTokens = normalizedTokens;
-  const validation = logApiKeyValidation("/universe", json.metadata);
-  if (process.env.DEBUG_REST_TESTS && latestSnapshot?.rows?.length) {
-    const expectedRaw = String(latestSnapshot.rows[0].symbol_id ?? "").trim();
+  if (process.env.DEBUG_REST_TESTS && latestSnapshot?.data?.length) {
+    const expectedRaw = String(latestSnapshot.data[0].symbol_id ?? "").trim();
     console.log("Universe contains raw expected:", rawTokens.includes(expectedRaw));
   }
   if (process.env.DEBUG_REST_TESTS) {
     console.log("Universe sample tokens:", universeTokens.slice(0, 5));
   }
-  if (latestSnapshot?.rows?.length) {
-    const firstSymbol = String(latestSnapshot.rows[0].symbol_id ?? "")
+  if (latestSnapshot?.data?.length) {
+    const firstSymbol = String(latestSnapshot.data[0].symbol_id ?? "")
       .trim()
       .toUpperCase();
     if (firstSymbol && !universeTokens.includes(firstSymbol)) {
@@ -188,9 +175,7 @@ await capture("GET /universe", async () => {
     }
   }
   return {
-    tokens: json.tokens.length,
-    api_key_hash: validation.hash,
-    api_key_match: validation.match,
+    tokens: json.data.length,
   };
 });
 
@@ -201,51 +186,51 @@ await capture("GET /predictions", async () => {
     console.warn("Skipping narrow prediction checks – unable to infer latest date.");
   }
 
-  const firstSymbolRaw = latestSnapshot?.rows?.[0]?.symbol_id ?? universeTokens?.[0] ?? null;
+  const firstSymbolRaw = latestSnapshot?.data?.[0]?.symbol_id ?? universeTokens?.[0] ?? null;
   const firstSymbol = firstSymbolRaw ? String(firstSymbolRaw).trim().toUpperCase() : null;
+  const firstBase = firstSymbol ? firstSymbol.split('_')[0] : null;
   const query = {
     start_date: startDate,
     end_date: endDate,
   };
-  if (firstSymbolRaw) {
-    query.tokens = firstSymbolRaw;
+  if (firstBase) {
+    query.tokens = firstBase;
   }
   const json = await requestJson("predictions", { query });
   if (!json || typeof json !== "object") {
     throw new Error("Missing JSON payload");
   }
-  if (!Array.isArray(json.rows)) {
-    throw new Error("Expected rows array");
+  if (!Array.isArray(json.data)) {
+    throw new Error("Expected data array");
   }
-  const validation = logApiKeyValidation("/predictions", json.metadata);
-  if (firstSymbol) {
-    const hasSymbol = json.rows.some(
-      (row) => String(row.symbol_id ?? '').trim().toUpperCase() === firstSymbol,
+  if (firstBase) {
+    const hasSymbol = json.data.some(
+      (row) => String(row.symbol_id ?? '').trim().toUpperCase().split('_')[0] === firstBase,
     );
-    if (!hasSymbol && json.rows.length) {
-      throw new Error(`Filtered predictions response missing token ${firstSymbol}`);
+    if (!hasSymbol && json.data.length) {
+      throw new Error(`Filtered predictions response missing token ${firstBase}`);
     }
   }
   return {
-    rows: json.rows.length,
-    range: json.range ?? null,
-    api_key_hash: validation.hash,
-    api_key_match: validation.match,
+    rows: json.data.length,
+    start_date: json.start_date ?? null,
+    end_date: json.end_date ?? null,
   };
 });
 
 await capture("GET /ohlcv", async () => {
-  const firstTokenRaw = latestSnapshot?.rows?.[0]?.symbol_id ?? universeTokens?.[0] ?? null;
+  const firstTokenRaw = latestSnapshot?.data?.[0]?.symbol_id ?? universeTokens?.[0] ?? null;
   const token = firstTokenRaw ? String(firstTokenRaw).trim().toUpperCase() : null;
+  const baseToken = token ? token.split('_')[0] : null;
   const endDate = latestSnapshot?.date ?? null;
-  if (!token || !endDate) {
+  if (!baseToken || !endDate) {
     console.warn("Skipping OHLCV checks – cannot determine token/date from data.");
     return { skipped: true };
   }
 
   const json = await requestJson("ohlcv", {
     query: {
-      token,
+      tokens: baseToken,
       start_date: endDate,
       end_date: endDate,
     },
@@ -253,21 +238,18 @@ await capture("GET /ohlcv", async () => {
   if (!json || typeof json !== "object") {
     throw new Error("Missing JSON payload");
   }
-  if (!Array.isArray(json.rows)) {
-    throw new Error("Expected rows array");
+  if (!Array.isArray(json.data)) {
+    throw new Error("Expected data array");
   }
-  const validation = logApiKeyValidation("/ohlcv", json.metadata);
-  if (json.rows.length) {
-    const first = json.rows[0];
+  if (json.data.length) {
+    const first = json.data[0];
     if (!["open", "high", "low", "close", "volume"].every((key) => key in first)) {
       throw new Error("OHLCV row missing expected keys");
     }
   }
   return {
-    rows: json.rows.length,
-    token,
-    api_key_hash: validation.hash,
-    api_key_match: validation.match,
+    rows: json.data.length,
+    token: baseToken,
   };
 });
 

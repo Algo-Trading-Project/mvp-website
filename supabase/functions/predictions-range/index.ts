@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
         requestedSymbols = Array.from(liteSymbols);
       }
       if (!requestedSymbols.length) {
-        return json({ count: 0, rows: [] });
+        return json({ count: 0, data: [] });
       }
       base = base.in('symbol_id', requestedSymbols);
     } else {

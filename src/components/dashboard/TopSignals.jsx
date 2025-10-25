@@ -96,7 +96,7 @@ export default function TopSignals({ subscription, horizon = '1d', loading = fal
         if (abortSignal?.aborted) return;
 
         const lastDate = data?.date;
-        const rows = data?.rows || [];
+        const rows = Array.isArray(data?.data) ? data.data : [];
 
         if (!lastDate || !rows.length) {
           setTopSignals([]);
@@ -106,7 +106,7 @@ export default function TopSignals({ subscription, horizon = '1d', loading = fal
           return;
         }
 
-        const predField = "y_pred";
+        const predField = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
         const scored = rows
           .map((r) => {
             const raw = r[predField];
