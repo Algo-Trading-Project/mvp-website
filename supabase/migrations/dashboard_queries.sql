@@ -1,24 +1,6 @@
 # TODO: implement daily refresh of daily_dashboard_metrics materialized view
 # TODO: implement daily refresh of model_performance_metrics_monthly_agg materialized view
 
-cross_sectional_metrics_1d schema (
-date
-cross_sectional_ic_1d
-rolling_30d_avg_ic
-cs_top_bottom_decile_spread
-rolling_30d_avg_top_bottom_decile_spread
-rolling_30d_hit_rate
-);
-
-predictions schema (
-date
-symbol_id
-predicted_returns_1,
-predicted_returns_3,
-forward_returns_1,
-forward_returns_3
-)
-
 WITH dates AS (
     SELECT DISTINCT date
     FROM predictions
@@ -45,6 +27,7 @@ cs_metrics_1d AS (
         date,
         CORR(cs_pred_rank_1d, cs_forward_return_rank_1d) AS cs_spearman_ic_1d,
         AVG(forward_returns_1) FILTER (WHERE cs_pred_percentile_1d >= 0.9) - AVG(forward_returns_1) FILTER (WHERE cs_pred_percentile_1d <= 0.1) AS cs_top_bottom_decile_spread_1d,
+        AVG(forward_returns_1) FILTER (WHERE cs_pred_percentile_1d >= 0.95) - AVG(forward_returns_1) FILTER (WHERE cs_pred_percentile_1d <= 0.05) AS cs_top_bottom_p05_spread_1d,
         SUM(
             CASE 
                 WHEN SIGN(predicted_returns_1) = SIGN(forward_returns_1) THEN 1 
@@ -77,6 +60,7 @@ cs_metrics_3d AS (
         date,
         CORR(cs_pred_rank_3d, cs_forward_return_rank_3d) AS cs_spearman_ic_3d,
         AVG(forward_returns_3) FILTER (WHERE cs_pred_percentile_3d >= 0.9) - AVG(forward_returns_3) FILTER (WHERE cs_pred_percentile_3d <= 0.1) AS cs_top_bottom_decile_spread_3d,
+        AVG(forward_returns_3) FILTER (WHERE cs_pred_percentile_3d >= 0.95) - AVG(forward_returns_3) FILTER (WHERE cs_pred_percentile_3d <= 0.05) AS cs_top_bottom_p05_spread_3d,
         SUM(
             CASE 
                 WHEN SIGN(predicted_returns_3) = SIGN(forward_returns_3) THEN 1 
@@ -94,11 +78,13 @@ cs_metrics_joined AS (
         -- 1d metrics
         m1d.cs_spearman_ic_1d,
         m1d.cs_top_bottom_decile_spread_1d,
+        m1d.cs_top_bottom_p05_spread_1d,
         m1d.cs_hit_count_1d,
         m1d.total_count_1d,
         -- 3d metrics
         m3d.cs_spearman_ic_3d,
         m3d.cs_top_bottom_decile_spread_3d,
+        m3d.cs_top_bottom_p05_spread_3d,
         m3d.cs_hit_count_3d,
         m3d.total_count_3d
     FROM dates d

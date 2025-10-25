@@ -32,14 +32,20 @@ create or replace function rpc_rolling_spread(
   window integer default 30,
   p_limit integer default 1000,
   p_offset integer default 0,
-  p_horizon text default '1d'
+  p_horizon text default '1d',
+  p_top_pct double precision default 0.1
 )
 returns table(date date, value double precision)
 language sql
 stable
 as $$
   select d.date,
-         avg(case when p_horizon = '3d' then d.cs_top_bottom_decile_spread_3d else d.cs_top_bottom_decile_spread_1d end) over (
+         avg(
+           case when p_horizon = '3d'
+                then (case when p_top_pct <= 0.05 then d.cs_top_bottom_p05_spread_3d else d.cs_top_bottom_decile_spread_3d end)
+                else (case when p_top_pct <= 0.05 then d.cs_top_bottom_p05_spread_1d else d.cs_top_bottom_decile_spread_1d end)
+           end
+         ) over (
            order by d.date
            rows between (window - 1) preceding and current row
          ) as value
