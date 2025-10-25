@@ -15,16 +15,9 @@ Deno.serve(async (req) => {
     const supabase = getServiceSupabaseClient();
     // Try horizon-aware RPC; fallback to legacy signature if older schema
     let data: any[] | null = null;
-    try {
-      const rpc2 = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end, p_horizon: horizon });
-      if (rpc2.error) throw rpc2.error;
-      data = rpc2.data as any[] | null;
-    } catch (_e) {
-      // Legacy fallback (no horizon param, implicitly 1d)
-      const rpc = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end } as any);
-      if (rpc.error) throw rpc.error;
-      data = rpc.data as any[] | null;
-    }
+    const rpc2 = await supabase.rpc('rpc_adv_by_decile', { start_date: start, end_date: end, p_horizon: horizon });
+    if (rpc2.error) throw rpc2.error;
+    data = rpc2.data as any[] | null;
     const bars = (data ?? [])
       .map((r: Record<string, unknown>) => ({
         decile: Number(r.decile),

@@ -39,6 +39,10 @@ Deno.serve(async (req) => {
   const startDate = normalizeDate(url.searchParams.get('start_date') ?? '');
   const endDate = normalizeDate(url.searchParams.get('end_date') ?? '');
   const tokens = parseTokens(url.searchParams.get('tokens'));
+  const includeForwards = (() => {
+    const raw = (url.searchParams.get('include_forward_returns') || '').trim().toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+  })();
 
   // Parse strict horizon from query params: horizon=1d, horizon=3d, or both
   const rawHorizon = url.searchParams.getAll('horizon');
@@ -97,9 +101,15 @@ Deno.serve(async (req) => {
     }
     // Build base query
     const targetCol = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
-    const selectCols = horizon === 'both'
-      ? 'date, symbol_id, predicted_returns_1, predicted_returns_3'
-      : `date, symbol_id, ${targetCol}`;
+    const selectCols = (() => {
+      if (horizon === 'both') {
+        return 'date, symbol_id, predicted_returns_1, predicted_returns_3' + (includeForwards ? ', forward_returns_1, forward_returns_3' : '');
+      }
+      if (horizon === '3d') {
+        return 'date, symbol_id, predicted_returns_3' + (includeForwards ? ', forward_returns_3' : '');
+      }
+      return 'date, symbol_id, predicted_returns_1' + (includeForwards ? ', forward_returns_1' : '');
+    })();
 
     let base = supabase
       .from('predictions')
@@ -144,22 +154,31 @@ Deno.serve(async (req) => {
         symbol_id: String(row.symbol_id ?? ''),
       };
       if (horizon === 'both') {
-        return {
+        const base: any = {
           ...common,
           predicted_returns_1: mapNumber((row as any).predicted_returns_1),
           predicted_returns_3: mapNumber((row as any).predicted_returns_3),
         };
+        if (includeForwards) {
+          base.forward_returns_1 = mapNumber((row as any).forward_returns_1);
+          base.forward_returns_3 = mapNumber((row as any).forward_returns_3);
+        }
+        return base;
       }
       if (horizon === '3d') {
-        return {
+        const base: any = {
           ...common,
           predicted_returns_3: mapNumber((row as any).predicted_returns_3),
         };
+        if (includeForwards) base.forward_returns_3 = mapNumber((row as any).forward_returns_3);
+        return base;
       }
-      return {
+      const base: any = {
         ...common,
         predicted_returns_1: mapNumber((row as any).predicted_returns_1),
       };
+      if (includeForwards) base.forward_returns_1 = mapNumber((row as any).forward_returns_1);
+      return base;
     }).filter((row) => (row as any).symbol_id && (row as any).date);
 
     return json({

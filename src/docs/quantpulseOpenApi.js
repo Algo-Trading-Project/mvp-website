@@ -59,6 +59,8 @@ const spec = {
           symbol_id: { type: "string", description: "Instrument identifier (e.g., BTC_USDT_BINANCE)." },
           predicted_returns_1: { type: "number", nullable: true, description: "1-day predicted return (if requested)." },
           predicted_returns_3: { type: "number", nullable: true, description: "3-day predicted return (if requested)." },
+          forward_returns_1: { type: "number", nullable: true, description: "1-day forward return (included when include_forward_returns=true and horizon includes 1d)." },
+          forward_returns_3: { type: "number", nullable: true, description: "3-day forward return (included when include_forward_returns=true and horizon includes 3d)." },
         },
         required: ["date", "symbol_id"],
       },
@@ -169,6 +171,13 @@ const spec = {
         schema: { type: "string" },
         description: "Prediction horizon: `1d`, `3d`, or `both`. Defaults to `1d`.",
       },
+      IncludeForwardReturns: {
+        name: "include_forward_returns",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "If true, response includes `forward_returns_1`/`forward_returns_3` for the selected horizon(s). Defaults to false.",
+      },
     },
   },
   paths: {
@@ -216,6 +225,7 @@ const spec = {
           { $ref: "#/components/parameters/EndDate" },
           { $ref: "#/components/parameters/Tokens" },
           { $ref: "#/components/parameters/Horizon" },
+          { $ref: "#/components/parameters/IncludeForwardReturns" },
         ],
         responses: {
           200: {
