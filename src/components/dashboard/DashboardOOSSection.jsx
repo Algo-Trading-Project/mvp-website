@@ -144,7 +144,10 @@ export default function DashboardOOSSection() {
   const [rawMonthlyRow, setRawMonthlyRow] = React.useState(null);
   // Which table to show SQL for: 'daily' | 'monthly' | null
   const [sqlTable, setSqlTable] = React.useState(null);
-  const [copiedSql, setCopiedSql] = React.useState(null);
+  // Chart SQL dialog state
+  const [chartSqlOpen, setChartSqlOpen] = React.useState(false);
+  const [chartSqlTitle, setChartSqlTitle] = React.useState('');
+  const [chartSqlText, setChartSqlText] = React.useState('');
 
 
   React.useEffect(() => {
@@ -536,6 +539,94 @@ from monthly_metrics_temp;`;
       <pre className="sql-pre p-3 text-xs whitespace-pre leading-5" dangerouslySetInnerHTML={{ __html: highlightSql(sql) }} />
     </div>
   );
+
+  const CopyButton = ({ text }) => {
+    const [copied, setCopied] = React.useState(false);
+    return (
+      <button
+        className={`text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${copied ? 'opacity-80' : ''}`}
+        onClick={async () => { await copyToClipboard(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      >{copied ? 'Copied' : 'Copy SQL'}</button>
+    );
+  };
+
+  const esc = (s) => String(s ?? '').replaceAll("'", "''");
+  const buildRollingIcSql = () => {
+    const field = horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d';
+    return `-- Resolved SQL matching rpc_rolling_ic
+select d.date,
+       avg(d.${field}) over (
+         order by d.date
+         rows between (30 - 1) preceding and current row
+       ) as value
+from daily_dashboard_metrics d
+where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by d.date
+limit 1000 offset 0;`;
+  };
+  const buildRollingSpreadSql = () => {
+    const field = horizon === '3d'
+      ? (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
+      : (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
+    return `-- Resolved SQL matching rpc_rolling_spread
+select d.date,
+       avg(d.${field}) over (
+         order by d.date
+         rows between (30 - 1) preceding and current row
+       ) as value
+from daily_dashboard_metrics d
+where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by d.date
+limit 1000 offset 0;`;
+  };
+  const buildRollingHitSql = () => {
+    const hitCol = horizon === '3d' ? 'cs_hit_count_3d' : 'cs_hit_count_1d';
+    const totCol = horizon === '3d' ? 'total_count_3d' : 'total_count_1d';
+    return `-- Resolved SQL matching rpc_rolling_hit_rate
+select d.date,
+       case when sum(d.${totCol}) over (
+                    order by d.date rows between (30 - 1) preceding and current row
+                  ) > 0
+            then (sum(d.${hitCol}) over (
+                    order by d.date rows between (30 - 1) preceding and current row
+                  ))::double precision
+                 / nullif(sum(d.${totCol}) over (
+                            order by d.date rows between (30 - 1) preceding and current row
+                          ), 0)
+            else null end as value
+from daily_dashboard_metrics d
+where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by d.date
+limit 1000 offset 0;`;
+  };
+  const buildQuintileReturnsSql = () => {
+    const pred = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
+    const fwd = horizon === '3d' ? 'forward_returns_3' : 'forward_returns_1';
+    return `-- Resolved SQL used by the decile returns plot
+with base as (
+  select
+    date,
+    ${pred} as pred,
+    ${fwd}  as fwd
+  from predictions
+  where date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+    and ${pred} is not null
+    and ${fwd}  is not null
+), ranked as (
+  select date,
+         ntile(10) over (partition by date order by pred) as decile,
+         fwd
+  from base
+), per_date as (
+  select date, decile, avg(fwd) as avg_ret
+  from ranked
+  group by date, decile
+)
+select decile, avg(avg_ret) as avg_return
+from per_date
+group by decile
+order by decile;`;
+  };
 
   // Simple clipboard copy helper for SQL dialog
   const copyToClipboard = async (text) => {
@@ -936,6 +1027,10 @@ from monthly_metrics_temp;`;
                     description="30‑day average of the daily cross‑sectional Information Coefficient between predictions and forward returns for the selected horizon." />
                   Rolling 30‑Day Information Coefficient ({horizon})
                 </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => { setChartSqlTitle('Rolling 30‑Day Information Coefficient'); setChartSqlText(buildRollingIcSql()); setChartSqlOpen(true); }}
+                >Show SQL</button>
               </div>
               <div className="h-auto">
                 {icSvgLoading ? (
@@ -959,6 +1054,10 @@ from monthly_metrics_temp;`;
                     description="30‑day average of the cross‑sectional top minus bottom performance using the selected percentile (10% or 5%)." />
                   {`Rolling 30‑Day Avg. Top–Bottom Spread (${topPct === 0.05 ? '5%' : '10%'} • ${horizon})`}
                 </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => { setChartSqlTitle('Rolling 30‑Day Avg. Top–Bottom Spread'); setChartSqlText(buildRollingSpreadSql()); setChartSqlOpen(true); }}
+                >Show SQL</button>
               </div>
               <div className="h-auto">
                 {spreadLoading ? (
@@ -982,6 +1081,10 @@ from monthly_metrics_temp;`;
                     description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)." />
                   Rolling 30‑Day Hit Rate
                 </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => { setChartSqlTitle('Rolling 30‑Day Hit Rate'); setChartSqlText(buildRollingHitSql()); setChartSqlOpen(true); }}
+                >Show SQL</button>
               </div>
               {hitLoading ? (
                 <ChartCardSkeleton height={360} />
@@ -1008,6 +1111,10 @@ from monthly_metrics_temp;`;
                     description="Per‑day, assets are binned into deciles by predicted return. Bars show the average forward return across days for each decile." />
                   Average Returns by Cross-Sectional Prediction Decile
                 </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => { setChartSqlTitle('Average Returns by Cross‑Sectional Prediction Decile'); setChartSqlText(buildQuintileReturnsSql()); setChartSqlOpen(true); }}
+                >Show SQL</button>
               </div>
               {quintileLoading ? (
                 <ChartCardSkeleton height={360} />
@@ -1032,7 +1139,20 @@ from monthly_metrics_temp;`;
               <BootstrapSpreadDistribution dateRange={dateRange} horizon={horizon} topPct={topPct} />
             </div>
           </div>
-        </div>
+      </div>
+
+        {/* Generic chart SQL dialog */}
+        <Dialog open={chartSqlOpen} onOpenChange={setChartSqlOpen}>
+          <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
+            <DialogHeader>
+              <DialogTitle className="text-white">{chartSqlTitle || 'SQL'}</DialogTitle>
+            </DialogHeader>
+            <div className="flex justify-end mb-2">
+              <CopyButton text={chartSqlText} />
+            </div>
+            {renderSql(chartSqlText)}
+          </DialogContent>
+        </Dialog>
 
         {/* Raw Data (bottom of dashboard, under distribution plots) */}
         <div className="mt-12">
@@ -1184,14 +1304,7 @@ from monthly_metrics_temp;`;
                 <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_monthly_agg'}</DialogTitle>
               </DialogHeader>
               <div className="flex justify-end mb-2">
-                <button
-                  className={`text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${copiedSql ? 'opacity-80' : ''}`}
-                  onClick={async () => {
-                    await copyToClipboard(sqlTable === 'daily' ? dailySql : monthlySql);
-                    setCopiedSql(sqlTable);
-                    setTimeout(() => setCopiedSql(null), 2000);
-                  }}
-                >{copiedSql === sqlTable ? 'Copied' : 'Copy SQL'}</button>
+                <CopyButton text={sqlTable === 'daily' ? dailySql : monthlySql} />
               </div>
               {sqlTable === 'daily' ? (
                 renderSql(dailySql)

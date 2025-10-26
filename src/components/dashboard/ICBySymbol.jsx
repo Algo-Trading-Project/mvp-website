@@ -4,6 +4,7 @@ import { icBySymbolPlot } from "@/api/functions";
 import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
 
@@ -70,6 +71,49 @@ export default function ICBySymbol({ dateRange, horizon = '1d' }) {
   const [htmlBottom, setHtmlBottom] = React.useState(initialBottomHtml);
   const [loading, setLoading] = React.useState(!(initialTopHtml && initialBottomHtml));
   const [error, setError] = React.useState(null);
+  const [showSqlTop, setShowSqlTop] = React.useState(false);
+  const [showSqlBottom, setShowSqlBottom] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const esc = (s) => String(s ?? '').replaceAll("'", "''");
+  const sqlCall = React.useMemo(() => {
+    const pred = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
+    const fwd  = horizon === '3d' ? 'forward_returns_3'   : 'forward_returns_1';
+    return `-- Resolved SQL used by IC by Token (Top/Bottom)
+with base as (
+  select split_part(symbol_id, '_', 1) as symbol,
+         ${pred} as pred,
+         ${fwd}  as ret
+  from predictions
+  where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end || '')}'
+    and ${pred} is not null
+    and ${fwd}  is not null
+), r as (
+  select symbol,
+         rank() over (partition by symbol order by pred) as r_pred,
+         rank() over (partition by symbol order by ret)  as r_ret
+  from base
+)
+select symbol,
+       corr(r_pred, r_ret) as spearman_ic,
+       count(*)            as observation_count
+from r
+group by symbol
+having count(*) >= 30
+order by spearman_ic desc;`;
+  }, [dateRange?.start, dateRange?.end, horizon]);
+
+  const highlightSql = (sql) => {
+    if (!sql) return '';
+    const escape = (t) => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let out = escape(sql);
+    out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
+    out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
+    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
+    const kw = /\b(select|from|where|between|and|or|order|group|by)\b/gi;
+    out = out.replace(kw, (m)=>`<span class=\"kw\">${m.toUpperCase()}</span>`);
+    return out;
+  };
 
   React.useEffect(() => {
     if (!dateRange || !dateRange.start || !dateRange.end) {
@@ -175,21 +219,47 @@ export default function ICBySymbol({ dateRange, horizon = '1d' }) {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-            <div className="flex items-center mb-2 gap-2">
+            <div className="flex items-center justify-between mb-2 gap-2">
               <InfoTooltip title="Top 20 by IC" description="Tokens with highest Information Coefficient over the selected date range." />
               <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
+              <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSqlTop(true)}>Show SQL</button>
             </div>
             <Plot html={htmlTop} title="Top 20 Tokens by IC" />
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-            <div className="flex items-center mb-2 gap-2">
+            <div className="flex items-center justify-between mb-2 gap-2">
               <InfoTooltip title="Bottom 20 by IC" description="Tokens with lowest Information Coefficient over the selected date range." />
               <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
+              <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSqlBottom(true)}>Show SQL</button>
             </div>
             <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
           </div>
         </div>
       )}
+
+      <Dialog open={showSqlTop || showSqlBottom} onOpenChange={(open)=>{ if (!open) { setShowSqlTop(false); setShowSqlBottom(false); } }}>
+        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="text-white">SQL: IC by Token</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-end mb-2">
+            <button
+              className={`text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${copied ? 'opacity-80' : ''}`}
+              onClick={async ()=>{ await navigator.clipboard.writeText(sqlCall); setCopied(true); setTimeout(()=>setCopied(false), 2000); }}
+            >{copied ? 'Copied' : 'Copy SQL'}</button>
+          </div>
+          <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
+            <style dangerouslySetInnerHTML={{ __html: `
+              .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono','Courier New', monospace; color: #e5e7eb; }
+              .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+              .sql-pre .str { color: #fca5a5; }
+              .sql-pre .num { color: #fdba74; }
+              .sql-pre .com { color: #94a3b8; font-style: italic; }
+            ` }} />
+            <pre className="sql-pre p-3 text-xs whitespace-pre leading-5" dangerouslySetInnerHTML={{ __html: highlightSql(sqlCall) }} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
