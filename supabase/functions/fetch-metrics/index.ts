@@ -105,41 +105,44 @@ Deno.serve(async (req) => {
       rolling_30d_hit_rate: cross[lastIdx].rolling_30d_hit_rate,
     } : null;
 
-    // Monthly performance metrics: read from materialized view model_performance_metrics_monthly_agg
+    // Aggregated performance metrics: read from materialized view model_performance_metrics_agg
     let monthly_summary = {
       one_day: { mean: null, std: null, positive_share: null, icir_ann: null },
       three_day: { mean: null, std: null, positive_share: null, icir_ann: null },
       count: { one_day: null as number | null, three_day: null as number | null },
     } as const;
+    let aggRow: any = null;
     try {
       const { data: mon, error: monErr } = await supabase
-        .from('model_performance_metrics_monthly_agg')
+        .from('model_performance_metrics_agg')
         .select(`
-          avg_monthly_mean_cs_spearman_ic_1d,
-          std_monthly_mean_cs_spearman_ic_1d,
+          avg_cs_spearman_ic_1d,
+          std_cs_spearman_ic_1d,
           annualized_icir_1d,
-          pct_months_mean_cs_ic_above_0_1d,
-          avg_monthly_mean_cs_spearman_ic_3d,
-          std_monthly_mean_cs_spearman_ic_3d,
+          pct_days_cs_ic_1d_above_0,
+          avg_cs_spearman_ic_3d,
+          std_cs_spearman_ic_3d,
           annualized_icir_3d,
-          pct_months_mean_cs_ic_above_0_3d
+          pct_days_cs_ic_3d_above_0,
+          avg_cs_decile_spread_1d
         `)
         .limit(1)
         .maybeSingle();
       if (monErr) throw monErr;
       const row = (mon || {}) as Record<string, unknown>;
+      aggRow = row;
       monthly_summary = {
         one_day: {
-          mean: coerceNumber(row.avg_monthly_mean_cs_spearman_ic_1d),
-          std: coerceNumber(row.std_monthly_mean_cs_spearman_ic_1d),
+          mean: coerceNumber(row.avg_cs_spearman_ic_1d),
+          std: coerceNumber(row.std_cs_spearman_ic_1d),
           icir_ann: coerceNumber(row.annualized_icir_1d),
-          positive_share: coerceNumber(row.pct_months_mean_cs_ic_above_0_1d),
+          positive_share: coerceNumber(row.pct_days_cs_ic_1d_above_0),
         },
         three_day: {
-          mean: coerceNumber(row.avg_monthly_mean_cs_spearman_ic_3d),
-          std: coerceNumber(row.std_monthly_mean_cs_spearman_ic_3d),
+          mean: coerceNumber(row.avg_cs_spearman_ic_3d),
+          std: coerceNumber(row.std_cs_spearman_ic_3d),
           icir_ann: coerceNumber(row.annualized_icir_3d),
-          positive_share: coerceNumber(row.pct_months_mean_cs_ic_above_0_3d),
+          positive_share: coerceNumber(row.pct_days_cs_ic_3d_above_0),
         },
         count: { one_day: null, three_day: null },
       } as const;
@@ -153,20 +156,15 @@ Deno.serve(async (req) => {
     // Prefer SQL aggregates for robustness; fallback to client means
     let mean_daily_ic_1d = null as number | null;
     let mean_daily_spread_1d = null as number | null;
-    try {
-      const { data: agg, error: aggErr } = await supabase
-        .from('daily_dashboard_metrics')
-        .select('avg_ic:avg(cs_spearman_ic_1d), avg_spread:avg(cs_top_bottom_decile_spread_1d)')
-        .single();
-      if (aggErr) throw aggErr;
-      const mic = typeof (agg as any)?.avg_ic === 'number' ? (agg as any).avg_ic : Number((agg as any)?.avg_ic ?? NaN);
-      const msp = typeof (agg as any)?.avg_spread === 'number' ? (agg as any).avg_spread : Number((agg as any)?.avg_spread ?? NaN);
-      mean_daily_ic_1d = Number.isFinite(mic) ? mic : null;
-      mean_daily_spread_1d = Number.isFinite(msp) ? msp : null;
-    } catch (_e) {
+    // Prefer values from the new aggregate MV if available
+    mean_daily_ic_1d = monthly_summary.one_day.mean;
+    mean_daily_spread_1d = typeof aggRow?.avg_cs_decile_spread_1d === 'number' ? aggRow.avg_cs_decile_spread_1d : null;
+    if (mean_daily_ic_1d == null || mean_daily_spread_1d == null) {
       // Fallback to client-side means
-      mean_daily_ic_1d = mean(nums(cross.map((r: any) => r.cross_sectional_ic_1d)));
-      mean_daily_spread_1d = mean(nums(cross.map((r: any) => r.cs_top_bottom_decile_spread)));
+      const nums = (arr: Array<number | null | undefined>) => arr.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+      const mean = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+      if (mean_daily_ic_1d == null) mean_daily_ic_1d = mean(nums(cross.map((r: any) => r.cross_sectional_ic_1d)));
+      if (mean_daily_spread_1d == null) mean_daily_spread_1d = mean(nums(cross.map((r: any) => r.cs_top_bottom_decile_spread)));
     }
 
     return json({

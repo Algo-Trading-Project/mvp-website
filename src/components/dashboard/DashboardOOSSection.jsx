@@ -429,30 +429,33 @@ with
   )
 select * from cs_metrics_joined;`;
 
-  const monthlySql = `CREATE MATERIALIZED VIEW model_performance_metrics_monthly_agg as
-with base as (
-  select date_part('year', date)::text || '-' || to_char(date, 'MM') as year_month,
-         cs_spearman_ic_1d,
-         cs_spearman_ic_3d
-  from public.daily_dashboard_metrics
-), monthly_metrics_temp as (
-  select year_month,
-         AVG(cs_spearman_ic_1d) as monthly_mean_cs_spearman_ic_1d,
-         AVG(cs_spearman_ic_3d) as monthly_mean_cs_spearman_ic_3d
-  from base
-  group by year_month
-  order by year_month
-)
+  const monthlySql = `CREATE MATERIALIZED VIEW model_performance_metrics_agg as
 select
-  AVG(monthly_mean_cs_spearman_ic_1d) as avg_monthly_mean_cs_spearman_ic_1d,
-  STDDEV(monthly_mean_cs_spearman_ic_1d) as std_monthly_mean_cs_spearman_ic_1d,
-  AVG(monthly_mean_cs_spearman_ic_1d) / STDDEV(monthly_mean_cs_spearman_ic_1d) * SQRT(12) as annualized_icir_1d,
-  AVG(case when monthly_mean_cs_spearman_ic_1d > 0 then 1 else 0 end) as pct_months_mean_cs_ic_above_0_1d,
-  AVG(monthly_mean_cs_spearman_ic_3d) as avg_monthly_mean_cs_spearman_ic_3d,
-  STDDEV(monthly_mean_cs_spearman_ic_3d) as std_monthly_mean_cs_spearman_ic_3d,
-  AVG(monthly_mean_cs_spearman_ic_3d) / STDDEV(monthly_mean_cs_spearman_ic_3d) * SQRT(12) as annualized_icir_3d,
-  AVG(case when monthly_mean_cs_spearman_ic_3d > 0 then 1 else 0 end) as pct_months_mean_cs_ic_above_0_3d
-from monthly_metrics_temp;`;
+  AVG(cs_spearman_ic_1d) as avg_cs_spearman_ic_1d,
+  STDDEV(cs_spearman_ic_1d) as std_cs_spearman_ic_1d,
+  AVG(cs_spearman_ic_1d) / STDDEV(cs_spearman_ic_1d) * SQRT(365) AS annualized_icir_1d,
+  AVG(case when cs_spearman_ic_1d > 0 then 1 else 0 end) as pct_days_cs_ic_1d_above_0,
+  AVG(cs_top_bottom_decile_spread_1d) as avg_cs_decile_spread_1d,
+  STDDEV(cs_top_bottom_decile_spread_1d) as std_cs_decile_spread_1d,
+  AVG(cs_top_bottom_decile_spread_1d) / STDDEV(cs_top_bottom_decile_spread_1d) * SQRT(365) AS annualized_cs_decile_spread_sharpe_1d,
+  AVG(case when cs_top_bottom_decile_spread_1d > 0 then 1 else 0 end) as pct_days_cs_decile_spread_above_0_1d,
+  AVG(cs_top_bottom_p05_spread_1d) as avg_cs_p05_spread_1d,
+  STDDEV(cs_top_bottom_p05_spread_1d) as std_cs_p05_spread_1d,
+  AVG(cs_top_bottom_p05_spread_1d) / STDDEV(cs_top_bottom_p05_spread_1d) * SQRT(365) AS annualized_cs_p05_spread_sharpe_1d,
+  AVG(case when cs_top_bottom_p05_spread_1d > 0 then 1 else 0 end) as pct_days_cs_p05_spread_above_0_1d,
+  AVG(cs_spearman_ic_3d) as avg_cs_spearman_ic_3d,
+  STDDEV(cs_spearman_ic_3d) as std_cs_spearman_ic_3d,
+  AVG(cs_spearman_ic_3d) / STDDEV(cs_spearman_ic_3d) * SQRT(365) AS annualized_icir_3d,
+  AVG(case when cs_spearman_ic_3d > 0 then 1 else 0 end) as pct_days_cs_ic_3d_above_0,
+  AVG(cs_top_bottom_decile_spread_3d) as avg_cs_decile_spread_3d,
+  STDDEV(cs_top_bottom_decile_spread_3d) as std_cs_decile_spread_3d,
+  AVG(cs_top_bottom_decile_spread_3d) / STDDEV(cs_top_bottom_decile_spread_3d) * SQRT(365) AS annualized_cs_decile_spread_sharpe_3d,
+  AVG(case when cs_top_bottom_decile_spread_3d > 0 then 1 else 0 end) as pct_days_cs_decile_spread_above_0_3d,
+  AVG(cs_top_bottom_p05_spread_3d) as avg_cs_p05_spread_3d,
+  STDDEV(cs_top_bottom_p05_spread_3d) as std_cs_p05_spread_3d,
+  AVG(cs_top_bottom_p05_spread_3d) / STDDEV(cs_top_bottom_p05_spread_3d) * SQRT(365) AS annualized_cs_p05_spread_sharpe_3d,
+  AVG(case when cs_top_bottom_p05_spread_3d > 0 then 1 else 0 end) as pct_days_cs_p05_spread_above_0_3d
+from daily_dashboard_metrics;`;
 
   // Load Rolling Hit Rate plot
   React.useEffect(() => {
@@ -787,8 +790,8 @@ order by decile;`;
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
-            title="Mean IC"
-            description="Average of daily cross‑sectional ICs, aggregated by month. Not a pooled calculation."
+            title="Mean Daily IC"
+            description="Average cross‑sectional Spearman IC across days (horizon‑aware)."
           />
           Mean (IC)
         </div>
@@ -798,7 +801,7 @@ order by decile;`;
         <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
             title="Standard Deviation of IC"
-            description="Monthly standard deviation of daily cross‑sectional ICs. Measures consistency."
+            description="Standard deviation of the daily cross‑sectional IC."
           />
           Std Dev (IC)
         </div>
@@ -807,18 +810,16 @@ order by decile;`;
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
-            title="Positive Months"
-            description="Proportion of months with a positive average Information Coefficient."
+            title="Positive Days"
+            description="Proportion of days with positive daily IC (1‑day or 3‑day model)."
           />
-          Positive Months %
+          Positive Days %
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.positiveProp != null ? `${(globalStats.positiveProp * 100).toFixed(1)}%` : "—"}</div>
       </div>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
-          <InfoTooltip
-            title="IC Information Ratio (annualized)"
-            description="Mean monthly IC divided by its standard deviation, annualized by sqrt(12)." />
+          <InfoTooltip title="ICIR (annualized)" description="Mean daily IC divided by its std, annualized by √365." />
           ICIR (Annualized)
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.icirAnn != null ? globalStats.icirAnn.toFixed(2) : "—"}</div>
@@ -1242,7 +1243,7 @@ order by decile;`;
 
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200">model_performance_metrics_monthly_agg</span>
+                <span className="font-semibold text-sm text-slate-200">model_performance_metrics_agg</span>
                 <div className="flex items-center gap-2">
                   <button
                   className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
@@ -1255,7 +1256,7 @@ order by decile;`;
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'model_performance_metrics_monthly_agg.csv';
+                    a.download = 'model_performance_metrics_agg.csv';
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
@@ -1270,17 +1271,21 @@ order by decile;`;
               </div>
               <div className="text-xs text-slate-300 mb-2 flex items-center gap-2">
                 <InfoTooltip
-                  title="Monthly IC Aggregates"
-                  description="Aggregated Information Coefficient statistics (mean, std, annualized ICIR, and positive‑month share) for 1‑day and 3‑day models. These power the Monthly IC badges at the top of the dashboard." />
-                <span>Monthly IC summary statistics.</span>
+                  title="Aggregated Daily Performance"
+                  description="Global aggregates computed over all days: IC mean/std/ICIR and spread metrics for both 1‑day and 3‑day models." />
+                <span>Aggregated daily metrics.</span>
               </div>
               <div className="relative overflow-auto border border-slate-800 rounded-md h-[360px]">
                 <table className="min-w-full text-xs">
                   <thead className="bg-slate-800 sticky top-0">
                     <tr>
                       {(rawMonthlyRow ? Object.keys(rawMonthlyRow) : [
-                        'avg_monthly_mean_cs_spearman_ic_1d', 'std_monthly_mean_cs_spearman_ic_1d', 'annualized_icir_1d', 'pct_months_mean_cs_ic_above_0_1d',
-                        'avg_monthly_mean_cs_spearman_ic_3d', 'std_monthly_mean_cs_spearman_ic_3d', 'annualized_icir_3d', 'pct_months_mean_cs_ic_above_0_3d'
+                        'avg_cs_spearman_ic_1d','std_cs_spearman_ic_1d','annualized_icir_1d','pct_days_cs_ic_1d_above_0',
+                        'avg_cs_decile_spread_1d','std_cs_decile_spread_1d','annualized_cs_decile_spread_sharpe_1d','pct_days_cs_decile_spread_above_0_1d',
+                        'avg_cs_p05_spread_1d','std_cs_p05_spread_1d','annualized_cs_p05_spread_sharpe_1d','pct_days_cs_p05_spread_above_0_1d',
+                        'avg_cs_spearman_ic_3d','std_cs_spearman_ic_3d','annualized_icir_3d','pct_days_cs_ic_3d_above_0',
+                        'avg_cs_decile_spread_3d','std_cs_decile_spread_3d','annualized_cs_decile_spread_sharpe_3d','pct_days_cs_decile_spread_above_0_3d',
+                        'avg_cs_p05_spread_3d','std_cs_p05_spread_3d','annualized_cs_p05_spread_sharpe_3d','pct_days_cs_p05_spread_above_0_3d'
                       ]).map((c) => (
                         <th key={c} className="text-left px-2 py-2 text-slate-300 whitespace-nowrap">{c}</th>
                       ))}
@@ -1301,7 +1306,7 @@ order by decile;`;
           <Dialog open={!!sqlTable} onOpenChange={(open) => { if (!open) setSqlTable(null); }}>
             <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
               <DialogHeader>
-                <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_monthly_agg'}</DialogTitle>
+                <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_agg'}</DialogTitle>
               </DialogHeader>
               <div className="flex justify-end mb-2">
                 <CopyButton text={sqlTable === 'daily' ? dailySql : monthlySql} />

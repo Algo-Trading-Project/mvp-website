@@ -8,16 +8,32 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
     const { data, error } = await supabase
-      .from('model_performance_metrics_monthly_agg')
+      .from('model_performance_metrics_agg')
       .select(`
-        avg_monthly_mean_cs_spearman_ic_1d,
-        std_monthly_mean_cs_spearman_ic_1d,
+        avg_cs_spearman_ic_1d,
+        std_cs_spearman_ic_1d,
         annualized_icir_1d,
-        pct_months_mean_cs_ic_above_0_1d,
-        avg_monthly_mean_cs_spearman_ic_3d,
-        std_monthly_mean_cs_spearman_ic_3d,
+        pct_days_cs_ic_1d_above_0,
+        avg_cs_spearman_ic_3d,
+        std_cs_spearman_ic_3d,
         annualized_icir_3d,
-        pct_months_mean_cs_ic_above_0_3d
+        pct_days_cs_ic_3d_above_0,
+        avg_cs_decile_spread_1d,
+        std_cs_decile_spread_1d,
+        annualized_cs_decile_spread_sharpe_1d,
+        pct_days_cs_decile_spread_above_0_1d,
+        avg_cs_p05_spread_1d,
+        std_cs_p05_spread_1d,
+        annualized_cs_p05_spread_sharpe_1d,
+        pct_days_cs_p05_spread_above_0_1d,
+        avg_cs_decile_spread_3d,
+        std_cs_decile_spread_3d,
+        annualized_cs_decile_spread_sharpe_3d,
+        pct_days_cs_decile_spread_above_0_3d,
+        avg_cs_p05_spread_3d,
+        std_cs_p05_spread_3d,
+        annualized_cs_p05_spread_sharpe_3d,
+        pct_days_cs_p05_spread_above_0_3d
       `)
       .limit(1)
       .maybeSingle();
@@ -27,4 +43,3 @@ Deno.serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
 });
-

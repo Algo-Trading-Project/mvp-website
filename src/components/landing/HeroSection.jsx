@@ -198,11 +198,7 @@ export default function HeroSection() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 max-w-3xl mx-auto mb-12">
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
-                <InfoTip
-                  title="Mean Daily IC"
-                  description="Average cross‑sectional Spearman rank correlation between predictions and next‑day returns."
-                  ariaLabel="Mean Daily IC info"
-                />
+                <InfoTip title="Mean Daily IC" description="Average cross‑sectional Spearman IC across all days (1‑day model)." ariaLabel="Mean Daily IC info" />
                 <span className="whitespace-nowrap">Mean Daily IC (1‑day)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">
@@ -211,11 +207,7 @@ export default function HeroSection() {
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
-                <InfoTip
-                  title="Average Daily Spread"
-                  description="For each day, take the mean 1‑day return of assets in the top 10% by predicted return minus the mean for the bottom 10%, then average across days."
-                  ariaLabel="Avg Daily Spread info"
-                />
+                <InfoTip title="Average Daily Spread" description="Average daily top‑minus‑bottom decile spread (1‑day model)." ariaLabel="Avg Daily Spread info" />
                 <span className="whitespace-nowrap">Avg Daily Spread (1‑day)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">
@@ -224,12 +216,8 @@ export default function HeroSection() {
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
-                <InfoTip
-                  title="Positive Months"
-                  description="Fraction of months with a positive average daily IC (1‑day horizon)."
-                  ariaLabel="Positive Months info"
-                />
-                <span className="whitespace-nowrap">Positive Months (1‑day)</span>
+                <InfoTip title="Positive Days" description="Fraction of days where the daily Spearman IC is greater than zero (1‑day model)." ariaLabel="Positive Days info" />
+                <span className="whitespace-nowrap">Positive Days (1‑day model)</span>
               </div>
               <div className="text-xl font-bold text-blue-400 min-h-[20px] flex items-center justify-center">
                 {loadingMonthly ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (positiveShare != null ? `${(positiveShare * 100).toFixed(1)}%` : "—")}
