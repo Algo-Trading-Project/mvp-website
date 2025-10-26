@@ -129,21 +129,21 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
 
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
             <InfoTooltip title="Mean IC" description="Average daily IC over the selected range. IC measures rank correlation between predictions and next‑day returns." />
             <span>Mean</span>
           </div>
           <div className="text-sm font-semibold">{summary.mean?.toFixed(4)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
             <InfoTooltip title="IC Std Dev" description="Day‑to‑day variability of IC across the selected period (standard deviation)." />
             <span>Std</span>
           </div>
           <div className="text-sm font-semibold">{summary.std?.toFixed(3)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
             <InfoTooltip title="ICIR (Annualized)" description="Information Coefficient Information Ratio: mean IC divided by its std, scaled by √365 to express yearly ‘efficiency’." />
             <span>ICIR (Annualized)</span>
           </div>
@@ -176,7 +176,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
       <Dialog open={showSql} onOpenChange={setShowSql}>
         <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle className="text-white">SQL: IC Distribution</DialogTitle>
+            <DialogTitle className="text-white">IC Distribution</DialogTitle>
           </DialogHeader>
           <div className="flex justify-end mb-2">
             <button

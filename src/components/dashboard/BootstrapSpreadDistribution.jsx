@@ -60,14 +60,14 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
             <InfoTooltip title="Bootstrapped Mean" description="Average of the 10k bootstrapped mean spreads; what a ‘typical’ mean could look like." />
             <span>Mean</span>
           </div>
           <div className="text-sm font-semibold">{Number.isFinite(summary.mean) ? summary.mean.toFixed(4) : '—'}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
             <InfoTooltip title="99% Confidence Interval" description="Range that contains 99% of the bootstrapped mean spreads (0.5% to 99.5%)." />
             <span>99% CI</span>
           </div>

@@ -174,7 +174,7 @@ order by decile;`;
       <Dialog open={showSql} onOpenChange={setShowSql}>
         <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle className="text-white">SQL: Median ADV by Decile</DialogTitle>
+            <DialogTitle className="text-white">Median ADV by Decile</DialogTitle>
           </DialogHeader>
           <div className="flex justify-end mb-2">
             <button

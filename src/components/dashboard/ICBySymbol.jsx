@@ -221,7 +221,7 @@ order by spearman_ic desc;`;
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2 gap-2">
               <InfoTooltip title="Top 20 by IC" description="Tokens with highest Information Coefficient over the selected date range." />
-              <span className="font-semibold text-sm text-emerald-300">Top 20 Tokens by IC</span>
+              <span className="font-semibold text-sm text-slate-300">Top 20 Tokens by IC</span>
               <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSqlTop(true)}>Show SQL</button>
             </div>
             <Plot html={htmlTop} title="Top 20 Tokens by IC" />
@@ -229,7 +229,7 @@ order by spearman_ic desc;`;
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2 gap-2">
               <InfoTooltip title="Bottom 20 by IC" description="Tokens with lowest Information Coefficient over the selected date range." />
-              <span className="font-semibold text-sm text-red-300">Bottom 20 Tokens by IC</span>
+              <span className="font-semibold text-sm text-slate-300">Bottom 20 Tokens by IC</span>
               <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSqlBottom(true)}>Show SQL</button>
             </div>
             <Plot html={htmlBottom} title="Bottom 20 Tokens by IC" />
@@ -240,7 +240,7 @@ order by spearman_ic desc;`;
       <Dialog open={showSqlTop || showSqlBottom} onOpenChange={(open)=>{ if (!open) { setShowSqlTop(false); setShowSqlBottom(false); } }}>
         <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle className="text-white">SQL: IC by Token</DialogTitle>
+            <DialogTitle className="text-white">IC by Token</DialogTitle>
           </DialogHeader>
           <div className="flex justify-end mb-2">
             <button

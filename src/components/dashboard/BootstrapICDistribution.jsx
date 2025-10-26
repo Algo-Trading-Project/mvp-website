@@ -96,11 +96,11 @@ export default function BootstrapICDistribution({ dateRange, horizon='1d' }) {
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1"><InfoTooltip title="Mean of Bootstrapped Means" description="Average of the 10,000 sample means; a stable estimate of the true daily IC." /> Mean</div>
+            <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1"><InfoTooltip title="Mean of Bootstrapped Means" description="Average of the 10,000 sample means; a stable estimate of the true daily IC." /> Mean</div>
             <div className="text-sm font-semibold">{summary.mean?.toFixed(4)}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1"><InfoTooltip title="99% Confidence Interval" description="Range in which the true average daily IC likely falls (99% confidence)." /> 99% CI</div>
+            <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1"><InfoTooltip title="99% Confidence Interval" description="Range in which the true average daily IC likely falls (99% confidence)." /> 99% CI</div>
             <div className="text-sm font-semibold">[{summary.ci_lower?.toFixed(4)}, {summary.ci_upper?.toFixed(4)}]</div>
         </div>
       </div>

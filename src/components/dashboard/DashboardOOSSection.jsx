@@ -733,6 +733,10 @@ order by decile;`;
     <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
+          <InfoTooltip
+            title="Model Horizon"
+            description="Choose the prediction horizon (1‑day or 3‑day). Updates all badges and plots on this page."
+          />
           <label className="text-xs text-slate-300">Model</label>
           <select
             value={horizon}
@@ -744,6 +748,10 @@ order by decile;`;
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <InfoTooltip
+            title="Top/Bottom Spread Percentile"
+            description="Controls the fraction of assets used for top and bottom groups in spread metrics (10% = decile; 5% = stronger tails)."
+          />
           <label className="text-xs text-slate-300">Spread</label>
           <select
             value={topPct}
@@ -753,9 +761,6 @@ order by decile;`;
             <option value={0.1}>Top/Bottom 10%</option>
             <option value={0.05}>Top/Bottom 5%</option>
           </select>
-          <InfoTooltip
-            title="Top/Bottom Spread Percentile"
-            description="Controls the fraction of assets used for top and bottom groups in spread metrics (10% = decile; 5% = stronger tails)." />
         </div>
         <label className="text-xs text-slate-300">From</label>
         <input
@@ -1010,8 +1015,74 @@ order by decile;`;
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">
         <div className="text-center mt-8">
-          <h3 className="text-2xl font-semibold text-white mb-4">Monthly IC ({horizon})</h3>
+          <h3 className="text-2xl font-semibold text-white mb-4">Summary</h3>
           {monthlyBadges}
+          {/* Spread summary badges (decile/p05) */}
+          {(() => {
+            // Compute spread stats from model_performance_metrics_agg (rawMonthlyRow)
+            const row = rawMonthlyRow || {};
+            const is3 = horizon === '3d';
+            const useP05 = topPct === 0.05;
+            const pick = (base) => row[base] ?? null;
+            const meanKey = useP05
+              ? (is3 ? 'avg_cs_p05_spread_3d' : 'avg_cs_p05_spread_1d')
+              : (is3 ? 'avg_cs_decile_spread_3d' : 'avg_cs_decile_spread_1d');
+            const stdKey = useP05
+              ? (is3 ? 'std_cs_p05_spread_3d' : 'std_cs_p05_spread_1d')
+              : (is3 ? 'std_cs_decile_spread_3d' : 'std_cs_decile_spread_1d');
+            const sharpeKey = useP05
+              ? (is3 ? 'annualized_cs_p05_spread_sharpe_3d' : 'annualized_cs_p05_spread_sharpe_1d')
+              : (is3 ? 'annualized_cs_decile_spread_sharpe_3d' : 'annualized_cs_decile_spread_sharpe_1d');
+            const posKey = useP05
+              ? (is3 ? 'pct_days_cs_p05_spread_above_0_3d' : 'pct_days_cs_p05_spread_above_0_1d')
+              : (is3 ? 'pct_days_cs_decile_spread_above_0_3d' : 'pct_days_cs_decile_spread_above_0_1d');
+
+            const spreadStats = {
+              mean: typeof pick(meanKey) === 'number' ? Number(pick(meanKey)) : null,
+              std: typeof pick(stdKey) === 'number' ? Number(pick(stdKey)) : null,
+              sharpe: typeof pick(sharpeKey) === 'number' ? Number(pick(sharpeKey)) : null,
+              positive: typeof pick(posKey) === 'number' ? Number(pick(posKey)) : null,
+            };
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-4">
+                <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+                  <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
+                    <InfoTooltip
+                      title={`Mean Daily Spread (${useP05 ? '5%' : '10%'})`}
+                      description={`Average daily top–minus–bottom ${useP05 ? '5%' : '10%'} spread for the ${is3 ? '3‑day' : '1‑day'} model.`}
+                    />
+                    <span>Mean Spread</span>
+                  </div>
+                  <div className="text-xl font-bold text-white mt-1">{spreadStats.mean != null ? `${(spreadStats.mean * 100).toFixed(2)}%` : '—'}</div>
+                </div>
+                <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+                  <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
+                    <InfoTooltip title="Std Dev (Spread)" description="Standard deviation of the daily cross‑sectional spread." />
+                    <span>Std Dev (Spread)</span>
+                  </div>
+                  <div className="text-xl font-bold text-white mt-1">{spreadStats.std != null ? (spreadStats.std).toFixed(4) : '—'}</div>
+                </div>
+                <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+                  <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
+                    <InfoTooltip
+                      title="Positive Days (Spread)"
+                      description={`Proportion of days where the ${useP05 ? '5%' : '10%'} spread is greater than zero.`}
+                    />
+                    <span>Positive Days %</span>
+                  </div>
+                  <div className="text-xl font-bold text-white mt-1">{spreadStats.positive != null ? `${(spreadStats.positive * 100).toFixed(1)}%` : '—'}</div>
+                </div>
+                <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
+                  <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
+                    <InfoTooltip title="Sharpe (Annualized)" description="Mean daily spread divided by its std, annualized by √365." />
+                    <span>Sharpe (Annualized)</span>
+                  </div>
+                  <div className="text-xl font-bold text-white mt-1">{spreadStats.sharpe != null ? spreadStats.sharpe.toFixed(2) : '—'}</div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
           {rollingBadges}
         </div>
@@ -1022,7 +1093,7 @@ order by decile;`;
             {/* Rolling IC chart with compact title inside card */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Information Coefficient"
                     description="30‑day average of the daily cross‑sectional Information Coefficient between predictions and forward returns for the selected horizon." />
@@ -1049,11 +1120,11 @@ order by decile;`;
             {/* Rolling decile spread chart with compact title inside card */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Top–Bottom Spread"
                     description="30‑day average of the cross‑sectional top minus bottom performance using the selected percentile (10% or 5%)." />
-                  {`Rolling 30‑Day Avg. Top–Bottom Spread (${topPct === 0.05 ? '5%' : '10%'} • ${horizon})`}
+                  {`Rolling 30‑Day Avg. Top–Bottom Spread`}
                 </span>
                 <button
                   className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
@@ -1076,7 +1147,7 @@ order by decile;`;
             {/* Rolling hit rate chart in same row */}
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
                   <InfoTooltip
                     title="Rolling Hit Rate"
                     description="Daily sign match between prediction and 1d forward return, averaged over a 30‑day trailing window (point‑in‑time)." />
@@ -1106,7 +1177,7 @@ order by decile;`;
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
                   <InfoTooltip
                     title="Decile Returns"
                     description="Per‑day, assets are binned into deciles by predicted return. Bars show the average forward return across days for each decile." />
