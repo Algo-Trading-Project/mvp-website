@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     }
     const rows: Row[] = (merged ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? '').slice(0, 10),
-      rate: coerceNumber(r['value']),
+      rate: coerceNumber(r['rolling_hit_rate'] ?? (r as any)['value']),
     })).filter((r) => r.date && r.rate !== null);
 
     const x = rows.map((r) => r.date);

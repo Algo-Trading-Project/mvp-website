@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     } catch (portalError) {
       // Fallback: create a new Checkout session using the user's last known plan/cycle (or sensible defaults)
       const rawPlan = (metadata.plan_slug as string | undefined) ?? planSlugForTier((metadata.subscription_tier as string | undefined) ?? "free");
-      const planSlug = normalizePlanSlug(rawPlan) ?? "signals_lite";
+      const planSlug = normalizePlanSlug(rawPlan) ?? "free";
       const billingCycle = normalizeBillingCycle((metadata.billing_cycle as string | undefined) ?? "monthly") ?? "monthly";
       const priceId = getPriceIdForPlan(planSlug, billingCycle);
       if (!priceId) {

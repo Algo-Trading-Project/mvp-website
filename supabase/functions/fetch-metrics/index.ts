@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     // Index rolling series by date for quick merge
     const mapIc = new Map((rIc ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
     const mapSp = new Map((rSp ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
-    const mapHr = new Map((rHr ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.value)]));
+    const mapHr = new Map((rHr ?? []).map((r: any) => [String(r.date).slice(0,10), coerceNumber(r.rolling_hit_rate ?? r.value)]));
 
     const cross = daily.map((r) => ({
       date: r.date,

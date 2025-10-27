@@ -377,7 +377,8 @@ const relevantEvents = new Set<string>([
   "invoice.payment_failed",
 ]);
 
-const tierOrder: Record<string, number> = { free: 0, lite: 1, pro: 2, api: 3 };
+// Tier ranking for upgrade/downgrade decisions. Insert pro_dev between pro and api.
+const tierOrder: Record<string, number> = { free: 0, lite: 1, pro: 2, pro_dev: 3, api: 4 };
 const rankTier = (planSlug: string | null | undefined) => {
   const tier = planSlug ? PLAN_TIER_MAP[planSlug] ?? planSlug : "free";
   return tierOrder[tier] ?? 0;
