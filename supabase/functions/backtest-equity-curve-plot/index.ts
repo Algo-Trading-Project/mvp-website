@@ -6,51 +6,74 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     if (req.method !== 'POST') return json({ error: 'Use POST' }, { status: 405 });
-    const { start, end, fees = 0.003, period = '1d', height = 380 } = await req.json();
+    const { start, end, fees = 0.003, height = 380, horizon = '1d', top_pct = 0.1, series_page_size = 0 } = await req.json();
     if (!start || !end) return json({ error: 'start and end required (YYYY-MM-DD)' }, { status: 400 });
 
     const supabase = getServiceSupabaseClient();
 
-    // Load strategy daily returns from daily_dashboard_metrics MV
-    const pageSize = 1000; let fromIdx = 0; const cross: any[] = [];
+    // Load the full input in one logical pass.
+    // Instead of splitting the date range (which resets compounding),
+    // page through the underlying table and compute the equity curve here.
+    const pct = Number(top_pct) === 0.05 ? 0.05 : 0.1;
+    const hzn = String(horizon) === '3d' ? '3d' : '1d';
+
+    // Select the spread column based on horizon/top_pct
+    const spreadField = hzn === '3d'
+      ? (pct === 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
+      : (pct === 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
+
+    const pageSize = 1000;
+    let from = 0;
+    const datesAll: string[] = [];
+    const returnsAll: number[] = [];
     while (true) {
       const { data, error } = await supabase
         .from('daily_dashboard_metrics')
-        .select('date, cs_top_bottom_decile_spread_1d')
+        .select(`date, ${spreadField}`)
         .gte('date', start)
         .lte('date', end)
         .order('date', { ascending: true })
-        .range(fromIdx, fromIdx + pageSize - 1);
+        .range(from, from + pageSize - 1);
       if (error) throw error;
-      if (data?.length) cross.push(...data);
-      if (!data || data.length < pageSize) break;
-      fromIdx += pageSize;
+      const rows = (data ?? []) as any[];
+      if (!rows.length) break;
+      for (const r of rows) {
+        const d = String(r.date ?? '').slice(0, 10);
+        let v = (r as any)[spreadField];
+        if (typeof v !== 'number') v = Number(v ?? 0);
+        if (!Number.isFinite(v)) v = 0;
+        // subtract daily fee
+        v = (v as number) - Number(fees || 0);
+        datesAll.push(d);
+        returnsAll.push(v);
+      }
+      if (rows.length < pageSize) break;
+      from += pageSize;
     }
 
-    // Use series as stored in Supabase (already shifted for point-in-time correctness)
-    const ndays = String(period) === '7d' ? 7 : 1;
-    const datesAll: string[] = [];
-    const retsAll: number[] = [];
-    for (const r of cross) {
-      const d = String(r.date ?? '').slice(0,10);
-      const v = typeof (r as any).cs_top_bottom_decile_spread_1d === 'number'
-        ? (r as any).cs_top_bottom_decile_spread_1d
-        : Number((r as any).cs_top_bottom_decile_spread_1d ?? 0);
-      if (d) { datesAll.push(d); retsAll.push(Number.isFinite(v) ? v : 0); }
+    // We will compound after sampling (to avoid overlapping windows for 3d)
+
+    if (!datesAll.length) {
+      return json({ html: '<html><body style="background:#0b1220;color:#e2e8f0;padding:16px">No data available for the selected range.</body></html>' });
     }
 
-    // Returns are already shifted in Supabase. Use as-is, and optionally
-    // downsample to weekly cadence when requested.
+    // Per-period returns
+    const retsAll: number[] = returnsAll;
+
+    // Match cadence to model horizon (1d or 3d only)
+    const ndays = hzn === '3d' ? 3 : 1;
     const step = ndays;
     const datesS: string[] = [];
     const retsS: number[] = [];
-    for (let i = 0; i < retsAll.length; i += step) { datesS.push(datesAll[i]); retsS.push(retsAll[i]); }
+    for (let i = 0; i < retsAll.length; i += step) {
+      datesS.push(datesAll[i]);
+      retsS.push(retsAll[i]);
+    }
 
-    // Apply fees per rebalance and compute equity curve
-    const fee = Number(fees || 0);
-    const retsNet: number[] = retsS.map((r) => (Number.isFinite(r) ? (r as number) : 0) - fee);
-    const equity: number[] = []; let eq = 1;
-    for (const r of retsNet) { const rr = Number.isFinite(r) ? r : 0; eq *= (1 + rr); equity.push(eq); }
+    // Apply fees already included; compute equity curve for sampled cadence
+    const retsNet: number[] = retsS.map((r) => (Number.isFinite(r) ? (r as number) : 0));
+    const equity: number[] = [];
+    let eqS = 1; for (const r of retsNet) { eqS *= (1 + (typeof r === 'number' ? r : 0)); equity.push(eqS); }
 
     // Compute summary metrics for badges
     const mean = (arr:number[]) => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : 0;
@@ -79,10 +102,11 @@ Deno.serve(async (req) => {
     const calmar = maxDrawdown ? (cagr / Math.abs(maxDrawdown)) : 0;
 
     // BTC comparison using predictions table
-    fromIdx = 0; const btc: any[] = [];
+    let fromIdx = 0; const btc: any[] = [];
+    const btcPage = 1000;
     while (true) {
-      const selectCols = (ndays === 7)
-        ? 'date, forward_returns_7, symbol_id'
+      const selectCols = (hzn === '3d')
+        ? 'date, forward_returns_3, symbol_id'
         : 'date, forward_returns_1, symbol_id';
       const { data, error } = await supabase
         .from('predictions')
@@ -91,18 +115,18 @@ Deno.serve(async (req) => {
         .gte('date', start)
         .lte('date', end)
         .order('date', { ascending: true })
-        .range(fromIdx, fromIdx + pageSize - 1);
+        .range(fromIdx, fromIdx + btcPage - 1);
       if (error) throw error;
       if (data?.length) btc.push(...data);
-      if (!data || data.length < pageSize) break;
-      fromIdx += pageSize;
+      if (!data || data.length < btcPage) break;
+      fromIdx += btcPage;
     }
 
     const btcDates: string[] = []; const btcRet: number[] = [];
     for (const r of btc) {
       const d = String(r.date ?? '').slice(0,10);
-      let v = (ndays === 7)
-        ? (typeof (r as any).forward_returns_7 === 'number' ? (r as any).forward_returns_7 : Number((r as any).forward_returns_7 ?? 0))
+      let v = (hzn === '3d')
+        ? (typeof (r as any).forward_returns_3 === 'number' ? (r as any).forward_returns_3 : Number((r as any).forward_returns_3 ?? 0))
         : (typeof (r as any).forward_returns_1 === 'number' ? (r as any).forward_returns_1 : Number((r as any).forward_returns_1 ?? 0));
       if (typeof v !== 'number') { const n = Number(v); v = Number.isFinite(n) ? n : 0; }
       btcDates.push(d); btcRet.push(v);
@@ -151,7 +175,49 @@ Plotly.newPlot('chart', data, layout, config);
 window.addEventListener('resize', () => Plotly.Plots.resize(document.getElementById('chart')));
 </script></body></html>`;
 
-    return json({ html, points: equity.length, params: { start, end, period, fees },
+    // Build resolved SQL string reflecting actual fields used
+    const field = hzn === '3d'
+      ? (pct === 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
+      : (pct === 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
+    const resolvedSql = `with base as (
+  select d.date,
+         (d.${field} - ${Number(fees || 0)}) as daily_return
+  from daily_dashboard_metrics d
+  where d.date between '${start}' and '${end}'
+  order by d.date
+), rn_base as (
+  select date, daily_return, row_number() over (order by date) as rn
+  from base
+), sampled as (
+  select date, daily_return
+  from rn_base
+  where ${hzn === '3d' ? '(rn % 3) = 1' : 'true'}
+  order by date
+)
+select date,
+       exp(sum(ln(1 + greatest(-0.999999, coalesce(daily_return,0)))) over (
+         order by date rows between unbounded preceding and current row
+       )) - 1 as equity
+from sampled
+order by date;`;
+
+    // Optional: paginate large series in the response (client can ignore)
+    const pageSizeOut = Number(series_page_size) || 0;
+    const seriesPages = pageSizeOut > 0 ? (() => {
+      const pages: any[] = [];
+      for (let i = 0; i < datesS.length; i += pageSizeOut) {
+        pages.push({
+          index: Math.floor(i / pageSizeOut),
+          dates: datesS.slice(i, i + pageSizeOut),
+          returns: retsNet.slice(i, i + pageSizeOut),
+          equity: equity.slice(i, i + pageSizeOut),
+          drawdowns: dds.slice(i, i + pageSizeOut),
+        });
+      }
+      return { page_size: pageSizeOut, page_count: pages.length, pages };
+    })() : null;
+
+    return json({ html, points: equity.length, params: { start, end, fees, horizon: hzn, top_pct: pct }, sql: resolvedSql,
       series: {
         dates: datesS,
         returns: retsNet,
@@ -161,6 +227,7 @@ window.addEventListener('resize', () => Plotly.Plots.resize(document.getElementB
         btc_equity: btcEquity,
         btc_drawdowns: btcDDs
       },
+      series_pages: seriesPages,
       metrics: { total_return: totalReturn, max_drawdown: maxDrawdown, avg_drawdown: avgDrawdown, cagr, sharpe, sortino, calmar, periods_per_year: periodsPerYear },
       btc_metrics: { total_return: btcTotalReturn, max_drawdown: btcMaxDrawdown, avg_drawdown: btcAvgDrawdown, cagr: btcCagr, sharpe: btcSharpe, sortino: btcSortino, calmar: btcCalmar }
     });

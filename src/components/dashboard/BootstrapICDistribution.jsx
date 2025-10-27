@@ -2,6 +2,7 @@ import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
 import { bootstrapIcDistributionPlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { toast } from "sonner";
 
@@ -39,7 +40,20 @@ export default function BootstrapICDistribution({ dateRange, horizon='1d' }) {
     const controller = new AbortController();
     let cancelled = false;
     const run = async () => {
-      setLoading(true);
+      const cached = getCachedFunctionResult("bootstrap-ic-distribution-plot", {
+        start: dateRange.start,
+        end: dateRange.end,
+        horizon,
+        samples: 10000,
+        bins: 50,
+        width: 980,
+        height: 360,
+      });
+      setLoading(!cached);
+      if (cached) {
+        setHtml(cached?.html || null);
+        if (cached?.summary) setSummary(cached.summary);
+      }
       setError(null);
       try {
         const data = await bootstrapIcDistributionPlot(
@@ -48,7 +62,7 @@ export default function BootstrapICDistribution({ dateRange, horizon='1d' }) {
             end: dateRange.end,
             horizon,
             samples: 10000,
-            bins: 20,
+            bins: 50,
             width: 980,
             height: 360,
           },

@@ -7,7 +7,7 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, { status: 405 });
 
-    const { start, end, samples = 10000, bins = 20, horizon = '1d', top_pct = 0.1 } = await req.json();
+    const { start, end, samples = 10000, bins = 50, horizon = '1d', top_pct = 0.1 } = await req.json();
     if (!start || !end) return json({ error: 'start and end date are required' }, { status: 400 });
     const pct = Number(top_pct);
     if (!(pct === 0.1 || pct === 0.05)) {

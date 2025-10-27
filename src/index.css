@@ -165,3 +165,18 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"] {
   color-scheme: dark;
 }
+
+/* Always-visible, styled horizontal scrollbar for data tables */
+.scrollbar-visible {
+  scrollbar-gutter: stable; /* Reserve space so bar is always visible */
+}
+.scrollbar-visible::-webkit-scrollbar {
+  height: 10px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background-color: #334155; /* slate-700 */
+  border-radius: 6px;
+}
+.scrollbar-visible::-webkit-scrollbar-track {
+  background-color: #0b1220; /* close to slate-950 bg */
+}

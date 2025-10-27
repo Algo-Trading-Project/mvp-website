@@ -69,13 +69,12 @@ export default function Pricing() {
       name: "Signals Lite",
       icon: Zap,
       monthlyPrice: 59,
-      description: "Top/bottom deciles for ~12 majors, 24h delay, email/Discord alerts, read‑only dashboard.",
+      description: "Top/bottom deciles for ~12 majors. 24h delay. Read‑only dashboard.",
       slug: "signals_lite",
       features: [
-        "Top & bottom deciles for ~12 majors (CSV)",
-        "24‑hour delay on files",
+        "CSV files for ~12 majors (24h delay)",
         "Email/Discord alerts on rebalance",
-        "Access to public OOS dashboard (read‑only)"
+        "No API access",
       ],
       cta: "Start with Lite",
     },
@@ -83,47 +82,45 @@ export default function Pricing() {
       name: "Signals Pro",
       icon: Zap,
       monthlyPrice: 139,
-      description: "Full daily ranks across ~391 assets, history downloads, fee‑adjusted deciles/turnover.",
+      description: "Full daily ranks across ~391 assets with history downloads and OOS analytics.",
       slug: "signals_pro",
       features: [
         "Full daily ranks/scores across ~391 assets",
-        "12–24 months history downloads (CSV)",
-        "Fee‑adjusted deciles, turnover & capacity metrics",
-        "Access to OOS visuals & methodology"
+        "12–24 months CSV history downloads",
+        "OOS dashboard, fee‑adjusted deciles & methodology",
+        "No API access",
       ],
       cta: "Choose Signals Pro",
       popular: true
     },
     {
+      name: "Pro‑Developer (Add‑on)",
+      icon: Building,
+      monthlyPrice: 229,
+      description: "Lightweight API for live automation without history. Add‑on to Pro.",
+      slug: "signals_pro_dev",
+      features: [
+        "API: /latest predictions (current release)",
+        "API: /universe (read)",
+        "API: /ohlcv (≤30‑day lookback)",
+        "Tight limits: ≤2 calls/day to /latest",
+      ],
+      cta: "Add Pro‑Developer",
+    },
+    {
       name: "Signals API",
       icon: Crown,
       monthlyPrice: 449,
-      description: "Programmatic ranks/scores + optional weights, PIT retrieval, higher limits, webhooks.",
+      description: "Full API for research/backtests and production. High limits.",
       slug: "signals_api",
       features: [
-        "Programmatic ranks/scores + optional weights",
-        "Point‑in‑time retrieval & historical archives",
-        "Higher rate limits + webhooks",
-        "Versioned model cards & monitoring"
+        "API: /predictions (full history)",
+        "API: /latest, /universe, /ohlcv (full)",
+        "Point‑in‑time retrieval (PIT) archives",
+        "Higher rate limits & multiple keys",
       ],
       cta: "Choose Signals API"
     },
-    {
-      name: "Team / Institution",
-      icon: Building,
-      monthlyPrice: null,
-      customNote: "From $2,000+/mo",
-      description: "Seats, custom universes/cadence, private endpoints, SLAs, PIT audit tooling.",
-      features: [
-        "Private endpoints & SLAs",
-        "Custom universes & cadence",
-        "Dedicated schema planning & onboarding",
-        "PIT audit tooling & onboarding help",
-        "Transact via AWS Marketplace / private offers"
-      ],
-      cta: "Contact Sales",
-      contact: true
-    }
   ];
 
   // Market data and bundle plans removed (Signals only)
@@ -239,7 +236,6 @@ export default function Pricing() {
               </ul>
             </div>
             <div className="mt-auto">
-              <p className="text-[11px] text-slate-500 mb-3">Delivery: daily @ 13:00 UTC · Schema docs & asset list included with every plan.</p>
               {plan.contact ? (
                 <Link to={createPageUrl("Contact")} className="block">
                   <Button className="w-full py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
@@ -422,27 +418,27 @@ export default function Pricing() {
           </div>
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
-              <div className="font-semibold mb-1">Lite / Starter</div>
+              <div className="font-semibold mb-1">Pro (no add‑on)</div>
               <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
-                <li>Email/Discord alerts</li>
-                <li>EOD files with delay</li>
-                <li>Basic rate limits</li>
+                <li>CSV downloads</li>
+                <li>No API access</li>
+                <li>OOS dashboard + history files</li>
               </ul>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
-              <div className="font-semibold mb-1">Pro</div>
+              <div className="font-semibold mb-1">Pro‑Developer</div>
               <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
-                <li>Full ranks across universe</li>
-                <li>12–24m history downloads</li>
-                <li>Higher limits</li>
+                <li>API: /latest predictions (rate‑limited)</li>
+                <li>API: /universe read</li>
+                <li>API: /ohlcv ≤30‑day lookback</li>
               </ul>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
-              <div className="font-semibold mb-1">API / Desk</div>
+              <div className="font-semibold mb-1">API</div>
               <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
-                <li>Programmatic access + webhooks</li>
-                <li>Point‑in‑time retrieval</li>
-                <li>SLAs & private endpoints (Desk)</li>
+                <li>API: /predictions full history</li>
+                <li>API: /latest, /universe, /ohlcv full</li>
+                <li>High limits + multiple keys</li>
               </ul>
             </div>
           </div>

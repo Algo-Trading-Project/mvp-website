@@ -2,6 +2,7 @@ import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
 import { bootstrapSpreadDistributionPlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 
 const InfoTooltip = ({ title, description }) => {
@@ -32,9 +33,14 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
     const controller = new AbortController();
     let cancelled = false;
     const load = async () => {
-      setLoading(true); setError(null);
+      const cached = getCachedFunctionResult("bootstrap-spread-distribution-plot", { start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, samples: 10000, bins: 50 });
+      setLoading(!cached); setError(null);
+      if (cached) {
+        setHtml(cached?.html || null);
+        setSummary(cached?.summary || { mean: 0, ci_lower: 0, ci_upper: 0 });
+      }
       try {
-        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, samples: 10000, bins: 20 }, { signal: controller.signal });
+        const res = await bootstrapSpreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, samples: 10000, bins: 50 }, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, ci_lower: 0, ci_upper: 0 });

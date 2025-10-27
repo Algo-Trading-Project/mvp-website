@@ -144,6 +144,8 @@ export default function DashboardOOSSection() {
   const [rawMonthlyRow, setRawMonthlyRow] = React.useState(null);
   // Which table to show SQL for: 'daily' | 'monthly' | null
   const [sqlTable, setSqlTable] = React.useState(null);
+  // Schema dialog state
+  const [schemaTable, setSchemaTable] = React.useState(null); // 'daily' | 'monthly' | null
   // Chart SQL dialog state
   const [chartSqlOpen, setChartSqlOpen] = React.useState(false);
   const [chartSqlTitle, setChartSqlTitle] = React.useState('');
@@ -239,16 +241,16 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      // Always show loader on range/model changes to avoid flicker
-      setIcSvgLoading(true);
+      // Prefer instant cached render when available
       const cached = getCachedFunctionResult("rolling-ic-plot", { start: fallbackStart, end: endDate, horizon });
+      setIcSvgLoading(!cached);
       if (cached) {
         setIcSvg(cached?.html || null);
         setIcSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setIcSummary(cached.summary);
       }
       try {
-        const data = await rollingIcPlot({ start: fallbackStart, end: endDate, horizon, __cache: false });
+        const data = await rollingIcPlot({ start: fallbackStart, end: endDate, horizon });
         setIcSvg(data?.html || null);
         setIcSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setIcSummary(data.summary);
@@ -280,15 +282,15 @@ export default function DashboardOOSSection() {
         return;
       }
       const fallbackStart = dateRange.start || (allRows.length ? allRows[0].date : undefined);
-      setSpreadLoading(true);
       const cached = getCachedFunctionResult("rolling-spread-plot", { start: fallbackStart, end: endDate, horizon, top_pct: topPct });
+      setSpreadLoading(!cached);
       if (cached) {
         setSpreadHtml(cached?.html || null);
         setSpreadSeries(Array.isArray(cached?.data) ? cached.data : []);
         if (cached?.summary) setSpreadSummary(cached.summary);
       }
       try {
-        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, horizon, top_pct: topPct, __cache: false });
+        const data = await rollingSpreadPlot({ start: fallbackStart, end: endDate, horizon, top_pct: topPct });
         setSpreadHtml(data?.html || null);
         setSpreadSeries(Array.isArray(data?.data) ? data.data : []);
         if (data?.summary) setSpreadSummary(data.summary);
@@ -314,7 +316,9 @@ export default function DashboardOOSSection() {
       setQuintileError(null);
       if (!dateRange.start || !dateRange.end) { setQuintileHtml(null); setQuintileLoading(false); return; }
       const payload = { start: dateRange.start, end: dateRange.end, horizon };
-      setQuintileLoading(true);
+      const cached = getCachedFunctionResult("quintile-returns-plot", payload);
+      setQuintileLoading(!cached);
+      if (cached) setQuintileHtml(cached?.html || null);
       try {
         const data = await quintileReturnsPlot(payload);
         setQuintileHtml(data?.html || null);
@@ -457,15 +461,112 @@ select
   AVG(case when cs_top_bottom_p05_spread_3d > 0 then 1 else 0 end) as pct_days_cs_p05_spread_above_0_3d
 from daily_dashboard_metrics;`;
 
+  // Column schema descriptions for the Raw Data tables
+  const tableSchemas = React.useMemo(() => ({
+    daily: [
+      { name: 'date', type: 'date', desc: 'Trading date for which the cross‑sectional metrics were computed.' },
+      { name: 'cs_spearman_ic_1d', type: 'float', desc: 'Daily Spearman rank correlation between predicted ranks and next‑day returns (1‑day horizon).' },
+      { name: 'cs_top_bottom_decile_spread_1d', type: 'float', desc: 'Average return of top 10% predicted minus bottom 10% predicted (1‑day horizon).' },
+      { name: 'cs_top_bottom_p05_spread_1d', type: 'float', desc: 'Average return of top 5% predicted minus bottom 5% predicted (1‑day horizon).' },
+      { name: 'cs_hit_count_1d', type: 'integer', desc: 'Count of assets where sign(prediction) matches sign(realized next‑day return).' },
+      { name: 'total_count_1d', type: 'integer', desc: 'Total number of assets considered that day for the 1‑day horizon.' },
+      { name: 'cs_spearman_ic_3d', type: 'float', desc: 'Daily Spearman rank correlation between predicted ranks and 3‑day forward returns (3‑day horizon).' },
+      { name: 'cs_top_bottom_decile_spread_3d', type: 'float', desc: 'Average return of top 10% predicted minus bottom 10% predicted (3‑day horizon).' },
+      { name: 'cs_top_bottom_p05_spread_3d', type: 'float', desc: 'Average return of top 5% predicted minus bottom 5% predicted (3‑day horizon).' },
+      { name: 'cs_hit_count_3d', type: 'integer', desc: 'Count of assets where sign(prediction) matches sign(realized 3‑day return).' },
+      { name: 'total_count_3d', type: 'integer', desc: 'Total number of assets considered that day for the 3‑day horizon.' },
+    ],
+    monthly: [
+      { name: 'avg_cs_spearman_ic_1d', type: 'float', desc: 'Average of daily 1‑day IC across the full sample.' },
+      { name: 'std_cs_spearman_ic_1d', type: 'float', desc: 'Standard deviation of daily 1‑day IC.' },
+      { name: 'annualized_icir_1d', type: 'float', desc: 'Annualized ICIR for 1‑day horizon: mean/std × √365.' },
+      { name: 'pct_days_cs_ic_1d_above_0', type: 'float', desc: 'Fraction of days where the 1‑day IC > 0.' },
+      { name: 'avg_cs_decile_spread_1d', type: 'float', desc: 'Average daily 1‑day top‑bottom decile spread.' },
+      { name: 'std_cs_decile_spread_1d', type: 'float', desc: 'Standard deviation of daily 1‑day top‑bottom decile spread.' },
+      { name: 'annualized_cs_decile_spread_sharpe_1d', type: 'float', desc: 'Annualized Sharpe proxy for 1‑day decile spread: mean/std × √365.' },
+      { name: 'pct_days_cs_decile_spread_above_0_1d', type: 'float', desc: 'Fraction of days where 1‑day decile spread > 0.' },
+      { name: 'avg_cs_p05_spread_1d', type: 'float', desc: 'Average daily 1‑day top‑bottom 5% spread.' },
+      { name: 'std_cs_p05_spread_1d', type: 'float', desc: 'Standard deviation of daily 1‑day top‑bottom 5% spread.' },
+      { name: 'annualized_cs_p05_spread_sharpe_1d', type: 'float', desc: 'Annualized Sharpe proxy for 1‑day 5% spread: mean/std × √365.' },
+      { name: 'pct_days_cs_p05_spread_above_0_1d', type: 'float', desc: 'Fraction of days where 1‑day 5% spread > 0.' },
+      { name: 'avg_cs_spearman_ic_3d', type: 'float', desc: 'Average of daily 3‑day IC across the full sample.' },
+      { name: 'std_cs_spearman_ic_3d', type: 'float', desc: 'Standard deviation of daily 3‑day IC.' },
+      { name: 'annualized_icir_3d', type: 'float', desc: 'Annualized ICIR for 3‑day horizon: mean/std × √365.' },
+      { name: 'pct_days_cs_ic_3d_above_0', type: 'float', desc: 'Fraction of days where the 3‑day IC > 0.' },
+      { name: 'avg_cs_decile_spread_3d', type: 'float', desc: 'Average daily 3‑day top‑bottom decile spread.' },
+      { name: 'std_cs_decile_spread_3d', type: 'float', desc: 'Standard deviation of daily 3‑day top‑bottom decile spread.' },
+      { name: 'annualized_cs_decile_spread_sharpe_3d', type: 'float', desc: 'Annualized Sharpe proxy for 3‑day decile spread: mean/std × √365.' },
+      { name: 'pct_days_cs_decile_spread_above_0_3d', type: 'float', desc: 'Fraction of days where 3‑day decile spread > 0.' },
+      { name: 'avg_cs_p05_spread_3d', type: 'float', desc: 'Average daily 3‑day top‑bottom 5% spread.' },
+      { name: 'std_cs_p05_spread_3d', type: 'float', desc: 'Standard deviation of daily 3‑day top‑bottom 5% spread.' },
+      { name: 'annualized_cs_p05_spread_sharpe_3d', type: 'float', desc: 'Annualized Sharpe proxy for 3‑day 5% spread: mean/std × √365.' },
+      { name: 'pct_days_cs_p05_spread_above_0_3d', type: 'float', desc: 'Fraction of days where 3‑day 5% spread > 0.' },
+    ],
+  }), []);
+
+  const SchemaView = ({ table }) => {
+    const isMonthly = table === 'monthly';
+    const items = isMonthly ? tableSchemas.monthly : tableSchemas.daily;
+    // Disable inner scroll for monthly; keep for daily
+    const containerClass = isMonthly ? 'overflow-visible' : 'overflow-auto max-h-[92vh]';
+    const wrapperClass = isMonthly ? 'border border-slate-800 rounded-md' : 'min-w-[1400px] border border-slate-800 rounded-md';
+    // Monthly: slightly smaller to avoid any overflow
+    const nameCellClass = isMonthly
+      ? 'px-2 py-1 font-mono text-[10px] leading-4 text-slate-100 pr-4 whitespace-normal break-words'
+      : 'px-3 py-2 font-mono text-[12px] text-slate-100 whitespace-nowrap pr-8';
+    const typeCellClass = isMonthly
+      ? 'px-2 py-1 text-[10px] leading-4 text-sky-300 whitespace-nowrap pr-4'
+      : 'px-3 py-2 text-[12px] text-sky-300 whitespace-nowrap pr-6';
+    const descCellClass = isMonthly
+      ? 'px-2 py-1 text-[10px] leading-4 text-slate-300'
+      : 'px-3 py-2 text-sm text-slate-300 leading-5';
+    return (
+      <div className={`${containerClass}`}>
+        <div className={`${wrapperClass}`}>
+          <table className={`w-full ${isMonthly ? 'table-fixed' : ''}`}>
+            {isMonthly && (
+              <colgroup>
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '48%' }} />
+              </colgroup>
+            )}
+            <thead className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
+              <tr className={isMonthly ? 'text-[10px] uppercase tracking-wide text-slate-300' : 'text-[11px] uppercase tracking-wide text-slate-300'}>
+                <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Column</th>
+                <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Type</th>
+                <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Description</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {items.map((col, i) => (
+                <tr key={col.name} className={i % 2 ? 'bg-slate-900/30' : 'bg-slate-900/10'}>
+                  <td className={nameCellClass}>{col.name}</td>
+                  <td className={typeCellClass}>{col.type}</td>
+                  <td className={descCellClass}>{col.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // Load Rolling Hit Rate plot
   React.useEffect(() => {
     const load = async () => {
       setHitError(null);
       if (!dateRange.start || !dateRange.end) { setHitHtml(null); setHitLoading(false); return; }
-      const payload = { start: dateRange.start, end: dateRange.end, window: 30, horizon, __cache: false };
-      setHitLoading(true);
+      const payload = { start: dateRange.start, end: dateRange.end, window: 30, horizon };
+      const cached = getCachedFunctionResult("rolling-hit-rate-plot", payload);
+      setHitLoading(!cached);
+      if (cached) {
+        setHitHtml(cached?.html || null);
+        if (cached?.summary) setHitSummary(cached.summary);
+      }
       try {
-        const data = await rollingHitRatePlot({ ...payload, __cache: false });
+        const data = await rollingHitRatePlot(payload);
         setHitHtml(data?.html || null);
         if (data?.summary) setHitSummary(data.summary);
       } catch (e) {
@@ -533,7 +634,7 @@ from daily_dashboard_metrics;`;
     <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
       <style dangerouslySetInnerHTML={{ __html: `
         .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Liberation Mono\', \'Courier New\', monospace; color: #e5e7eb; }
-        .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+        .sql-pre .kw { color: #93c5fd; }
         .sql-pre .fn { color: #a78bfa; }
         .sql-pre .str { color: #fca5a5; }
         .sql-pre .num { color: #fdba74; }
@@ -1215,7 +1316,7 @@ order by decile;`;
 
         {/* Generic chart SQL dialog */}
         <Dialog open={chartSqlOpen} onOpenChange={setChartSqlOpen}>
-          <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
+          <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="text-white">{chartSqlTitle || 'SQL'}</DialogTitle>
             </DialogHeader>
@@ -1251,9 +1352,13 @@ order by decile;`;
                       document.body.appendChild(a);
                       a.click();
                       a.remove();
-                      URL.revokeObjectURL(url);
-                    }}
+                    URL.revokeObjectURL(url);
+                  }}
                   >Download CSV</button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    onClick={() => setSchemaTable('daily')}
+                  >Show Schema</button>
                   <button
                     className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
                     onClick={() => setSqlTable('daily')}
@@ -1266,9 +1371,9 @@ order by decile;`;
                   description="Per‑day cross‑sectional metrics for 1‑day and 3‑day models (IC, top–bottom spreads 10%/5%, hit/total counts). These power the rolling 30‑day plots and the histogram‑based plots above." />
                 <span>Daily cross‑sectional metrics by date.</span>
               </div>
-              <div className="relative overflow-auto border border-slate-800 rounded-md h-[360px]">
+              <div className="relative overflow-y-auto overflow-x-scroll scrollbar-visible border border-slate-800 rounded-md h-[360px]" style={{ scrollbarGutter: 'stable' }}>
                 {rawDailyLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 z-10">
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 z-40 pointer-events-none">
                     <span className="text-slate-300 text-sm">Loading…</span>
                   </div>
                 )}
@@ -1330,10 +1435,14 @@ order by decile;`;
                     a.download = 'model_performance_metrics_agg.csv';
                     document.body.appendChild(a);
                     a.click();
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                  }}
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                }}
                 >Download CSV</button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    onClick={() => setSchemaTable('monthly')}
+                  >Show Schema</button>
                   <button
                     className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
                     onClick={() => setSqlTable('monthly')}
@@ -1346,7 +1455,7 @@ order by decile;`;
                   description="Global aggregates computed over all days: IC mean/std/ICIR and spread metrics for both 1‑day and 3‑day models." />
                 <span>Aggregated daily metrics.</span>
               </div>
-              <div className="relative overflow-auto border border-slate-800 rounded-md h-[360px]">
+              <div className="relative overflow-y-auto overflow-x-scroll scrollbar-visible border border-slate-800 rounded-md h-[360px]" style={{ scrollbarGutter: 'stable' }}>
                 <table className="min-w-full text-xs">
                   <thead className="bg-slate-800 sticky top-0">
                     <tr>
@@ -1375,7 +1484,7 @@ order by decile;`;
           </div>
 
           <Dialog open={!!sqlTable} onOpenChange={(open) => { if (!open) setSqlTable(null); }}>
-            <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
+            <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
               <DialogHeader>
                 <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_agg'}</DialogTitle>
               </DialogHeader>
@@ -1387,6 +1496,16 @@ order by decile;`;
               ) : sqlTable === 'monthly' ? (
                 renderSql(monthlySql)
               ) : null}
+            </DialogContent>
+          </Dialog>
+
+          {/* Schema dialog */}
+          <Dialog open={!!schemaTable} onOpenChange={(open) => { if (!open) setSchemaTable(null); }}>
+            <DialogContent className={`bg-slate-950 border border-slate-800 text-white ${schemaTable === 'monthly' ? 'max-w-[96rem] w-[88vw] max-h-[88vh]' : 'max-w-[120rem] w-[98vw] max-h-[96vh]'}`}>
+              <DialogHeader>
+                <DialogTitle className="text-white">{schemaTable === 'daily' ? 'daily_dashboard_metrics Schema' : 'model_performance_metrics_agg Schema'}</DialogTitle>
+              </DialogHeader>
+              <SchemaView table={schemaTable || 'daily'} />
             </DialogContent>
           </Dialog>
         </div>

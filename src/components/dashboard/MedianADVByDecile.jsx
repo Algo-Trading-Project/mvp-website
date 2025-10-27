@@ -116,9 +116,7 @@ order by decile;`;
     let cancelled = false;
     const load = async () => {
       setError(null);
-      setLoading(true);
-      try {
-        const payload = {
+      const payload = {
           start: dateRange.start,
           end: dateRange.end,
           horizon,
@@ -128,14 +126,15 @@ order by decile;`;
           window_days: 30,
           __cache: true,
         };
-        const cached = getCachedFunctionResult("adv-by-decile-plot", payload);
-        if (cached) {
-          if (cancelled || controller.signal.aborted) return;
-          setHtml(cached?.html || null);
-          if (storageKey && cached?.html) {
-            try { window.sessionStorage?.setItem(storageKey, cached.html); } catch (err) { console.warn("Failed to persist ADV cache", err); }
-          }
+      const cached = getCachedFunctionResult("adv-by-decile-plot", payload);
+      setLoading(!cached);
+      if (cached) {
+        setHtml(cached?.html || null);
+        if (storageKey && cached?.html) {
+          try { window.sessionStorage?.setItem(storageKey, cached.html); } catch (err) { console.warn("Failed to persist ADV cache", err); }
         }
+      }
+      try {
         const res = await advByDecilePlot(payload, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
@@ -157,8 +156,10 @@ order by decile;`;
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center justify-between mb-2 gap-2">
-        <InfoTooltip title="Median ADV 30 by Decile" description="For each day, tokens are bucketed into prediction deciles. We compute 30‑day average dollar volume per token and show the median by decile — a simple capacity proxy." />
-        <span className="font-semibold text-sm text-slate-200">Median ADV 30 by Cross‑Sectional Prediction Decile</span>
+        <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+          <InfoTooltip title="Median ADV 30 by Decile" description="For each day, tokens are bucketed into prediction deciles. We compute 30‑day average dollar volume per token and show the median by decile — a simple capacity proxy." />
+          Median ADV 30 by Cross‑Sectional Prediction Decile
+        </span>
         <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSql(true)}>Show SQL</button>
       </div>
       {loading ? (
@@ -172,7 +173,7 @@ order by decile;`;
       )}
 
       <Dialog open={showSql} onOpenChange={setShowSql}>
-        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
+        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-white">Median ADV by Decile</DialogTitle>
           </DialogHeader>
@@ -185,7 +186,7 @@ order by decile;`;
           <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
             <style dangerouslySetInnerHTML={{ __html: `
               .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono','Courier New', monospace; color: #e5e7eb; }
-              .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+              .sql-pre .kw { color: #93c5fd; }
               .sql-pre .str { color: #fca5a5; }
               .sql-pre .num { color: #fdba74; }
               .sql-pre .com { color: #94a3b8; font-style: italic; }

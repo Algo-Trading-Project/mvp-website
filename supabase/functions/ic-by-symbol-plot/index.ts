@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       (a, b) => (b.spearman_ic as number) - (a.spearman_ic as number)
     );
 
-    const makePlot = (rows: typeof symbols, title: string, color: string) => {
+    const makePlot = (rows: typeof symbols, _title: string, color: string) => {
       const x = rows.map((r) => r.symbol);
       const y = rows.map((r) => r.spearman_ic);
       const counts = rows.map((r) => r.observation_count);
@@ -90,10 +90,10 @@ const y = ${JSON.stringify(y)};
 const counts = ${JSON.stringify(counts)};
 const data = [{ type: 'bar', x, y, marker: { color: '${color}' }, hovertemplate: 'IC: %{y:.3f}<br>Observations: %{customdata}<br>Symbol: %{x}<extra></extra>', customdata: counts }];
 const layout = {
-  title: { text: '${title}', font: { color: '#e2e8f0', size: 14 }, x: 0.5 },
+  // No plotly title; page provides header next to info icon
   paper_bgcolor: '#0b1220',
   plot_bgcolor: '#0b1220',
-  margin: { l: 48, r: 20, t: 40, b: 80 },
+  margin: { l: 48, r: 20, t: 10, b: 80 },
   xaxis: { fixedrange:true, tickfont: { color: '#94a3b8' }, gridcolor: '#334155', tickangle: -45, categoryorder: 'array', categoryarray: ${JSON.stringify(x)} },
   yaxis: { fixedrange:true, tickformat: '.3f', tickfont: { color: '#94a3b8' }, gridcolor: '#334155', zeroline: true, zerolinecolor: '#475569' }
 };
@@ -104,8 +104,8 @@ Plotly.newPlot(el, data, layout, config);
     };
 
     return json({
-      html_top: makePlot(topRows, 'Top Tokens by IC', '#10b981'),
-      html_bottom: makePlot(bottomRows, 'Bottom Tokens by IC', '#ef4444'),
+      html_top: makePlot(topRows, '', '#10b981'),
+      html_bottom: makePlot(bottomRows, '', '#ef4444'),
       summary: {
         min_points: minPoints,
         top: topRows,

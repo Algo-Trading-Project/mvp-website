@@ -6,6 +6,7 @@ import { getServiceSupabaseClient } from "./supabase.ts";
 export const PLAN_TIER_MAP: Record<string, string> = {
   signals_lite: "lite",
   signals_pro: "pro",
+  signals_pro_dev: "pro_dev",
   signals_api: "api",
   free: "free",
 };
@@ -14,6 +15,7 @@ const TIER_PLAN_MAP: Record<string, string> = {
   free: "free",
   lite: "signals_lite",
   pro: "signals_pro",
+  pro_dev: "signals_pro_dev",
   api: "signals_api",
 };
 
@@ -40,6 +42,8 @@ registerPrice("STRIPE_PRICE_SIGNALS_LITE_MONTHLY", "signals_lite", "monthly");
 registerPrice("STRIPE_PRICE_SIGNALS_LITE_ANNUAL", "signals_lite", "annual");
 registerPrice("STRIPE_PRICE_SIGNALS_PRO_MONTHLY", "signals_pro", "monthly");
 registerPrice("STRIPE_PRICE_SIGNALS_PRO_ANNUAL", "signals_pro", "annual");
+registerPrice("STRIPE_PRICE_SIGNALS_PRO_DEV_MONTHLY", "signals_pro_dev", "monthly");
+registerPrice("STRIPE_PRICE_SIGNALS_PRO_DEV_ANNUAL", "signals_pro_dev", "annual");
 registerPrice("STRIPE_PRICE_SIGNALS_API_MONTHLY", "signals_api", "monthly");
 registerPrice("STRIPE_PRICE_SIGNALS_API_ANNUAL", "signals_api", "annual");
 

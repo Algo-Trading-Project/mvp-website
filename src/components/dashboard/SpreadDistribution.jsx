@@ -3,6 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
 import { spreadDistributionPlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 
 const InfoTooltip = ({ title, description }) => {
@@ -58,9 +59,14 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
     const controller = new AbortController();
     let cancelled = false;
     const load = async () => {
-      setLoading(true); setError(null);
+      const cached = getCachedFunctionResult("spread-distribution-plot", { start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, bins: 50, width: 980, height: 360 });
+      setLoading(!cached); setError(null);
+      if (cached) {
+        setHtml(cached?.html || null);
+        setSummary(cached?.summary || { mean: 0, std: 0, sharpe_ann: 0 });
+      }
       try {
-        const res = await spreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, bins: 20, width: 980, height: 360 }, { signal: controller.signal });
+        const res = await spreadDistributionPlot({ start: dateRange.start, end: dateRange.end, horizon, top_pct: topPct, bins: 50, width: 980, height: 360 }, { signal: controller.signal });
         if (cancelled || controller.signal.aborted) return;
         setHtml(res?.html || null);
         setSummary(res?.summary || { mean: 0, std: 0, sharpe_ann: 0 });
@@ -80,8 +86,10 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center justify-between mb-2 gap-2">
-        <InfoTooltip title="Distribution of Daily Top–Bottom Spread" description="Histogram of daily top‑minus‑bottom spread across assets for the selected percentile (10% or 5%)." />
-        <div className="font-semibold text-sm">{`Distribution of Daily Cross‑Sectional Spread (${topPct === 0.05 ? '5%' : '10%'})`}</div>
+        <span className="font-semibold text-sm flex items-center gap-2">
+          <InfoTooltip title="Distribution of Daily Top–Bottom Spread" description="Histogram of daily top‑minus‑bottom spread across assets for the selected percentile (10% or 5%)." />
+          {`Distribution of Daily Cross‑Sectional Spread (${topPct === 0.05 ? '5%' : '10%'})`}
+        </span>
         <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSql(true)}>Show SQL</button>
       </div>
 
@@ -120,7 +128,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
       )}
 
       <Dialog open={showSql} onOpenChange={setShowSql}>
-        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
+        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-white">Spread Distribution</DialogTitle>
           </DialogHeader>
@@ -133,7 +141,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
           <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
             <style dangerouslySetInnerHTML={{ __html: `
               .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono','Courier New', monospace; color: #e5e7eb; }
-              .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+              .sql-pre .kw { color: #93c5fd; }
               .sql-pre .str { color: #fca5a5; }
               .sql-pre .num { color: #fdba74; }
               .sql-pre .com { color: #94a3b8; font-style: italic; }

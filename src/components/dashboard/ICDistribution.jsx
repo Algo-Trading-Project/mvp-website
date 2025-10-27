@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
 import { icDistributionPlot } from "@/api/functions";
+import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { toast } from "sonner";
 
@@ -72,7 +73,19 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
     const controller = new AbortController();
     let cancelled = false;
     const run = async () => {
-      setLoading(true);
+      const cached = getCachedFunctionResult("ic-distribution-plot", {
+        start: dateRange.start,
+        end: dateRange.end,
+        horizon,
+        bins: 50,
+        width: 980,
+        height: 360,
+      });
+      setLoading(!cached);
+      if (cached) {
+        setHtml(cached?.html || null);
+        if (cached?.summary) setSummary(cached.summary);
+      }
       setError(null);
       try {
         const data = await icDistributionPlot(
@@ -80,7 +93,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
             start: dateRange.start,
             end: dateRange.end,
             horizon,
-            bins: 20,
+            bins: 50,
             width: 980,
             height: 360,
           },
@@ -119,11 +132,13 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center justify-between mb-2 gap-2">
-        <InfoTooltip
-          title="IC Distribution"
-          description="Histogram of daily Spearman rank correlations between predictions and realized returns across assets over the selected window. Red line at 0, blue line at mean."
-        />
-        <div className="font-semibold text-sm">Distribution of Daily Cross‑Sectional IC</div>
+        <span className="font-semibold text-sm flex items-center gap-2">
+          <InfoTooltip
+            title="IC Distribution"
+            description="Histogram of daily Spearman rank correlations between predictions and realized returns across assets over the selected window. Red line at 0, blue line at mean."
+          />
+          Distribution of Daily Cross‑Sectional IC
+        </span>
         <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSql(true)}>Show SQL</button>
       </div>
 
@@ -174,7 +189,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
       )}
 
       <Dialog open={showSql} onOpenChange={setShowSql}>
-        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-4xl max-h-[85vh]">
+        <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-white">IC Distribution</DialogTitle>
           </DialogHeader>
@@ -187,7 +202,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
           <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
             <style dangerouslySetInnerHTML={{ __html: `
               .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono','Courier New', monospace; color: #e5e7eb; }
-              .sql-pre .kw { color: #93c5fd; font-weight: 600; }
+              .sql-pre .kw { color: #93c5fd; }
               .sql-pre .str { color: #fca5a5; }
               .sql-pre .num { color: #fdba74; }
               .sql-pre .com { color: #94a3b8; font-style: italic; }

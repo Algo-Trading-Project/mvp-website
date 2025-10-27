@@ -2,10 +2,11 @@ import React from "react";
 // Note: This component is intended to be embedded inside Dashboard.jsx.
 // Do not wrap with Layout to avoid duplicate headers.
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { backtestEquityCurvePlot, backtestRollingAlphaPlot, backtestBootstrapRobustnessPlot, predictionsCoverage } from "@/api/functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Info } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, AreaChart, Area, Legend, ReferenceLine } from 'recharts';
 
 const BACKTEST_CACHE_KEY = "backtest-cache-v1";
 
@@ -54,6 +55,8 @@ export default function Backtest() {
   const [metrics, setMetrics] = React.useState(cached?.metrics ?? null);
   const [btcMetrics, setBtcMetrics] = React.useState(cached?.btcMetrics ?? null);
   const [equitySeries, setEquitySeries] = React.useState(cached?.equitySeries ?? null);
+  const [equitySqlOpen, setEquitySqlOpen] = React.useState(false);
+  const [equitySqlText, setEquitySqlText] = React.useState('');
 
   const [alphaHtml, setAlphaHtml] = React.useState(cached?.alphaHtml ?? null);
   const [betaHtml, setBetaHtml] = React.useState(cached?.betaHtml ?? null);
@@ -64,6 +67,10 @@ export default function Backtest() {
   const [bootstrapCharts, setBootstrapCharts] = React.useState(cached?.bootstrapCharts ?? null);
   const [bootstrapLoading, setBootstrapLoading] = React.useState(hasBootstrapCache ? false : true);
   const [bootstrapError, setBootstrapError] = React.useState(null);
+
+  // Controls used by effects below must be declared before use
+  const [horizon, setHorizon] = React.useState('1d');
+  const [topPct, setTopPct] = React.useState(0.1);
 
   const rangeMatchesCache = React.useCallback(() => {
     const current = cacheRef.current;
@@ -142,16 +149,17 @@ export default function Backtest() {
       }
       setEquityError(null);
       try {
-        const res = await backtestEquityCurvePlot({ start: dateRange.start, end: dateRange.end, period: '1d', fees: 0.003 });
+        const res = await backtestEquityCurvePlot({ start: dateRange.start, end: dateRange.end, period: '1d', fees: 0.003, horizon, top_pct: topPct });
         setEquityHtml(res?.html || null);
         setMetrics(res?.metrics || null);
         setBtcMetrics(res?.btc_metrics || null);
         setEquitySeries(res?.series || null);
+        if (res?.sql) setEquitySqlText(res.sql);
       } catch (e) { setEquityError(e?.message || 'Unable to load equity curve'); setEquityHtml(null); setEquitySeries(null); }
       finally { setEquityLoading(false); }
     };
     if (initialized) load();
-  }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache]);
+  }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache, horizon, topPct]);
 
   React.useEffect(() => {
     const load = async () => {
@@ -180,7 +188,7 @@ export default function Backtest() {
       }
       setBootstrapError(null);
       try {
-        const res = await backtestBootstrapRobustnessPlot({ start: dateRange.start, end: dateRange.end, iterations: 10000, period: '1d', fees: 0.003 });
+        const res = await backtestBootstrapRobustnessPlot({ start: dateRange.start, end: dateRange.end, iterations: 10000, period: '1d', fees: 0.003, bins: 50, height: 900 });
         setBootstrapHtml(res?.html || null);
         if (res?.charts) setBootstrapCharts(res.charts);
       } catch (e) { setBootstrapError(e?.message || 'Unable to load bootstrap plot'); setBootstrapHtml(null); }
@@ -189,13 +197,31 @@ export default function Backtest() {
     if (initialized) load();
   }, [dateRange.start, dateRange.end, initialized, rangeMatchesCache]);
 
+  // moved above
+
   const controlBar = (
     <div className="flex w-full items-center justify-end mb-4">
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-slate-400">From</label>
-        <input type="date" value={dateRange.start} min={MIN_BACKTEST_DATE} max={dateRange.end || todayIso} onChange={(e)=>setDateRange(r=>({...r,start:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
-        <label className="text-xs text-slate-400 ml-2">To</label>
-        <input type="date" value={dateRange.end} min={MIN_BACKTEST_DATE} max={todayIso} onChange={(e)=>setDateRange(r=>({...r,end:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-300">Model</span>
+          <select value={horizon} onChange={(e)=>setHorizon(e.target.value === '3d' ? '3d' : '1d')} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white">
+            <option value="1d">1‑Day</option>
+            <option value="3d">3‑Day</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-300">Spread</span>
+          <select value={topPct} onChange={(e)=>setTopPct(Number(e.target.value) === 0.05 ? 0.05 : 0.1)} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white">
+            <option value={0.1}>Top/Bottom 10%</option>
+            <option value={0.05}>Top/Bottom 5%</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-300">From</label>
+          <input type="date" value={dateRange.start} min={MIN_BACKTEST_DATE} max={dateRange.end || todayIso} onChange={(e)=>setDateRange(r=>({...r,start:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
+          <label className="text-xs text-slate-300 ml-2">To</label>
+          <input type="date" value={dateRange.end} min={MIN_BACKTEST_DATE} max={todayIso} onChange={(e)=>setDateRange(r=>({...r,end:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
+        </div>
       </div>
     </div>
   );
@@ -314,6 +340,56 @@ export default function Backtest() {
 
   const drawdownLegendFormatter = React.useCallback((value) => value, []);
 
+  // Styled SQL helpers (match OOS page styling)
+  const highlightSql = (sql) => {
+    if (!sql) return "";
+    const escape = (s) => s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    let out = escape(sql);
+    out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
+    out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
+    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
+    const fnRe = /\b([a-z_][a-z0-9_]*)\s*(?=\()/gi;
+    out = out.replace(fnRe, `<span class=\"fn\">$1</span>`);
+    const KW = ['select','from','where','group','by','order','join','left','right','inner','outer','on','as','with','create','materialized','view','case','when','then','else','end','avg','stddev','sum','count','rank','percent_rank','over','partition','union','all','distinct','and','or','not','between','like','desc','asc','limit','offset','window'];
+    const kwRe = new RegExp(`\\b(${KW.join('|')})\\b`, 'gi');
+    out = out.replace(kwRe, (m) => `<span class=\"kw\">${m.toUpperCase()}</span>`);
+    return out;
+  };
+  const renderSql = (sql) => (
+    <div className="overflow-auto max-h-[70vh] rounded border border-slate-800 bg-slate-900">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .sql-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; color: #e5e7eb; }
+        .sql-pre .kw { color: #93c5fd; }
+        .sql-pre .fn { color: #a78bfa; }
+        .sql-pre .str { color: #fca5a5; }
+        .sql-pre .num { color: #fdba74; }
+        .sql-pre .com { color: #94a3b8; font-style: italic; }
+      ` }} />
+      <pre className="sql-pre p-3 text-xs whitespace-pre leading-5" dangerouslySetInnerHTML={{ __html: highlightSql(sql || '') }} />
+    </div>
+  );
+  const copyToClipboard = async (text) => {
+    try { await navigator.clipboard.writeText(text || ''); }
+    catch (_e) {
+      const ta = document.createElement('textarea');
+      ta.value = text || '';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } finally { ta.remove(); }
+    }
+  };
+  const CopyButton = ({ text }) => {
+    const [copied, setCopied] = React.useState(false);
+    return (
+      <button
+        className={`text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${copied ? 'opacity-80' : ''}`}
+        onClick={async ()=>{ await copyToClipboard(text); setCopied(true); setTimeout(()=>setCopied(false),2000); }}
+      >{copied ? 'Copied' : 'Copy SQL'}</button>
+    );
+  };
+
   const HistogramTooltip = ({ active, payload, label, title, fmt, formatX }) => {
     if (!active || !payload || !payload.length) return null;
     const count = payload[0]?.value ?? 0;
@@ -330,33 +406,46 @@ export default function Backtest() {
     const formatX = (v) => {
       const num = Number(v);
       if (!Number.isFinite(num)) return '';
-      // Uniform decimal formatting (no percent symbol)
+      if (fmt === 'pct') {
+        // Show percent axis labels
+        const abs = Math.abs(num);
+        const digits = abs < 0.1 ? 2 : abs < 1 ? 1 : 0;
+        return `${(num*100).toFixed(digits)}%`;
+      }
       return num.toFixed(2);
     };
     const mean = data?.mean ?? 0;
     const p005 = data?.p005 ?? 0;
     const p995 = data?.p995 ?? 0;
     const rows = (data?.centers || []).map((x, i) => ({ x, y: (data.counts || [])[i] || 0 }));
-    const formattedMean = formatX(mean);
-    const ciLabel = `[${formatX(p005)}, ${formatX(p995)}]`;
-    // Keep badges one line even with info icon: small, tight leading
-    const badgeTextClass = 'text-xs md:text-sm leading-tight whitespace-nowrap';
-    const badgePadClass = 'px-3 py-2';
+    const formatBadge = (v) => {
+      if (v === null || v === undefined || Number.isNaN(v)) return '—';
+      if (fmt === 'pct') return `${(v*100).toFixed(2)}%`;
+      return `${Number(v).toFixed(2)}`;
+    };
+    const formattedMean = formatBadge(mean);
+    const ciLabel = `[${formatBadge(p005)}, ${formatBadge(p995)}]`;
+    // Badge styling similar to OOS dashboard (two-line, taller)
+    const badgeLabelClass = 'text-[11px] text-slate-300 flex items-center justify-center gap-1';
+    const badgeValueClass = 'text-sm font-semibold';
+    const badgePadClass = 'px-4 py-3 min-h-[56px]';
     return (
       <div className="space-y-2">
         {/* Badges row (outside and above the plot card) */}
         <div className="grid grid-cols-2 gap-3">
-          <div className={`bg-slate-800/70 border border-slate-700 rounded-md ${badgePadClass} ${badgeTextClass} font-medium text-slate-100`}> 
-            <div className="flex items-center justify-center gap-1">
+          <div className={`bg-slate-800/60 border border-slate-700 rounded ${badgePadClass} text-center`}>
+            <div className={badgeLabelClass}>
               <InfoTooltip title="Mean" description="Average of the bootstrapped values for this metric." />
-              <span>Mean: {formattedMean}</span>
+              <span>Mean</span>
             </div>
+            <div className={badgeValueClass}>{formattedMean}</div>
           </div>
-          <div className={`bg-slate-800/70 border border-slate-700 rounded-md ${badgePadClass} ${badgeTextClass} font-medium text-slate-100`}>
-            <div className="flex items-center justify-center gap-1">
+          <div className={`bg-slate-800/60 border border-slate-700 rounded ${badgePadClass} text-center`}>
+            <div className={badgeLabelClass}>
               <InfoTooltip title="99% Confidence Interval" description="Range containing 99% of simulated values (0.5% to 99.5%)." />
-              <span>99% CI: {ciLabel}</span>
+              <span>99% CI</span>
             </div>
+            <div className={badgeValueClass}>{ciLabel}</div>
           </div>
         </div>
         {/* Plot card */}
@@ -373,6 +462,10 @@ export default function Backtest() {
                 <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#334155' }} tickLine={{ stroke: '#334155' }} />
                 <RTooltip content={<HistogramTooltip title={title} fmt={fmt} formatX={formatX} />} />
                 <Bar dataKey="y" fill={color} stroke="#000000" strokeWidth={1} />
+                {/* Reference lines: mean (blue) and 99% CI (red dotted) */}
+                {Number.isFinite(mean) && <ReferenceLine x={mean} stroke="#60a5fa" strokeWidth={2} />}
+                {Number.isFinite(p005) && <ReferenceLine x={p005} stroke="#ef4444" strokeDasharray="3 3" />}
+                {Number.isFinite(p995) && <ReferenceLine x={p995} stroke="#ef4444" strokeDasharray="3 3" />}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -382,13 +475,14 @@ export default function Backtest() {
   };
 
   const RobustnessGrid = ({ charts }) => {
+    // Order and colors to match server and previous visuals
     const defs = [
+      { key: 'mdds', title: 'Max Drawdown', fmt: 'pct', color: '#ef4444' },
+      { key: 'avgdds', title: 'Average Drawdown', fmt: 'pct', color: '#f59e0b' },
+      { key: 'cagrs', title: 'CAGR', fmt: 'pct', color: '#a78bfa' },
       { key: 'sharpes', title: 'Sharpe', fmt: 'ratio', color: '#22c55e' },
       { key: 'sortinos', title: 'Sortino', fmt: 'ratio', color: '#3b82f6' },
-      { key: 'calmar', title: 'Calmar', fmt: 'ratio', color: '#ef4444' },
-      { key: 'cagrs', title: 'CAGR', fmt: 'ratio', color: '#a78bfa' },
-      { key: 'mdds', title: 'Max Drawdown', fmt: 'ratio', color: '#92400e' },
-      { key: 'avgdds', title: 'Average Drawdown', fmt: 'ratio', color: '#b45309' },
+      { key: 'calmar', title: 'Calmar', fmt: 'ratio', color: '#f43f5e' },
     ];
     return (
       <div className="grid md:grid-cols-3 gap-4">
@@ -432,10 +526,14 @@ export default function Backtest() {
           <div className="grid md:grid-cols-1 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
                   <InfoTooltip title="Equity Curve" description="Cumulative product of (1 + returns) after fees; compared to BTC buy‑and‑hold over same cadence." />
                   Equity Curve (Strategy vs BTC)
                 </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={()=> setEquitySqlOpen(true)}
+                >Show SQL</button>
               </div>
               {equityLoading ? <ChartCardSkeleton height={380} /> : equityError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{equityError}</div>
@@ -445,6 +543,17 @@ export default function Backtest() {
                 <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
             </div>
+            <Dialog open={equitySqlOpen} onOpenChange={setEquitySqlOpen}>
+              <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-5xl max-h-[85vh]">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Equity Curve</DialogTitle>
+                </DialogHeader>
+                <div className="flex justify-end mb-2">
+                  <CopyButton text={equitySqlText || ''} />
+                </div>
+                {renderSql(equitySqlText || '')}
+              </DialogContent>
+            </Dialog>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200 flex items-center gap-2">
@@ -556,7 +665,7 @@ export default function Backtest() {
             ) : bootstrapCharts ? (
               <RobustnessGrid charts={bootstrapCharts} InfoTooltip={InfoTooltip} />
             ) : bootstrapHtml ? (
-              <iframe srcDoc={bootstrapHtml} title="Bootstrap Robustness" className="w-full rounded-md" style={{ height: 560, border: 'none', background: 'transparent' }} />
+              <iframe srcDoc={bootstrapHtml} title="Bootstrap Robustness" className="w-full rounded-md" style={{ height: 1000, border: 'none', background: 'transparent', overflow: 'visible' }} />
             ) : <div className="text-slate-400 text-sm p-4 text-center">No data</div>}
           </div>
         </div>
