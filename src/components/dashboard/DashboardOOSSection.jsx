@@ -1387,7 +1387,7 @@ order by decile;`;
               </div>
               <div className={`${rawDailyLoading ? 'overflow-hidden' : 'overflow-y-auto overflow-x-scroll scrollbar-visible'} relative border border-slate-800 rounded-md h-[360px]`} style={{ scrollbarGutter: rawDailyLoading ? undefined : 'stable' }}>
                 {rawDailyLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 z-40 pointer-events-none">
+                  <div className="sticky top-0 left-0 right-0 h-full flex items-center justify-center bg-slate-950/70 z-40 pointer-events-none">
                     <span className="text-slate-300 text-sm">Loading…</span>
                   </div>
                 )}

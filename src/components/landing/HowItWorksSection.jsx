@@ -6,18 +6,18 @@ export default function HowItWorksSection() {
   const steps = [
     {
       icon: Cpu,
-      title: "1. We Collect & Normalize Data",
-      description: "Clean OHLCV (1m–1d) and optional tick/trade feeds across major assets and venues."
+      title: "1. We Collect & Prepare",
+      description: "We collect and process data across many sources to power our research and feature engineering."
     },
     {
       icon: Zap,
-      title: "2. We Train & Publish Signals",
-      description: "Daily ML signals with public OOS verification—ranks, scores, and decile spreads."
+      title: "2. We Train & Publish",
+      description: "We generate daily ML signals on 1‑day and 3‑day horizons alongside public OOS performance and robustness checks."
     },
     {
       icon: Rocket,
       title: "3. You Build & Execute",
-      description: "Access via APIs and files—use signals directly or build systems on our data."
+      description: "Use the REST API or manually download our data, then plug into your own systems and research."
     }
   ];
 

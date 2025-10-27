@@ -10,10 +10,10 @@ export default function CTASection() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="glass rounded-2xl p-8 md:p-12 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Get Your Edge, <span className="gradient-text">Today</span>
+            See The Edge <span className="gradient-text">In Minutes</span>
           </h2>
           <p className="text-slate-300 text-lg mb-8 max-w-2xl mx-auto">
-            Market‑neutral alpha you can verify. See rolling alpha and beta live, then pick the plan that fits.
+            Live, auditable performance. Inspect rolling IC, spreads, and various visualizations—then choose the plan that fits you best.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to={createPageUrl("Pricing")}>
