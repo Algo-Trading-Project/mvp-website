@@ -101,7 +101,7 @@ export default function HeroSection() {
 
           {/* Headline */}
           <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-            Crypto signals you can verify — built on institutional‑grade data
+            Crypto signals you can verify, built on institutional‑grade data
           </h1>
 
           {/* Above-the-fold clarity copy */}

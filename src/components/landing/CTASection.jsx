@@ -13,7 +13,7 @@ export default function CTASection() {
             See The Edge <span className="gradient-text">In Minutes</span>
           </h2>
           <p className="text-white text-lg mb-8 max-w-2xl mx-auto">
-            Live, auditable performance. Inspect rolling IC, spreads, and various visualizations—then choose the plan that fits you best.
+            Live, auditable performance. Inspect rolling IC, spreads, and visualizations, then choose the plan that fits you best.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to={createPageUrl("Pricing")}>

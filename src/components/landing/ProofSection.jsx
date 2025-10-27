@@ -12,13 +12,13 @@ export default function ProofSection() {
           {/* Left: narrative + checklist */}
           <div className="md:col-span-3">
             <p className="font-semibold text-blue-400">Proof, Not Promises</p>
-            <h2 className="text-3xl sm:text-4xl font-bold mt-2">See it working — in the open</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold mt-2">See it working in the open</h2>
             <p className="mt-4 text-white text-lg max-w-xl">
               Live performance, public verification, and downloadable history. Validate the edge on your terms.
             </p>
             <ul className="mt-6 space-y-3 text-white">
               <li className="flex items-start gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /> Public dashboard with rolling IC, spreads, drawdowns, and more</li>
-              <li className="flex items-start gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /> Out‑of‑sample metrics only — no cherry‑picked backtests</li>
+              <li className="flex items-start gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /> Out‑of‑sample metrics only. No cherry‑picked backtests</li>
               <li className="flex items-start gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /> Download yesterday’s predictions to run your own checks</li>
               <li className="flex items-start gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /> Immutable archives, stable schemas, and consistent delivery</li>
             </ul>
@@ -39,7 +39,7 @@ export default function ProofSection() {
                 <LineChart className="w-5 h-5 text-emerald-400" />
                 <span className="font-semibold">Live OOS Dashboard</span>
               </div>
-              <p className="text-sm text-white">Rolling IC, decile spreads, hit‑rate, and robustness plots — updated daily.</p>
+              <p className="text-sm text-white">Rolling IC, decile spreads, hit‑rate, and robustness plots. Updated daily.</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
               <div className="flex items-center gap-2 mb-2 text-white">

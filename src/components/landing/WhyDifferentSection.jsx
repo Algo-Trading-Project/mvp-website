@@ -5,12 +5,12 @@ const DIFFERENTIATORS = [
   {
     icon: LineChart,
     title: "Public, verifiable OOS",
-    body: "We publish every rank, decile, and spread out-of-sample. No cherry-picked backtests—judge the model on live history only.",
+    body: "We publish every rank, decile, and spread out-of-sample. No cherry-picked backtests. Judge the model on live history only.",
   },
   {
     icon: ShieldCheck,
     title: "Point-in-time clean",
-    body: "Signals are versioned, PIT-audited, and delivered after the book is closed—no look-ahead leakage or patched datasets.",
+    body: "Signals are versioned, PIT-audited, and delivered after the book is closed. No look-ahead leakage or patched datasets.",
   },
   {
     icon: Plug,
