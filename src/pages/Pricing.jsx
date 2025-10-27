@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Check, Crown, Zap, Building } from "lucide-react";
+import { Check, Crown, Zap, Building, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -72,7 +72,8 @@ export default function Pricing() {
       description: "Top/bottom deciles for ~12 majors. 24h delay. Read‑only dashboard.",
       slug: "signals_lite",
       features: [
-        "CSV files for ~12 majors (24h delay)",
+        "CSV ranks for top 60 tokens by ADV",
+        "90 days download history (CSV)",
         "Email/Discord alerts on rebalance",
         "No API access",
       ],
@@ -80,7 +81,7 @@ export default function Pricing() {
     },
     {
       name: "Signals Pro",
-      icon: Zap,
+      icon: Shield,
       monthlyPrice: 139,
       description: "Full daily ranks across ~391 assets with history downloads and OOS analytics.",
       slug: "signals_pro",
@@ -203,14 +204,14 @@ export default function Pricing() {
               <h2 className="text-2xl font-bold text-white mb-2">
                 {plan.name}
               </h2>
-              <p className="text-slate-400 mb-6 text-sm px-2">{plan.description}</p>
+              <p className="text-slate-300 mb-6 text-sm px-2">{plan.description}</p>
               <div className="text-center mb-6 flex flex-col items-center justify-center min-h-[72px]">
                 {plan.price ? (
                   <>
                     <span className="text-3xl font-extrabold text-white">
                       ${getPrice(plan)}
                     </span>
-                    <span className="text-lg text-slate-400">
+                    <span className="text-lg text-slate-300">
                       /{billingCycle === "monthly" ? "month" : "year"}
                     </span>
                     {billingCycle === "annual" && getSavings(plan) > 0 && (
@@ -222,7 +223,7 @@ export default function Pricing() {
                     <span className="text-2xl font-extrabold text-white">
                       {plan.customNote || "Custom"}
                     </span>
-                    <div className="text-slate-400 text-sm mt-1">Contact us</div>
+                    <div className="text-slate-300 text-sm mt-1">Contact us</div>
                   </div>
                 )}
               </div>
@@ -271,7 +272,7 @@ export default function Pricing() {
         <div className="text-center mb-10">
           <h1 className="text-4xl font-extrabold text-white mb-4">Pricing</h1>
           <p className="text-slate-300 max-w-3xl mx-auto">
-            Transparent, audited, ML‑driven crypto signals and a clean market‑data lake — priced for builders, quants, and teams.
+            Transparent, automated, ML‑driven crypto signals — priced for builders, quants, and teams.
           </p>
           {/* Billing Toggle */}
           <div className="flex items-center justify-center space-x-4 mt-8">
@@ -299,124 +300,87 @@ export default function Pricing() {
           <PlanGrid plans={signalsPlans} />
         </div>
 
-        {/* Details */}
+        {/* Details / FAQ */}
         <div className="mt-16 max-w-4xl mx-auto">
           <Accordion type="multiple" className="bg-slate-900 border border-slate-800 rounded-md divide-y divide-slate-800">
-            <AccordionItem value="why">
-              <AccordionTrigger className="px-4 text-left">Why Premium?</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
-                <ol className="list-decimal list-inside space-y-2">
-                  <li><strong>Proven edge, measured the way quants do.</strong> We report monthly Spearman rank IC, ICIR, fee‑adjusted decile performance, turnover, and drawdowns.</li>
-                  <li><strong>No backfills that overwrite history.</strong> Every daily prediction file is snapshotted and published; histories are retained and auditable.</li>
-                  <li><strong>Breadth + discipline.</strong> Hundreds of assets × daily/weekly re‑estimation → breadth that converts IC into realized IR (with costs accounted for).</li>
-                  <li><strong>Data + Signals in one place.</strong> Clean OHLCV and tick history + daily alpha ranks/weights, so you can build, backtest, and go live without duct‑tape.</li>
-                </ol>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="oos">
-              <AccordionTrigger className="px-4 text-left">What’s on the OOS Dashboard (public)</AccordionTrigger>
+            <AccordionItem value="api-access">
+              <AccordionTrigger className="px-4 text-left">What API access do I get on each plan?</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
                 <ul className="list-disc pl-5 space-y-2">
-                  <li>Monthly rank IC (1d) with confidence bands</li>
-                  <li>Decile long‑short curves (gross and fee/slippage‑adjusted)</li>
-                  <li>Drawdowns & recovery time</li>
-                  <li>Turnover and capacity notes (avg daily traded $/pair assumption)</li>
-                  <li>Methodology card: factor families, training cadence, leakage tests, data handling, and quality checks</li>
-                  <li>Audit artifacts: daily prediction file hash, timestamp, immutable ID</li>
-                </ul>
-                <p className="text-xs text-slate-500 mt-3">(Full ranks/weights and full history are gated to paid tiers.)</p>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="proof">
-              <AccordionTrigger className="px-4 text-left">Proof Points</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
-                <ul className="list-disc pl-5 space-y-2">
-                  <li>Consistency: ICIR ≥ 2 over multi‑year OOS periods</li>
-                  <li>Tradability: we show fee/slippage‑adjusted decile spreads using conservative taker costs</li>
-                  <li>No hindsight: retrieve any past prediction and check the published hash</li>
-                  <li>Breadth: ~391 assets with coverage since 2019 (rolling universe handling documented)</li>
-                  <li>Methodology transparency: clear leakage checks, data sanity, and retraining cadence</li>
+                  <li><strong>Lite:</strong> No API access. CSVs for ~12 majors (24h delay).</li>
+                  <li><strong>Pro (no add‑on):</strong> No API access. Full ranks + history via CSV and dashboard.</li>
+                  <li><strong>Pro‑Developer (add‑on):</strong> API access to <code>/latest</code> predictions (current release, rate‑limited), <code>/universe</code> (read), and <code>/ohlcv</code> with short lookback (≤30 days).</li>
+                  <li><strong>API:</strong> Full API, including <code>/predictions</code> historical range, <code>/latest</code>, <code>/universe</code>, and <code>/ohlcv</code> with higher limits.</li>
                 </ul>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="workflows">
-              <AccordionTrigger className="px-4 text-left">Example Workflows</AccordionTrigger>
+            <AccordionItem value="publishing">
+              <AccordionTrigger className="px-4 text-left">When are predictions published?</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="font-semibold text-white mb-1">Signals Pro</h4>
-                    <p>Export today’s top decile and create a market‑neutral basket with turnover caps.</p>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-white mb-1">Signals API</h4>
-                    <p>Pull ranks at 00:05 UTC daily, join to your risk model, produce weights with sector/size constraints.</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">Data + Signals</p>
-                    <p>Run an offline backtest using our OHLCV + tick to validate fee‑adjusted P&amp;L; go live from the same schema.</p>
-                  </div>
-                </div>
+                Predictions publish once per day (UTC). Each file is snapshotted and versioned so archives remain immutable and auditable.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="discounts">
-              <AccordionTrigger className="px-4 text-left">Discounts & Terms</AccordionTrigger>
+            <AccordionItem value="accumulation">
+              <AccordionTrigger className="px-4 text-left">Can Pro‑Developer users reconstruct history over time?</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
-                <ul className="list-disc pl-5 space-y-2">
-                  <li>Annual: 15% off</li>
-                  <li>Founder pricing: early adopters are grandfathered</li>
-                  <li>One subscription per project/team; fair‑use rate limits apply</li>
-                </ul>
+                Over time, <code>/latest</code> responses can be accumulated. That’s an intentional trade‑off: Pro‑Developer enables light automation; anyone who needs immediate backfill for research/backtests should use the API tier.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="faq">
-              <AccordionTrigger className="px-4 text-left">FAQ</AccordionTrigger>
+            <AccordionItem value="universe">
+              <AccordionTrigger className="px-4 text-left">What’s the universe and horizon?</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
-                <div className="space-y-3">
-                  <div>
-                    <p className="font-semibold text-white">Are these investment recommendations?</p>
-                    <p>No. This is data & research for professional users. You control execution and risk.</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">What costs do you assume on the dashboard?</p>
-                    <p>We publish the exact assumptions (e.g., taker bps, slippage model) and show both gross and cost‑adjusted curves.</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">How do I verify there’s no backfill?</p>
-                    <p>Use our daily prediction archives to retrieve historical files and check the published hash.</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">What about capacity?</p>
-                    <p>We disclose turnover and notional assumptions by decile, plus sensitivity to rebalance frequency.</p>
-                  </div>
-                </div>
+                We cover ~391 liquid assets with daily cadence. Horizons on the dashboard are 1‑day and 3‑day; Pro‑Developer focuses on <code>1d</code>; API exposes all available horizons.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="compliance">
-              <AccordionTrigger className="px-4 text-left">Compliance & Risk</AccordionTrigger>
+            <AccordionItem value="verification">
+              <AccordionTrigger className="px-4 text-left">How do I verify there’s no backfill?</AccordionTrigger>
               <AccordionContent className="px-4 pb-4 text-slate-300">
-                <ul className="list-disc pl-5 space-y-2">
-                  <li>For informational purposes only; not investment advice</li>
-                  <li>Some assets may be restricted in certain jurisdictions; you’re responsible for compliance and tax</li>
-                  <li>Past performance (including OOS) does not guarantee future results</li>
-                </ul>
+                Every prediction file is fingerprinted; retrieve historical files and validate the published hash in the dashboard archives.
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="dashboard">
+              <AccordionTrigger className="px-4 text-left">What’s on the public OOS dashboard?</AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 text-slate-300">
+                Monthly IC, fee‑adjusted decile performance, rolling metrics (IC, spreads, hit‑rate), robustness checks, and distribution plots.
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="limits">
+              <AccordionTrigger className="px-4 text-left">How do rate limits work?</AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 text-slate-300">
+                Pro‑Developer uses strict caps (e.g., ≤2 calls/day for <code>/latest</code>, single key/concurrency). API tier has significantly higher limits and multiple keys.
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="support">
+              <AccordionTrigger className="px-4 text-left">Support & SLAs</AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 text-slate-300">
+                Pro and Pro‑Developer receive email support. API adds higher priority; SLAs and private endpoints are available via custom agreements.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         </div>
 
         {/* Compare Plans */}
-        <div id="compare" className="mt-16 max-w-5xl mx-auto">
+        <div id="compare" className="mt-16 max-w-6xl mx-auto">
           <div className="text-center mb-6">
             <h3 className="text-2xl font-bold text-white">Compare Plans</h3>
-            <p className="text-slate-400 text-sm">Key limits and differences at a glance.</p>
+            <p className="text-slate-300 text-sm">Key limits and differences at a glance.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
+              <div className="font-semibold mb-1">Lite</div>
+              <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
+                <li>CSV ranks for top 60 tokens by ADV</li>
+                <li>90 days history (CSV)</li>
+                <li>No API access; alerts + read‑only dashboard</li>
+              </ul>
+            </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
               <div className="font-semibold mb-1">Pro (no add‑on)</div>
               <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
@@ -442,9 +406,7 @@ export default function Pricing() {
               </ul>
             </div>
           </div>
-          <div className="text-center mt-6 text-sm text-slate-400">
-            Have questions? <Link to={createPageUrl("Contact")} className="text-blue-400 hover:underline">Contact sales</Link>.
-          </div>
+          {/* Contact sales note removed per request */}
         </div>
 
         {/* CTA buttons */}

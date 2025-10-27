@@ -476,13 +476,14 @@ export default function Backtest() {
 
   const RobustnessGrid = ({ charts }) => {
     // Order and colors to match server and previous visuals
+    // Top row: Sharpe, Sortino, Calmar; Bottom row: CAGR, Max DD, Avg DD
     const defs = [
-      { key: 'mdds', title: 'Max Drawdown', fmt: 'pct', color: '#ef4444' },
-      { key: 'avgdds', title: 'Average Drawdown', fmt: 'pct', color: '#f59e0b' },
-      { key: 'cagrs', title: 'CAGR', fmt: 'pct', color: '#a78bfa' },
       { key: 'sharpes', title: 'Sharpe', fmt: 'ratio', color: '#22c55e' },
       { key: 'sortinos', title: 'Sortino', fmt: 'ratio', color: '#3b82f6' },
       { key: 'calmar', title: 'Calmar', fmt: 'ratio', color: '#f43f5e' },
+      { key: 'cagrs', title: 'CAGR', fmt: 'pct', color: '#a78bfa' },
+      { key: 'mdds', title: 'Max Drawdown', fmt: 'pct', color: '#ef4444' },
+      { key: 'avgdds', title: 'Average Drawdown', fmt: 'pct', color: '#f59e0b' },
     ];
     return (
       <div className="grid md:grid-cols-3 gap-4">

@@ -140,6 +140,7 @@ export default function DashboardOOSSection() {
   const [rawDailyRows, setRawDailyRows] = React.useState([]);
   const [rawDailyLoading, setRawDailyLoading] = React.useState(false);
   const [rawDailyPage, setRawDailyPage] = React.useState(1);
+  const rawDailyLoadedPagesRef = React.useRef(new Set());
   const RAW_PAGE_SIZE = 200;
   const [rawMonthlyRow, setRawMonthlyRow] = React.useState(null);
   // Which table to show SQL for: 'daily' | 'monthly' | null
@@ -336,7 +337,8 @@ export default function DashboardOOSSection() {
   React.useEffect(() => {
     const load = async () => {
       if (!dateRange.start || !dateRange.end) return;
-      setRawDailyLoading(true);
+      const isNewPage = !rawDailyLoadedPagesRef.current.has(rawDailyPage);
+      setRawDailyLoading(isNewPage);
       try {
         const [dailyRes, monthlyRes] = await Promise.all([
           rawDaily({ start: dateRange.start, end: dateRange.end, page: rawDailyPage, page_size: RAW_PAGE_SIZE }),
@@ -344,6 +346,7 @@ export default function DashboardOOSSection() {
         ]);
         setRawDailyRows(Array.isArray(dailyRes?.rows) ? dailyRes.rows : []);
         setRawMonthlyRow(monthlyRes?.row || null);
+        rawDailyLoadedPagesRef.current.add(rawDailyPage);
       } catch (_e) {
         setRawDailyRows([]);
         setRawMonthlyRow(null);
@@ -357,6 +360,7 @@ export default function DashboardOOSSection() {
   // Reset daily raw table to first page whenever the date range changes
   React.useEffect(() => {
     setRawDailyPage(1);
+    rawDailyLoadedPagesRef.current = new Set();
   }, [dateRange.start, dateRange.end]);
 
   const dailySql = `create materialized view daily_dashboard_metrics as
@@ -686,18 +690,16 @@ limit 1000 offset 0;`;
   const buildRollingHitSql = () => {
     const hitCol = horizon === '3d' ? 'cs_hit_count_3d' : 'cs_hit_count_1d';
     const totCol = horizon === '3d' ? 'total_count_3d' : 'total_count_1d';
-    return `-- Resolved SQL matching rpc_rolling_hit_rate
+    const win = 30; // UI uses 30d window consistently
+    // Resolved SQL with new alias rolling_hit_rate
+    return `-- Resolved SQL matching rpc_rolling_hit_rate (column renamed to rolling_hit_rate)
 select d.date,
-       case when sum(d.${totCol}) over (
-                    order by d.date rows between (30 - 1) preceding and current row
-                  ) > 0
-            then (sum(d.${hitCol}) over (
-                    order by d.date rows between (30 - 1) preceding and current row
-                  ))::double precision
-                 / nullif(sum(d.${totCol}) over (
-                            order by d.date rows between (30 - 1) preceding and current row
-                          ), 0)
-            else null end as value
+       (sum(d.${hitCol}) over (
+          order by d.date rows between (${win} - 1) preceding and current row
+        ))::double precision
+       / nullif(sum(d.${totCol}) over (
+            order by d.date rows between (${win} - 1) preceding and current row
+          ), 0) as rolling_hit_rate
 from daily_dashboard_metrics d
 where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
 order by d.date
@@ -1145,8 +1147,18 @@ order by decile;`;
               positive: typeof pick(posKey) === 'number' ? Number(pick(posKey)) : null,
             };
 
+            const spreadBadgesLoading = !rawMonthlyRow;
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-4">
+                {spreadBadgesLoading ? (
+                  <>
+                    <BadgeSkeleton />
+                    <BadgeSkeleton />
+                    <BadgeSkeleton />
+                    <BadgeSkeleton />
+                  </>
+                ) : (
+                  <>
                 <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
                   <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
                     <InfoTooltip
@@ -1162,7 +1174,7 @@ order by decile;`;
                     <InfoTooltip title="Std Dev (Spread)" description="Standard deviation of the daily cross‑sectional spread." />
                     <span>Std Dev (Spread)</span>
                   </div>
-                  <div className="text-xl font-bold text-white mt-1">{spreadStats.std != null ? (spreadStats.std).toFixed(4) : '—'}</div>
+                  <div className="text-xl font-bold text-white mt-1">{spreadStats.std != null ? `${(spreadStats.std * 100).toFixed(2)}%` : '—'}</div>
                 </div>
                 <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
                   <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
@@ -1181,6 +1193,8 @@ order by decile;`;
                   </div>
                   <div className="text-xl font-bold text-white mt-1">{spreadStats.sharpe != null ? spreadStats.sharpe.toFixed(2) : '—'}</div>
                 </div>
+                  </>
+                )}
               </div>
             );
           })()}
@@ -1371,7 +1385,7 @@ order by decile;`;
                   description="Per‑day cross‑sectional metrics for 1‑day and 3‑day models (IC, top–bottom spreads 10%/5%, hit/total counts). These power the rolling 30‑day plots and the histogram‑based plots above." />
                 <span>Daily cross‑sectional metrics by date.</span>
               </div>
-              <div className="relative overflow-y-auto overflow-x-scroll scrollbar-visible border border-slate-800 rounded-md h-[360px]" style={{ scrollbarGutter: 'stable' }}>
+              <div className={`${rawDailyLoading ? 'overflow-hidden' : 'overflow-y-auto overflow-x-scroll scrollbar-visible'} relative border border-slate-800 rounded-md h-[360px]`} style={{ scrollbarGutter: rawDailyLoading ? undefined : 'stable' }}>
                 {rawDailyLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 z-40 pointer-events-none">
                     <span className="text-slate-300 text-sm">Loading…</span>

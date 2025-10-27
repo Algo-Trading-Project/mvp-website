@@ -238,7 +238,7 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <div className="bg-slate-950 text-white min-h-screen font-sans">
-      <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
+      <header className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-sm border-b border-slate-800">
         {/* Add small horizontal padding so logo/profile aren’t flush to the edges */}
         <nav className="w-full flex items-center justify-between py-5 px-3 sm:px-4"> {/* was py-4 -> py-5 to give logo a bit more room */}
           {/* Left group: logo + nav links */}

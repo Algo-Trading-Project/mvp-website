@@ -35,6 +35,7 @@ const PLAN_TIER_TO_SLUG = {
   free: "free",
   lite: "signals_lite",
   pro: "signals_pro",
+  pro_dev: "signals_pro_dev",
   api: "signals_api",
 };
 
@@ -42,6 +43,7 @@ const PLAN_SLUG_TO_TIER = {
   free: "free",
   signals_lite: "lite",
   signals_pro: "pro",
+  signals_pro_dev: "pro_dev",
   signals_api: "api",
 };
 
@@ -60,6 +62,7 @@ const PLAN_LABELS = {
   free: "Free",
   signals_lite: "Signals Lite",
   signals_pro: "Signals Pro",
+  signals_pro_dev: "Pro‑Developer",
   signals_api: "Signals API",
 };
 
@@ -67,6 +70,7 @@ const TIER_LABELS = {
   free: "Free",
   lite: "Signals Lite",
   pro: "Signals Pro",
+  pro_dev: "Pro‑Developer",
   api: "Signals API",
 };
 
