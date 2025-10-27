@@ -10,13 +10,13 @@ const InfoTooltip = ({ title, description }) => {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="text-slate-400 hover:text-slate-300 transition-colors focus:outline-none" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}>
+        <button className="text-white/80 hover:text-white transition-colors focus:outline-none" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}>
           <Info className="w-4 h-4" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="bg-slate-900 border-slate-700 text-white p-3 max-w-xs" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}>
         <div className="font-semibold text-sm mb-1">{title}</div>
-        <div className="text-xs text-slate-300">{description}</div>
+        <div className="text-xs text-white">{description}</div>
       </PopoverContent>
     </Popover>
   );
@@ -66,14 +66,14 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-white flex items-center justify-center gap-1">
             <InfoTooltip title="Bootstrapped Mean" description="Average of the 10k bootstrapped mean spreads; what a ‘typical’ mean could look like." />
             <span>Mean</span>
           </div>
           <div className="text-sm font-semibold">{Number.isFinite(summary.mean) ? summary.mean.toFixed(4) : '—'}</div>
         </div>
         <div className="bg-slate-800/60 rounded p-2 text-center">
-          <div className="text-[11px] text-slate-300 flex items-center justify-center gap-1">
+          <div className="text-[11px] text-white flex items-center justify-center gap-1">
             <InfoTooltip title="99% Confidence Interval" description="Range that contains 99% of the bootstrapped mean spreads (0.5% to 99.5%)." />
             <span>99% CI</span>
           </div>
@@ -88,7 +88,7 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
       ) : html ? (
         <iframe srcDoc={html} title="Bootstrapped Mean Spread" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
       ) : (
-        <div className="text-slate-400 text-sm p-4 text-center">No data available.</div>
+        <div className="text-white text-sm p-4 text-center">No data available.</div>
       )}
     </div>
   );

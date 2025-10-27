@@ -203,23 +203,23 @@ export default function Backtest() {
     <div className="flex w-full items-center justify-end mb-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-300">Model</span>
+          <span className="text-xs text-white">Model</span>
           <select value={horizon} onChange={(e)=>setHorizon(e.target.value === '3d' ? '3d' : '1d')} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white">
             <option value="1d">1‑Day</option>
             <option value="3d">3‑Day</option>
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-300">Spread</span>
+          <span className="text-xs text-white">Spread</span>
           <select value={topPct} onChange={(e)=>setTopPct(Number(e.target.value) === 0.05 ? 0.05 : 0.1)} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white">
             <option value={0.1}>Top/Bottom 10%</option>
             <option value={0.05}>Top/Bottom 5%</option>
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-300">From</label>
+          <label className="text-xs text-white">From</label>
           <input type="date" value={dateRange.start} min={MIN_BACKTEST_DATE} max={dateRange.end || todayIso} onChange={(e)=>setDateRange(r=>({...r,start:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
-          <label className="text-xs text-slate-300 ml-2">To</label>
+          <label className="text-xs text-white ml-2">To</label>
           <input type="date" value={dateRange.end} min={MIN_BACKTEST_DATE} max={todayIso} onChange={(e)=>setDateRange(r=>({...r,end:e.target.value}))} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white" />
         </div>
       </div>
@@ -232,7 +232,7 @@ export default function Backtest() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
-            className="text-slate-400 hover:text-slate-300 transition-colors focus:outline-none"
+            className="text-white/80 hover:text-white transition-colors focus:outline-none"
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
             aria-label={`About ${title}`}
@@ -245,7 +245,7 @@ export default function Backtest() {
           onMouseLeave={() => setOpen(false)}
         >
           <div className="font-semibold text-sm mb-1">{title}</div>
-          <div className="text-xs text-slate-300">{description}</div>
+          <div className="text-xs text-white">{description}</div>
         </PopoverContent>
       </Popover>
     );
@@ -261,7 +261,7 @@ export default function Backtest() {
     const valueClass = fmt === 'pct' ? 'text-lg md:text-xl' : 'text-xl md:text-2xl';
     return (
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+        <div className="text-xs text-white flex items-center justify-center gap-1">
           <InfoTooltip title={label} description={info} />
           {label}
         </div>
@@ -426,7 +426,7 @@ export default function Backtest() {
     const formattedMean = formatBadge(mean);
     const ciLabel = `[${formatBadge(p005)}, ${formatBadge(p995)}]`;
     // Badge styling similar to OOS dashboard (two-line, taller)
-    const badgeLabelClass = 'text-[11px] text-slate-300 flex items-center justify-center gap-1';
+    const badgeLabelClass = 'text-[11px] text-white flex items-center justify-center gap-1';
     const badgeValueClass = 'text-sm font-semibold';
     const badgePadClass = 'px-4 py-3 min-h-[56px]';
     return (
@@ -497,7 +497,7 @@ export default function Backtest() {
         <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Backtest</h1>
-            <p className="text-slate-400 mt-2">Run simple top-bottom decile strategy backtests and view OOS metrics.</p>
+            <p className="text-white mt-2">Run simple top-bottom decile strategy backtests and view OOS metrics.</p>
           </div>
 
           {controlBar}
@@ -527,7 +527,7 @@ export default function Backtest() {
           <div className="grid md:grid-cols-1 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+                <span className="font-semibold text-sm text-white flex items-center gap-2">
                   <InfoTooltip title="Equity Curve" description="Cumulative product of (1 + returns) after fees; compared to BTC buy‑and‑hold over same cadence." />
                   Equity Curve (Strategy vs BTC)
                 </span>

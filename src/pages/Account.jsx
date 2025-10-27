@@ -92,7 +92,7 @@ const statusColorClass = (status) => {
     return "text-red-400";
   if (s === "active") return "text-emerald-400";
   if (s === "trial" || s === "trialing") return "text-amber-300";
-  if (s === "canceled") return "text-slate-400";
+  if (s === "canceled") return "text-white/80";
   return "text-slate-200";
 };
 
@@ -550,7 +550,7 @@ export default function Account() {
           <h1 className="text-3xl font-bold mb-4">
             My <span className="gradient-text">Account</span>
           </h1>
-          <p className="text-slate-400 mb-6">You’re not signed in. Sign in to manage your account and subscription.</p>
+          <p className="text-white mb-6">You’re not signed in. Sign in to manage your account and subscription.</p>
           <Link to={createPageUrl("GetStarted")}>
             <Button className="bg-emerald-500 hover:bg-emerald-400 rounded-md text-black">
               Go to sign in
@@ -587,7 +587,7 @@ export default function Account() {
               <UserIcon className="w-6 h-6 text-emerald-400" />
               My Account
             </h2>
-            <p className="text-slate-400 mt-1">
+            <p className="text-white mt-1">
               Subscription status, billing cycle, and upcoming changes at a glance.
             </p>
           </div>
@@ -678,7 +678,7 @@ export default function Account() {
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            <p className="text-slate-400">
+            <p className="text-white">
               API access is available on Pro and Desk plans. Use your key to download signals programmatically.
             </p>
 
@@ -726,7 +726,7 @@ export default function Account() {
                   <DialogContent className="bg-slate-900 border border-slate-700 text-white">
                     <DialogHeader>
                       <DialogTitle>{apiKey ? "Regenerate API key" : "Generate API key"}</DialogTitle>
-                      <DialogDescription className="text-slate-400">
+                      <DialogDescription className="text-white">
                         Generating a new key revokes the previous one immediately. Store the new key securely—this is the
                         only time it will be shown.
                       </DialogDescription>
@@ -778,7 +778,7 @@ export default function Account() {
                     <DialogContent className="bg-slate-900 border border-slate-700 text-white">
                       <DialogHeader>
                         <DialogTitle>Revoke API key</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-white">
                           Revoking removes access immediately. You can generate a new key at any time.
                         </DialogDescription>
                       </DialogHeader>
@@ -816,7 +816,7 @@ export default function Account() {
         <div className="bg-slate-900 border border-slate-800 rounded-md">
           <div className="p-6 border-b border-slate-800">
             <h3 className="font-semibold text-white">Preferences</h3>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-white text-sm mt-1">
               Control how we keep in touch and what updates you receive.
             </p>
           </div>
@@ -826,7 +826,7 @@ export default function Account() {
                 <Label htmlFor="marketing" className="text-slate-200">
                   Marketing emails
                 </Label>
-                <p className="text-xs text-slate-400">Receive occasional updates, promotions, and news.</p>
+                <p className="text-xs text-white">Receive occasional updates, promotions, and news.</p>
               </div>
               <Switch id="marketing" checked={marketingOptIn} onCheckedChange={setMarketingOptIn} />
             </div>
@@ -835,7 +835,7 @@ export default function Account() {
                 <Label htmlFor="weekly" className="text-slate-200">
                   Weekly summary
                 </Label>
-                <p className="text-xs text-slate-400">Get a weekly digest of performance and signals.</p>
+                <p className="text-xs text-white">Get a weekly digest of performance and signals.</p>
               </div>
               <Switch id="weekly" checked={weeklySummary} onCheckedChange={setWeeklySummary} />
             </div>
@@ -844,7 +844,7 @@ export default function Account() {
                 <Label htmlFor="product" className="text-slate-200">
                   Product updates
                 </Label>
-                <p className="text-xs text-slate-400">Be notified of new features and improvements.</p>
+                <p className="text-xs text-white">Be notified of new features and improvements.</p>
               </div>
               <Switch id="product" checked={productUpdates} onCheckedChange={setProductUpdates} />
             </div>

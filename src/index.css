@@ -87,7 +87,7 @@ button:focus-visible {
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted-foreground: 0 0% 100%;
     --accent: 0 0% 96.1%;
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
@@ -122,7 +122,7 @@ button:focus-visible {
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted-foreground: 0 0% 100%;
     --accent: 0 0% 14.9%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
@@ -147,6 +147,28 @@ button:focus-visible {
 }
 
 
+
+@layer utilities {
+  /* Force small gray text utilities to render white sitewide */
+  .text-slate-200,
+  .text-slate-300,
+  .text-slate-400,
+  .text-slate-500,
+  .text-gray-200,
+  .text-gray-300,
+  .text-gray-400,
+  .text-gray-500,
+  .text-neutral-200,
+  .text-neutral-300,
+  .text-neutral-400,
+  .text-neutral-500,
+  .text-zinc-200,
+  .text-zinc-300,
+  .text-zinc-400,
+  .text-zinc-500 {
+    color: #fff !important;
+  }
+}
 
 @layer base {
   * {

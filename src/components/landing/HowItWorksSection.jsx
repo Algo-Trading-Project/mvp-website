@@ -12,7 +12,7 @@ export default function HowItWorksSection() {
     {
       icon: Zap,
       title: "2. We Train & Publish",
-      description: "We generate daily ML signals on 1‑day and 3‑day horizons alongside public OOS performance and robustness checks."
+      description: "We generate daily ML signals on 1‑day and 3‑day horizons."
     },
     {
       icon: Rocket,
@@ -28,7 +28,7 @@ export default function HowItWorksSection() {
           <h2 className="text-3xl font-bold mb-4">
             A Simple, Powerful Workflow
           </h2>
-          <p className="text-slate-300 text-lg mb-12">
+          <p className="text-white text-lg mb-12">
             We do the heavy lifting so you can focus on execution.
           </p>
         </div>
@@ -40,7 +40,7 @@ export default function HowItWorksSection() {
                 <step.icon className="w-8 h-8 text-blue-300" />
               </div>
               <h3 className="font-semibold text-xl mb-3">{step.title}</h3>
-              <p className="text-slate-300">{step.description}</p>
+              <p className="text-white">{step.description}</p>
             </div>
           ))}
         </div>

@@ -12,7 +12,7 @@ export default function CTASection() {
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             See The Edge <span className="gradient-text">In Minutes</span>
           </h2>
-          <p className="text-slate-300 text-lg mb-8 max-w-2xl mx-auto">
+          <p className="text-white text-lg mb-8 max-w-2xl mx-auto">
             Live, auditable performance. Inspect rolling IC, spreads, and various visualizations—then choose the plan that fits you best.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

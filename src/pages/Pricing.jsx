@@ -204,14 +204,14 @@ export default function Pricing() {
               <h2 className="text-2xl font-bold text-white mb-2">
                 {plan.name}
               </h2>
-              <p className="text-slate-300 mb-6 text-sm px-2">{plan.description}</p>
+              <p className="text-white mb-6 text-sm px-2">{plan.description}</p>
               <div className="text-center mb-6 flex flex-col items-center justify-center min-h-[72px]">
                 {plan.price ? (
                   <>
                     <span className="text-3xl font-extrabold text-white">
                       ${getPrice(plan)}
                     </span>
-                    <span className="text-lg text-slate-300">
+                    <span className="text-lg text-white">
                       /{billingCycle === "monthly" ? "month" : "year"}
                     </span>
                     {billingCycle === "annual" && getSavings(plan) > 0 && (
@@ -223,13 +223,13 @@ export default function Pricing() {
                     <span className="text-2xl font-extrabold text-white">
                       {plan.customNote || "Custom"}
                     </span>
-                    <div className="text-slate-300 text-sm mt-1">Contact us</div>
+                    <div className="text-white text-sm mt-1">Contact us</div>
                   </div>
                 )}
               </div>
               <ul className="space-y-3 mb-8 text-left mx-auto max-w-[90%]">
                 {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start text-slate-300 text-sm">
+                  <li key={idx} className="flex items-start text-white text-sm">
                     <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
                     <span>{feature}</span>
                   </li>
@@ -271,12 +271,12 @@ export default function Pricing() {
         {/* Intro */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-extrabold text-white mb-4">Pricing</h1>
-          <p className="text-slate-300 max-w-3xl mx-auto">
+          <p className="text-white max-w-3xl mx-auto">
             Transparent, automated, ML‑driven crypto signals — priced for builders, quants, and teams.
           </p>
           {/* Billing Toggle */}
           <div className="flex items-center justify-center space-x-4 mt-8">
-            <span className={`text-lg font-medium ${billingCycle === "monthly" ? "text-white" : "text-slate-400"}`}>
+            <span className={`text-lg font-medium ${billingCycle === "monthly" ? "text-white" : "text-white/70"}`}>
               Monthly
             </span>
             <Switch
@@ -285,7 +285,7 @@ export default function Pricing() {
               className="data-[state=checked]:bg-indigo-600 data-[state=unchecked]:bg-gray-600 rounded-full"
             />
             <div className="flex items-center">
-              <span className={`text-lg font-medium ${billingCycle === "annual" ? "text-white" : "text-slate-400"}`}>
+              <span className={`text-lg font-medium ${billingCycle === "annual" ? "text-white" : "text-white/70"}`}>
                 Annually
               </span>
               <span className="ml-2 px-3 py-1 text-xs font-semibold bg-indigo-500 text-white rounded-md">
@@ -305,7 +305,7 @@ export default function Pricing() {
           <Accordion type="multiple" className="bg-slate-900 border border-slate-800 rounded-md divide-y divide-slate-800">
             <AccordionItem value="api-access">
               <AccordionTrigger className="px-4 text-left">What API access do I get on each plan?</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
+              <AccordionContent className="px-4 pb-4 text-white">
                 <ul className="list-disc pl-5 space-y-2">
                   <li><strong>Lite:</strong> No API access. CSVs for ~12 majors (24h delay).</li>
                   <li><strong>Pro (no add‑on):</strong> No API access. Full ranks + history via CSV and dashboard.</li>
@@ -317,21 +317,21 @@ export default function Pricing() {
 
             <AccordionItem value="publishing">
               <AccordionTrigger className="px-4 text-left">When are predictions published?</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
+              <AccordionContent className="px-4 pb-4 text-white">
                 Predictions publish once per day (UTC). Each file is snapshotted and versioned so archives remain immutable and auditable.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="accumulation">
               <AccordionTrigger className="px-4 text-left">Can Pro‑Developer users reconstruct history over time?</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
+              <AccordionContent className="px-4 pb-4 text-white">
                 Over time, <code>/latest</code> responses can be accumulated. That’s an intentional trade‑off: Pro‑Developer enables light automation; anyone who needs immediate backfill for research/backtests should use the API tier.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="universe">
               <AccordionTrigger className="px-4 text-left">What’s the universe and horizon?</AccordionTrigger>
-              <AccordionContent className="px-4 pb-4 text-slate-300">
+              <AccordionContent className="px-4 pb-4 text-white">
                 We cover ~391 liquid assets with daily cadence. Horizons on the dashboard are 1‑day and 3‑day; Pro‑Developer focuses on <code>1d</code>; API exposes all available horizons.
               </AccordionContent>
             </AccordionItem>
@@ -370,12 +370,12 @@ export default function Pricing() {
         <div id="compare" className="mt-16 max-w-6xl mx-auto">
           <div className="text-center mb-6">
             <h3 className="text-2xl font-bold text-white">Compare Plans</h3>
-            <p className="text-slate-300 text-sm">Key limits and differences at a glance.</p>
+            <p className="text-white text-sm">Key limits and differences at a glance.</p>
           </div>
           <div className="grid md:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
               <div className="font-semibold mb-1">Lite</div>
-              <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
+              <ul className="text-white text-sm list-disc pl-5 space-y-1">
                 <li>CSV ranks for top 60 tokens by ADV</li>
                 <li>90 days history (CSV)</li>
                 <li>No API access; alerts + read‑only dashboard</li>
@@ -383,7 +383,7 @@ export default function Pricing() {
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
               <div className="font-semibold mb-1">Pro (no add‑on)</div>
-              <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
+              <ul className="text-white text-sm list-disc pl-5 space-y-1">
                 <li>CSV downloads</li>
                 <li>No API access</li>
                 <li>OOS dashboard + history files</li>
@@ -391,7 +391,7 @@ export default function Pricing() {
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-4">
               <div className="font-semibold mb-1">Pro‑Developer</div>
-              <ul className="text-slate-300 text-sm list-disc pl-5 space-y-1">
+              <ul className="text-white text-sm list-disc pl-5 space-y-1">
                 <li>API: /latest predictions (rate‑limited)</li>
                 <li>API: /universe read</li>
                 <li>API: /ohlcv ≤30‑day lookback</li>

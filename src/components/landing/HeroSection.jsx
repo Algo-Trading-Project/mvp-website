@@ -55,7 +55,7 @@ export default function HeroSection() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
-            className="text-slate-300 hover:text-slate-200 focus:outline-none"
+            className="text-white/90 hover:text-white focus:outline-none"
             aria-label={ariaLabel}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
@@ -69,7 +69,7 @@ export default function HeroSection() {
           onMouseLeave={() => setOpen(false)}
         >
           <div className="text-xs font-semibold mb-1">{title}</div>
-          <div className="text-[11px] text-slate-300 leading-relaxed">{description}</div>
+          <div className="text-[11px] text-white leading-relaxed">{description}</div>
         </PopoverContent>
       </Popover>
     );
@@ -174,7 +174,7 @@ export default function HeroSection() {
               <Popover>
                 <PopoverTrigger asChild>
                   <button
-                    className="text-slate-400 hover:text-slate-300 focus:outline-none"
+                    className="text-white/80 hover:text-white focus:outline-none"
                     aria-label={`More info about ${title}`}
                   >
                     <Info className="w-3.5 h-3.5" />
@@ -182,7 +182,7 @@ export default function HeroSection() {
                 </PopoverTrigger>
                 <PopoverContent className="bg-slate-900 border-slate-700 text-white p-3 max-w-xs text-left">
                   <div className="text-xs font-semibold mb-1">{title}</div>
-                  <div className="text-[11px] text-slate-300 leading-relaxed">{description}</div>
+                  <div className="text-[11px] text-white leading-relaxed">{description}</div>
                 </PopoverContent>
               </Popover>
             );
@@ -197,7 +197,7 @@ export default function HeroSection() {
           {/* Highlight Strip (compact badges) */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 max-w-3xl mx-auto mb-12">
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
-              <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
+              <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip title="Mean Daily IC" description="Average cross‑sectional Spearman IC across all days (1‑day model)." ariaLabel="Mean Daily IC info" />
                 <span className="whitespace-nowrap">Mean Daily IC (1‑day)</span>
               </div>
@@ -206,7 +206,7 @@ export default function HeroSection() {
               </div>
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
-              <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
+              <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip title="Average Daily Spread" description="Average daily top‑minus‑bottom decile spread (1‑day model)." ariaLabel="Avg Daily Spread info" />
                 <span className="whitespace-nowrap">Avg Daily Spread (1‑day)</span>
               </div>
@@ -215,7 +215,7 @@ export default function HeroSection() {
               </div>
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
-              <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
+              <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip title="Positive Days" description="Fraction of days where the daily Spearman IC is greater than zero (1‑day model)." ariaLabel="Positive Days info" />
                 <span className="whitespace-nowrap">Positive Days (1‑day)</span>
               </div>
@@ -224,7 +224,7 @@ export default function HeroSection() {
               </div>
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
-              <div className="text-xs text-slate-300 mb-1 flex items-center justify-center gap-1">
+              <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip
                   title="Data Lake Size"
                   description="Approximate row count of the data lake used for feature engineering and research that powers model training and OOS evaluation."

@@ -14,7 +14,7 @@ const InfoTooltip = ({ title, description }) => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="text-slate-400 hover:text-slate-300 transition-colors focus:outline-none"
+          className="text-white/80 hover:text-white transition-colors focus:outline-none"
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
         >
@@ -27,7 +27,7 @@ const InfoTooltip = ({ title, description }) => {
         onMouseLeave={() => setOpen(false)}
       >
         <div className="font-semibold text-sm mb-1">{title}</div>
-        <div className="text-xs text-slate-300">{description}</div>
+        <div className="text-xs text-white">{description}</div>
       </PopoverContent>
     </Popover>
   );
@@ -197,7 +197,7 @@ order by spearman_ic desc;`;
       );
     }
     return (
-      <div className="text-slate-400 text-sm p-4 text-center">
+      <div className="text-white text-sm p-4 text-center">
         No data available for this date range.
       </div>
     );
@@ -220,7 +220,7 @@ order by spearman_ic desc;`;
         <div className="grid md:grid-cols-2 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2 gap-2">
-              <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+              <span className="font-semibold text-sm text-white flex items-center gap-2">
                 <InfoTooltip title="Top 20 by IC" description="Tokens with highest Information Coefficient over the selected date range." />
                 Top 20 Tokens by IC
               </span>
@@ -230,7 +230,7 @@ order by spearman_ic desc;`;
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
             <div className="flex items-center justify-between mb-2 gap-2">
-              <span className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+              <span className="font-semibold text-sm text-white flex items-center gap-2">
                 <InfoTooltip title="Bottom 20 by IC" description="Tokens with lowest Information Coefficient over the selected date range." />
                 Bottom 20 Tokens by IC
               </span>

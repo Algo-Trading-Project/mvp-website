@@ -54,10 +54,10 @@ export default function Downloads() {
           <h1 className="text-3xl font-bold mb-2">
             Signal <span className="gradient-text">Downloads</span>
           </h1>
-          <p className="text-slate-400">
+          <p className="text-white">
             Preview mode • Daily files and historical examples
           </p>
-          <div className="mt-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 inline-block px-2 py-1 rounded">
+          <div className="mt-2 text-xs text-white bg-slate-900 border border-slate-800 inline-block px-2 py-1 rounded">
             Token filter (Free Tier: 8 tokens) — a small, representative subset for evaluation. Reach out to the team for the full symbol dictionary.
           </div>
         </div>
@@ -71,7 +71,7 @@ export default function Downloads() {
                   <span>Today's Signals</span>
                   <Badge className="bg-emerald-500/20 text-emerald-400 rounded-sm">Latest</Badge>
                 </h3>
-                <div className="text-slate-400 text-sm">
+                <div className="text-white text-sm">
                   {new Date(todaySignals.signal_date).toLocaleDateString()}
                 </div>
               </div>
@@ -89,7 +89,7 @@ export default function Downloads() {
                       <file.icon className="w-4 h-4 text-blue-400" />
                       <span className="font-medium text-sm">{file.name}</span>
                     </div>
-                    <p className="text-xs text-slate-400 mb-3 h-8">{file.description}</p>
+                    <p className="text-xs text-white mb-3 h-8">{file.description}</p>
                     <Button 
                       size="sm" 
                       className="w-full bg-blue-600 hover:bg-blue-700 rounded-md"
@@ -124,7 +124,7 @@ export default function Downloads() {
                           </span>
                           {isLatest && <Badge className="bg-emerald-500/20 text-emerald-400 rounded-sm">Latest</Badge>}
                         </div>
-                        <div className="text-sm text-slate-400">
+                        <div className="text-sm text-white">
                           4 files available: scores, portfolio, equity curve, returns
                         </div>
                       </div>

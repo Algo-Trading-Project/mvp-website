@@ -40,14 +40,14 @@ export default function Contact() {
     <div className="min-h-screen py-16 bg-slate-950">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <h1 className="text-3xl font-bold"><span className="gradient-text">Contact</span></h1>
-        <p className="text-slate-300 text-sm leading-relaxed">
+        <p className="text-white text-sm leading-relaxed">
           Reach the QuantPulse team directly. Fill out the form below and we’ll draft an email for you—feel free to add more details before sending.
         </p>
 
         <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-5 text-sm text-slate-200">
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label htmlFor="contact-name" className="text-xs uppercase tracking-wide text-slate-400">Name</label>
+              <label htmlFor="contact-name" className="text-xs uppercase tracking-wide text-white">Name</label>
               <Input
                 id="contact-name"
                 placeholder="Jane Quant"
@@ -57,7 +57,7 @@ export default function Contact() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="contact-company" className="text-xs uppercase tracking-wide text-slate-400">Company / Fund</label>
+              <label htmlFor="contact-company" className="text-xs uppercase tracking-wide text-white">Company / Fund</label>
               <Input
                 id="contact-company"
                 placeholder="Acme Capital"
@@ -69,7 +69,7 @@ export default function Contact() {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="contact-email" className="text-xs uppercase tracking-wide text-slate-400">Email *</label>
+            <label htmlFor="contact-email" className="text-xs uppercase tracking-wide text-white">Email *</label>
             <Input
               id="contact-email"
               type="email"
@@ -82,7 +82,7 @@ export default function Contact() {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="contact-message" className="text-xs uppercase tracking-wide text-slate-400">How can we help? *</label>
+            <label htmlFor="contact-message" className="text-xs uppercase tracking-wide text-white">How can we help? *</label>
             <Textarea
               id="contact-message"
               required

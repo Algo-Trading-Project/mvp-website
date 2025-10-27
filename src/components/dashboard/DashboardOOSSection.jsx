@@ -522,8 +522,8 @@ from daily_dashboard_metrics;`;
       ? 'px-2 py-1 text-[10px] leading-4 text-sky-300 whitespace-nowrap pr-4'
       : 'px-3 py-2 text-[12px] text-sky-300 whitespace-nowrap pr-6';
     const descCellClass = isMonthly
-      ? 'px-2 py-1 text-[10px] leading-4 text-slate-300'
-      : 'px-3 py-2 text-sm text-slate-300 leading-5';
+      ? 'px-2 py-1 text-[10px] leading-4 text-white'
+      : 'px-3 py-2 text-sm text-white leading-5';
     return (
       <div className={`${containerClass}`}>
         <div className={`${wrapperClass}`}>
@@ -536,7 +536,7 @@ from daily_dashboard_metrics;`;
               </colgroup>
             )}
             <thead className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
-              <tr className={isMonthly ? 'text-[10px] uppercase tracking-wide text-slate-300' : 'text-[11px] uppercase tracking-wide text-slate-300'}>
+              <tr className={isMonthly ? 'text-[10px] uppercase tracking-wide text-white' : 'text-[11px] uppercase tracking-wide text-white'}>
                 <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Column</th>
                 <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Type</th>
                 <th className={isMonthly ? 'text-left px-2 py-1' : 'text-left px-3 py-2'}>Description</th>
@@ -605,7 +605,7 @@ from daily_dashboard_metrics;`;
   };
 
   const deltaClass = (val) => {
-    if (val === null || typeof val !== "number" || Number.isNaN(val)) return "text-slate-300";
+    if (val === null || typeof val !== "number" || Number.isNaN(val)) return "text-white";
     return val >= 0 ? "text-emerald-400" : "text-red-400";
   };
 
