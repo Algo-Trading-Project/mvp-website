@@ -117,7 +117,7 @@ export default function HeroSection() {
                 size="lg"
                 className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white px-8 py-6 text-lg font-semibold rounded-md shadow-lg hover:shadow-xl transition-all duration-300 group"
               >
-                Start Free
+                Start Free Trial
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
               </Button>
             </Link>
@@ -126,7 +126,7 @@ export default function HeroSection() {
                 size="lg"
                 className="bg-white text-slate-900 hover:bg-slate-100 border border-slate-200 px-8 py-6 text-lg font-semibold rounded-md"
               >
-                View Performance
+                View Live Performance
               </Button>
             </Link>
           </div>

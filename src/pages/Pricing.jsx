@@ -44,6 +44,14 @@ export default function Pricing() {
   const [isAuthed, setIsAuthed] = useState(authCacheRef.current ?? false);
   const [authChecked, setAuthChecked] = useState(!!authCacheRef.current);
 
+  // Always land at top when visiting Pricing
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); }
+      catch { window.scrollTo(0, 0); }
+    }
+  }, []);
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
