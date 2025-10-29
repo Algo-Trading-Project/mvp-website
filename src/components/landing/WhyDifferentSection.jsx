@@ -4,18 +4,18 @@ import { ShieldCheck, LineChart, Plug } from "lucide-react";
 const DIFFERENTIATORS = [
   {
     icon: LineChart,
-    title: "Public, verifiable OOS",
-    body: "We publish every rank, decile, and spread out-of-sample. No cherry-picked backtests. Judge the model on live history only.",
+    title: "Live, auditable results",
+    body: "Daily out‑of‑sample ranks and spreads—no curated backtests. Judge the system on what it does in public.",
   },
   {
     icon: ShieldCheck,
-    title: "Point-in-time clean",
-    body: "Signals are versioned, PIT-audited, and delivered after the book is closed. No look-ahead leakage or patched datasets.",
+    title: "Point‑in‑time integrity",
+    body: "Predictions are timestamped before outcomes. Ingestion is PIT and immutable—no restatements, no look‑ahead.",
   },
   {
     icon: Plug,
-    title: "Straightforward delivery",
-    body: "Grab CSVs, hit the REST API, or stream webhooks. Schemas stay stable and every plan includes docs, data dictionary, and assets list.",
+    title: "Built for integration",
+    body: "CSV downloads, REST, and webhooks with stable schemas and a clear data dictionary.",
   },
 ];
 
@@ -31,10 +31,12 @@ export default function WhyDifferentSection() {
         </div>
         <div className="grid gap-6 md:grid-cols-3">
           {DIFFERENTIATORS.map((item) => (
-            <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
-              <item.icon className="w-6 h-6 text-emerald-400 mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">{item.title}</h3>
-              <p className="text-sm text-white leading-relaxed">{item.body}</p>
+            <div key={item.title} className="p-6 rounded-lg border bg-slate-900/70 border-slate-800">
+              <div className="flex items-center gap-2 mb-3">
+                <item.icon className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-semibold text-white">{item.title}</h3>
+              </div>
+              <p className="text-sm text-slate-200 leading-relaxed">{item.body}</p>
             </div>
           ))}
         </div>

@@ -261,7 +261,7 @@ export default function PerformancePreviewSection() {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Proven Results</p>
             <h2 className="text-2xl md:text-3xl font-bold text-white mt-1">Publicly verified performance</h2>
-            <p className="text-white mt-2">Transparent, out‑of‑sample metrics. Inspect the full dashboard when ready.</p>
+            <p className="text-white mt-2">Transparent, out‑of‑sample metrics. Inspect the full dashboard for more.</p>
           </div>
           <Link to={createPageUrl("Dashboard")} className="hidden md:inline-flex items-center gap-2 text-blue-300 hover:text-blue-200">
             <LineChart className="w-5 h-5" />

@@ -113,7 +113,7 @@ export default function HeroSection() {
                 size="lg"
                 className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white px-8 py-6 text-lg font-semibold rounded-md shadow-lg hover:shadow-xl transition-all duration-300 group"
               >
-                Start Free Trial
+                Get Started
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
               </Button>
             </Link>
@@ -194,7 +194,13 @@ export default function HeroSection() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 max-w-3xl mx-auto mb-12">
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
-                <InfoTip title="Mean Daily IC" description="Average cross‑sectional Spearman IC across all days (1‑day model)." ariaLabel="Mean Daily IC info" />
+                <InfoTip
+                  title="Mean Daily IC"
+                  description={
+                    "Daily Spearman rank correlation between predicted 1‑day returns and next‑day realized returns, averaged over all days."
+                  }
+                  ariaLabel="Mean Daily IC info"
+                />
                 <span className="whitespace-nowrap">Mean Daily IC (1‑day)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">
@@ -203,7 +209,13 @@ export default function HeroSection() {
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
-                <InfoTip title="Average Daily Spread" description="Average daily top‑minus‑bottom decile spread (1‑day model)." ariaLabel="Avg Daily Spread info" />
+                <InfoTip
+                  title="Average Daily Spread"
+                  description={
+                    "Each day, tokens are sorted by predicted 1‑day return. We take the average realized return of the top 10% and subtract the average of the bottom 10%. This ‘decile spread’ is computed per‑day; the badge shows its average across all days. Higher means the model’s top picks tended to outperform the bottom picks."
+                  }
+                  ariaLabel="Avg Daily Spread info"
+                />
                 <span className="whitespace-nowrap">Avg Daily Spread (1‑day)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">

@@ -146,7 +146,16 @@ export default function Layout({ children, currentPageName }) {
           >
             {items.map((item) => (
               <DropdownMenuItem asChild key={item.label} className="cursor-pointer">
-                <Link to={createPageUrl(item.href)} className="flex items-center">
+                <Link
+                  to={createPageUrl(item.href)}
+                  className="flex items-center"
+                  onClick={(e) => {
+                    try {
+                      // Always land at top when navigating via dropdown
+                      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                    } catch {}
+                  }}
+                >
                   {item.icon ? <item.icon className="mr-2 h-4 w-4" /> : null}
                   <span>{item.label}</span>
                 </Link>
@@ -176,9 +185,7 @@ export default function Layout({ children, currentPageName }) {
       { label: "Signals", href: "Signals", icon: TrendingUp }
     ];
     const resourceItems = [
-      { label: "Methodology", href: "Methodology", icon: BookOpen },
       { label: "API Docs", href: "Docs", icon: BookOpen },
-      { label: "About", href: "About", icon: Users },
       { label: "Contact", href: "Contact", icon: Mail }
     ];
     return (
@@ -395,9 +402,8 @@ export default function Layout({ children, currentPageName }) {
           <div className="md:flex md:items-center md:justify-between">
             <div className="flex justify-center space-x-6 md:order-2">
               <Link to={createPageUrl("Pricing")} className="text-slate-400 hover:text-slate-300">Pricing</Link>
-              <a href="https://github.com/quantpulse-ai" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-300">GitHub</a>
               <a href="https://discord.gg/quantpulse" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-300">Discord</a>
-              <Link to={createPageUrl("WhatsNew")} className="text-slate-400 hover:text-slate-300">What’s New</Link>
+              <Link to={createPageUrl("Status")} className="text-slate-400 hover:text-slate-300">Status</Link>
             </div>
             <div className="mt-8 md:mt-0 md:order-1">
               <p className="text-center text-base text-slate-500">

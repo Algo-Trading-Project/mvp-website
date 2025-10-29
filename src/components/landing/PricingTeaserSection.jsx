@@ -41,7 +41,7 @@ export default function PricingTeaserSection() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-white">Simple pricing</h2>
-          <p className="text-white mt-2">Pick a plan and start your free trial.</p>
+          <p className="text-white mt-2">Pick a plan and get started in minutes.</p>
         </div>
         <div className="grid md:grid-cols-4 gap-4">
           {plans.map((p) => (
@@ -65,4 +65,3 @@ export default function PricingTeaserSection() {
     </section>
   );
 }
-

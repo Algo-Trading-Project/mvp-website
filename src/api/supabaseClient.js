@@ -242,6 +242,7 @@ const authClient = {
   bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
   advByDecilePlot: "adv-by-decile-plot",
   predictionsCoverage: "predictions-coverage",
+  latestUniverseSize: "latest-universe-size",
   sampleSignals: "sample-signals",
   rawDaily: "raw-daily",
   listPredictionDates: "list-prediction-dates",

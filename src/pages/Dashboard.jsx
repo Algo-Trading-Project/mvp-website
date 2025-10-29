@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { getSupabaseClient } from "@/api/supabaseClient";
-import { predictionsCoverage, predictionsRange } from "@/api/functions";
+import { predictionsCoverage, predictionsRange, latestUniverseSize } from "@/api/functions";
 import { toast } from "sonner";
 
 import SignalHealthDisplay from "../components/dashboard/SignalHealthDisplay";
@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [latestSnapshot, setLatestSnapshot] = useState(() => cached?.latestSnapshot ?? null);
   const { search } = useLocation();
   const [latestInfo, setLatestInfo] = useState({ date: null, assets: null });
+  const [latestInfoLoading, setLatestInfoLoading] = useState(true);
 
   // Ensure we land at the very top when navigating here
   useEffect(() => {
@@ -87,28 +88,19 @@ export default function Dashboard() {
     }
   }, [search]); // Depend on useLocation().search to re-evaluate when URL changes
 
-  // Fetch latest predictions date + latest asset count (unique bases)
+  // Fetch latest date + universe size via Edge Function (service role)
   useEffect(() => {
     const run = async () => {
       try {
-        // Use edge function to get latest_date (works under RLS)
-        const cov = await predictionsCoverage({ monthsBack: 240 }).catch(() => null);
-        const latestDate = cov?.latest_date ? String(cov.latest_date).slice(0, 10) : null;
-        let assets = null;
-        if (latestDate) {
-          // Pull that day's predictions via edge function and count unique bases
-          const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000, horizon: '1d' }).catch(() => null);
-          const rows = Array.isArray(res?.data) ? res.data : [];
-          const bases = new Set();
-          rows.forEach((r) => {
-            const base = String(r?.symbol_id || '').split('_')[0];
-            if (base) bases.add(base);
-          });
-          assets = bases.size || null;
-        }
-        setLatestInfo({ date: latestDate, assets });
+        setLatestInfoLoading(true);
+        const res = await latestUniverseSize();
+        const date = res?.date ? String(res.date).slice(0, 10) : null;
+        const assets = typeof res?.count === 'number' ? res.count : null;
+        setLatestInfo({ date, assets });
       } catch (_e) {
         setLatestInfo({ date: null, assets: null });
+      } finally {
+        setLatestInfoLoading(false);
       }
     };
     run();
@@ -290,6 +282,12 @@ export default function Dashboard() {
     );
   };
 
+  const BadgeSkeleton = ({ width = 120 }) => (
+    <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-800 bg-slate-900">
+      <span className="h-3 bg-slate-700/60 rounded animate-pulse" style={{ width }} />
+    </span>
+  );
+
   return (
     <div className="min-h-screen py-6 bg-slate-950">
       <div className="max-w-[1700px] mx-auto px-2 sm:px-3 lg:px-4">
@@ -305,7 +303,9 @@ export default function Dashboard() {
               Live OOS feed
             </span>
             {/* As of latest date */}
-            {latestInfo.date ? (
+            {latestInfoLoading ? (
+              <BadgeSkeleton width={140} />
+            ) : latestInfo.date ? (
               <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
                 Latest Update {latestInfo.date}
               </span>
@@ -315,7 +315,9 @@ export default function Dashboard() {
               Updated daily by 00:30 UTC
             </span>
             {/* Latest assets count */}
-            {typeof latestInfo.assets === 'number' ? (
+            {latestInfoLoading ? (
+              <BadgeSkeleton width={170} />
+            ) : typeof latestInfo.assets === 'number' && latestInfo.assets > 0 ? (
               <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
                 Universe Size: {latestInfo.assets} tokens
               </span>

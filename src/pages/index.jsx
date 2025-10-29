@@ -2,15 +2,13 @@ import Layout from "./Layout.jsx";
 import Pricing from "./Pricing";
 import Dashboard from "./Dashboard";
 import Downloads from "./Downloads";
-import Methodology from "./Methodology";
 import Home from "./Home";
 import Account from "./Account";
 import GetStarted from "./GetStarted";
-import About from "./About";
 import Contact from "./Contact";
 import Signals from "./Signals";
 import AuthCallback from "./AuthCallback";
-import WhatsNew from "./WhatsNew";
+import Status from "./Status";
 import Docs from "./Docs";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
@@ -21,14 +19,12 @@ const PAGES = {
     Pricing: Pricing,
     Dashboard: Dashboard,
     Downloads: Downloads,
-    Methodology: Methodology,
     Account: Account,
     GetStarted: GetStarted,
-    About: About,
     Contact: Contact,
     Signals: Signals,
     AuthCallback: AuthCallback,
-    WhatsNew: WhatsNew,
+    Status: Status,
     Docs: Docs,
 }
 
@@ -63,7 +59,7 @@ function PagesContent() {
                 <Route path="/downloads" element={<Downloads />} />
                 
                 
-                <Route path="/methodology" element={<Methodology />} />
+                
                 
                 <Route path="/home" element={<Home />} />
                 
@@ -71,7 +67,7 @@ function PagesContent() {
                 
                 <Route path="/getstarted" element={<GetStarted />} />
                 
-                <Route path="/about" element={<About />} />
+                
                 
                 <Route path="/contact" element={<Contact />} />
                 
@@ -79,7 +75,7 @@ function PagesContent() {
                 
                 <Route path="/authcallback" element={<AuthCallback />} />
                 
-                <Route path="/whatsnew" element={<WhatsNew />} />
+                <Route path="/status" element={<Status />} />
                 
                 <Route path="/docs" element={<Docs />} />
                 

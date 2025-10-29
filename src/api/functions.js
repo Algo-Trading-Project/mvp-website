@@ -86,6 +86,11 @@ export const predictionsCoverage = wrapCall(
   supabaseApi.functions.predictionsCoverage
 );
 
+export const latestUniverseSize = wrapCall(
+  "Failed to load latest universe size",
+  supabaseApi.functions.latestUniverseSize
+);
+
 export const listPredictionDates = wrapCall(
   "Failed to list prediction dates",
   supabaseApi.functions.listPredictionDates

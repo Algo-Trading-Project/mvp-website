@@ -47,29 +47,29 @@ export default function Contact() {
         <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-5 text-sm text-slate-200">
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label htmlFor="contact-name" className="text-xs uppercase tracking-wide text-white">Name</label>
+              <label htmlFor="contact-name" className="text-xs uppercase tracking-wide text-slate-400">Name</label>
               <Input
                 id="contact-name"
                 placeholder="Jane Quant"
                 value={form.name}
                 onChange={handleChange("name")}
-                className="bg-slate-950 border-slate-800"
+                className="!bg-slate-900 border-slate-800 text-slate-300 placeholder:text-slate-400"
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="contact-company" className="text-xs uppercase tracking-wide text-white">Company / Fund</label>
+              <label htmlFor="contact-company" className="text-xs uppercase tracking-wide text-slate-400">Company / Fund</label>
               <Input
                 id="contact-company"
                 placeholder="Acme Capital"
                 value={form.company}
                 onChange={handleChange("company")}
-                className="bg-slate-950 border-slate-800"
+                className="!bg-slate-900 border-slate-800 text-slate-300 placeholder:text-slate-400"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="contact-email" className="text-xs uppercase tracking-wide text-white">Email *</label>
+            <label htmlFor="contact-email" className="text-xs uppercase tracking-wide text-slate-400">Email *</label>
             <Input
               id="contact-email"
               type="email"
@@ -77,12 +77,12 @@ export default function Contact() {
               placeholder="you@firm.com"
               value={form.email}
               onChange={handleChange("email")}
-              className="bg-slate-950 border-slate-800"
+              className="!bg-slate-900 border-slate-800 text-slate-300 placeholder:text-slate-400"
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="contact-message" className="text-xs uppercase tracking-wide text-white">How can we help? *</label>
+            <label htmlFor="contact-message" className="text-xs uppercase tracking-wide text-slate-400">How can we help? *</label>
             <Textarea
               id="contact-message"
               required
@@ -90,12 +90,12 @@ export default function Contact() {
               placeholder="Tell us about your use case, timelines, and data needs."
               value={form.message}
               onChange={handleChange("message")}
-              className="bg-slate-950 border-slate-800"
+              className="!bg-slate-900 border-slate-800 text-slate-300 placeholder:text-slate-400"
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">We reply within one business day. Never share secrets or API keys.</p>
+            <p className="text-xs text-slate-500">We typically reply within one business day. Never share secrets or API keys.</p>
             <Button type="submit" disabled={sending || !form.email || !form.message} className="bg-blue-600 hover:bg-blue-700 rounded-md">
               {sending ? "Opening email…" : "Send email to support"}
             </Button>

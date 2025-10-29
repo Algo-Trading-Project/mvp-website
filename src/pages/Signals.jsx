@@ -283,7 +283,7 @@ export default function SignalsHub() {
 
   const handleDownloadToday = async () => {
     if (isFreeUser) {
-      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or Pro for access.");
+      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or higher for access.");
       setShowUpgradeModal(true);
       return;
     }
@@ -298,7 +298,7 @@ export default function SignalsHub() {
 
   const handleDownloadForDate = async (date) => {
     if (isFreeUser) {
-      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or Pro for access.");
+      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or higher for access.");
       setShowUpgradeModal(true);
       return;
     }
@@ -310,7 +310,7 @@ export default function SignalsHub() {
 
   const handleTokenFilterClick = () => {
     if (isFreeUser) {
-      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite (60 tokens) or Pro for access.");
+      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or higher for access.");
       setShowUpgradeModal(true);
       return;
     }
@@ -319,7 +319,7 @@ export default function SignalsHub() {
 
   const handleRangeDownload = async () => {
     if (isFreeUser) {
-      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or Pro for access.");
+      setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or higher for access.");
       setShowUpgradeModal(true);
       return;
     }
@@ -448,7 +448,7 @@ export default function SignalsHub() {
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h3 className="text-xl font-semibold text-white mb-2">Historical Download</h3>
-                  <p className="text-slate-400">Download predictions across a selected date range. Extended ranges and full token access require Pro.</p>
+                  <p className="text-slate-400">Download predictions across a selected date range. Extended ranges and full token access require Pro or higher.</p>
                 </div>
                 <div className="p-3 bg-emerald-600/20 rounded-lg">
                   <Search className="w-6 h-6 text-emerald-400" />
@@ -764,12 +764,12 @@ export default function SignalsHub() {
           </DialogHeader>
           <div className="space-y-3 text-slate-300 text-center">
             <p>
-              Access to the token universe depends on your plan tier:
+              Access to the token universe depends on your subscription tier:
             </p>
             <ul className="list-disc pl-5 space-y-1 inline-block text-left mx-auto">
               <li><span className="font-semibold">Free:</span> Downloads are not available.</li>
               <li><span className="font-semibold">Lite:</span> Top 60 tokens by 90‑day median daily dollar volume, excluding stablecoins.</li>
-              <li><span className="font-semibold">Pro/API:</span> Full token universe.</li>
+              <li><span className="font-semibold">Pro / Pro‑Developer / API:</span> Full token universe.</li>
             </ul>
           </div>
           <DialogFooter className="justify-center sm:justify-center">
@@ -794,9 +794,11 @@ export default function SignalsHub() {
               Maximum historical lookback depends on your subscription tier:
             </p>
             <ul className="list-disc pl-5 space-y-1 text-left">
-              <li><span className="font-semibold">Free:</span> 0 days (downloads not available).</li>
-              <li><span className="font-semibold">Lite:</span> up to 180 days.</li>
-              <li><span className="font-semibold">Pro/API:</span> entire history (365 days per request).</li>
+              <li><span className="font-semibold">Free:</span> Downloads not available.</li>
+              <li><span className="font-semibold">Lite:</span> Start date must be within the last 90 days.</li>
+              <li><span className="font-semibold">Pro:</span> Start date must be within the last 365 days.</li>
+              <li><span className="font-semibold">Pro‑Developer:</span> Start date must be within the last 365 days.</li>
+              <li><span className="font-semibold">API:</span> No limits.</li>
             </ul>
           </div>
           <DialogFooter className="justify-center sm:justify-center">
