@@ -3,8 +3,6 @@ import { internalError, json, methodNotAllowed } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 
-// TODO: refactor to incorporate pro-developer subscription tier and to return
-// the correct universe based on the user's subscription tier
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -21,24 +19,20 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
 
-    // API access is Pro or API tiers only
+    // Only Pro‑Developer and API tiers may access this endpoint (UI provides universe views for other tiers)
     const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-    if (!(tier === 'pro' || tier === 'api')) {
-      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    if (!(tier === 'pro_dev' || tier === 'api')) {
+      return json({ error: 'API access for /universe requires Pro‑Developer or API tier' }, { status: 403 });
     }
 
+    // Pro‑Developer and API receive the same full API universe for now
     const { data, error } = await supabase.rpc('api_prediction_universe');
     if (error) throw error;
-
     const tokens = (Array.isArray(data) ? data : [])
       .map((token) => String(token ?? '').trim().toUpperCase())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
-
-    return json({
-      count: tokens.length,
-      data: tokens,
-    });
+    return json({ count: tokens.length, data: tokens });
   } catch (error) {
     return internalError(error);
   }

@@ -21,10 +21,10 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceSupabaseClient();
 
-    // API access is Pro or API tiers only
+    // API access is Pro‑Developer or API tiers only
     const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-    if (!(tier === 'pro' || tier === 'api')) {
-      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    if (!(tier === 'pro_dev' || tier === 'api')) {
+      return json({ error: 'API access requires Pro‑Developer or API tier' }, { status: 403 });
     }
 
     // Parse strict horizon from query params: horizon=1d, horizon=3d, or both
