@@ -3,49 +3,48 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Cpu, Database, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { monthlyIcSummary, fetchMetrics, sampleSignals } from "@/api/functions";
+import { fetchMetrics, sampleSignals } from "@/api/functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function HeroSection() {
-  const [icir1d, setIcir1d] = React.useState(null);
   const [positiveShare, setPositiveShare] = React.useState(null);
   const [meanDailyIc, setMeanDailyIc] = React.useState(null);
   const [meanDailySpread, setMeanDailySpread] = React.useState(null);
+  const [icirAnn, setIcirAnn] = React.useState(null);
   const [loadingMeans, setLoadingMeans] = React.useState(true);
-  const [loadingMonthly, setLoadingMonthly] = React.useState(true);
   const [downloadingSample, setDownloadingSample] = React.useState(false);
 
   React.useEffect(() => {
-    const loadMonthly = async () => {
-      setLoadingMonthly(true);
-      const data = await monthlyIcSummary({}).catch(() => null);
-      if (data?.one_day) {
-        setIcir1d(typeof data.one_day.icir_ann === 'number' ? data.one_day.icir_ann : null);
-        setPositiveShare(typeof data.one_day.positive_share === 'number' ? data.one_day.positive_share : null);
-      } else {
-        setIcir1d(null);
-        setPositiveShare(null);
-      }
-      setLoadingMonthly(false);
-    };
-    const loadDailyMeans = async () => {
+    const loadDaily = async () => {
       setLoadingMeans(true);
       const res = await fetchMetrics({ version: 2 }).catch(() => null);
-      const gm = res?.global_means || {};
-      if (typeof gm.mean_daily_ic_1d === 'number') setMeanDailyIc(gm.mean_daily_ic_1d);
-      if (typeof gm.mean_daily_spread_1d === 'number') setMeanDailySpread(gm.mean_daily_spread_1d);
-      // Fallback if global_means not present
-      if ((gm?.mean_daily_ic_1d == null || gm?.mean_daily_spread_1d == null) && Array.isArray(res?.cross)) {
-        const rows = res.cross;
-        const nums = (arr) => arr.filter((v) => typeof v === 'number' && Number.isFinite(v));
-        const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
-        if (gm?.mean_daily_ic_1d == null) setMeanDailyIc(mean(nums(rows.map((r) => r.cross_sectional_ic_1d))));
-        if (gm?.mean_daily_spread_1d == null) setMeanDailySpread(mean(nums(rows.map((r) => r.cs_top_bottom_decile_spread))));
-      }
+      const rows = Array.isArray(res?.cross) ? res.cross : [];
+      const nums = (arr) => arr.filter((v) => typeof v === 'number' && Number.isFinite(v));
+      const mean = (arr) => (arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null);
+      const std = (arr) => {
+        if (!arr.length) return null;
+        const m = mean(arr);
+        if (m == null) return null;
+        const v = arr.reduce((acc, x) => acc + Math.pow(x - m, 2), 0) / arr.length;
+        return Math.sqrt(v);
+      };
+
+      const icVals = nums(rows.map((r) => r.cross_sectional_ic_1d));
+      const spVals = nums(rows.map((r) => r.cs_top_bottom_decile_spread));
+
+      const mIc = mean(icVals);
+      const sIc = std(icVals);
+      const mSp = mean(spVals);
+      const pos = icVals.length ? icVals.filter((v) => v > 0).length / icVals.length : null;
+      const icir = (mIc != null && sIc && sIc > 0) ? (mIc / sIc) * Math.sqrt(365) : null;
+
+      setMeanDailyIc(mIc);
+      setMeanDailySpread(mSp);
+      setPositiveShare(pos);
+      setIcirAnn(icir);
       setLoadingMeans(false);
     };
-    loadMonthly();
-    loadDailyMeans();
+    loadDaily();
   }, []);
 
   // Hoverable info tooltip (matches OOS dashboard behavior)
@@ -220,19 +219,21 @@ export default function HeroSection() {
                 <span className="whitespace-nowrap">Positive Days (1‑day)</span>
               </div>
               <div className="text-xl font-bold text-blue-400 min-h-[20px] flex items-center justify-center">
-                {loadingMonthly ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (positiveShare != null ? `${(positiveShare * 100).toFixed(1)}%` : "—")}
+                {loadingMeans ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (positiveShare != null ? `${(positiveShare * 100).toFixed(1)}%` : "—")}
               </div>
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip
-                  title="Data Lake Size"
-                  description="Approximate row count of the data lake used for feature engineering and research that powers model training and OOS evaluation."
-                  ariaLabel="Data Lake Size info"
+                  title="ICIR (Annualized)"
+                  description="Mean daily IC divided by its standard deviation, scaled by √365 to annualize. Computed from daily_dashboard_metrics (1‑day model)."
+                  ariaLabel="ICIR info"
                 />
-                <span className="whitespace-nowrap">Data Lake Size</span>
+                <span className="whitespace-nowrap">ICIR (Annualized, 1‑day)</span>
               </div>
-              <div className="text-xl font-bold text-cyan-400 min-h-[20px] flex items-center justify-center">160B+ rows</div>
+              <div className="text-xl font-bold text-cyan-400 min-h-[20px] flex items-center justify-center">
+                {loadingMeans ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (icirAnn != null ? icirAnn.toFixed(2) : "—")}
+              </div>
             </div>
           </div>
         </div>

@@ -86,11 +86,6 @@ export const predictionsCoverage = wrapCall(
   supabaseApi.functions.predictionsCoverage
 );
 
-export const monthlyIcSummary = wrapCall(
-  "Failed to load monthly IC summary",
-  supabaseApi.functions.monthlyIcSummary
-);
-
 export const listPredictionDates = wrapCall(
   "Failed to list prediction dates",
   supabaseApi.functions.listPredictionDates
@@ -116,7 +111,8 @@ export const rawDaily = wrapCall(
   supabaseApi.functions.rawDaily
 );
 
-export const rawMonthly = wrapCall(
-  "Failed to load raw monthly metrics",
-  supabaseApi.functions.rawMonthly
+// RPC: range summary metrics from daily_dashboard_metrics
+export const rangeSummary = wrapCall(
+  "Failed to load range summary",
+  supabaseApi.rpc.rangeSummary
 );

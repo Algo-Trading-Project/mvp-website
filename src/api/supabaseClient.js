@@ -241,11 +241,9 @@ const authClient = {
   spreadDistributionPlot: "spread-distribution-plot",
   bootstrapSpreadDistributionPlot: "bootstrap-spread-distribution-plot",
   advByDecilePlot: "adv-by-decile-plot",
-  monthlyIcSummary: "monthly-ic-summary",
   predictionsCoverage: "predictions-coverage",
   sampleSignals: "sample-signals",
   rawDaily: "raw-daily",
-  rawMonthly: "raw-monthly",
   listPredictionDates: "list-prediction-dates",
   predictionsRange: "predictions-range",
   liteTokens: "lite-tokens",
@@ -263,6 +261,23 @@ export const supabaseApi = {
   functions: functionsClient,
   auth: authClient,
   integrations: {},
+  rpc: {
+    async rangeSummary({ start, end, horizon, use_p05 }) {
+      const client = ensureClient();
+      const { data, error } = await client.rpc('range_summary', {
+        start_date: start,
+        end_date: end,
+        horizon,
+        use_p05,
+      });
+      if (error) {
+        throw new ApiError(error.message || 'Failed to run range_summary', { status: error.status, data: error });
+      }
+      // Supabase RPC returns either a single row or array depending on config; normalize
+      if (Array.isArray(data)) return data[0] || null;
+      return data || null;
+    },
+  },
 };
 
 export const apiRuntimeMode = "supabase";
