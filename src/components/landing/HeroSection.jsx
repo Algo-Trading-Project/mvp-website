@@ -78,11 +78,7 @@ export default function HeroSection() {
     <div className="relative overflow-hidden bg-slate-950">
       {/* Background Grid */}
       <div
-        className="absolute top-0 left-0 right-0 h-[700px] [mask-image:linear-gradient(to_bottom,white_10%,transparent_90%)]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke-width='1.5' stroke='rgb(30 41 59)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e\")",
-        }}
+        className="absolute top-0 left-0 right-0 h-[700px] [mask-image:linear-gradient(to_bottom,white_10%,transparent_90%)] bg-grid bg-grid-animate"
       />
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
         <div className="text-center max-w-4xl mx-auto">
