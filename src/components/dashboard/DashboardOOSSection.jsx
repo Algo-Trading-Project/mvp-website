@@ -1280,7 +1280,13 @@ from filtered;`;
                 ) : icError ? (
                   <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{icError}</div>
                 ) : icSvg ? (
-                  <iframe srcDoc={icSvg} title="Rolling 30-Day IC" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                  <iframe
+                    srcDoc={icSvg}
+                    title="Rolling 30-Day IC"
+                    className="w-full rounded-md"
+                    style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                    onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                  />
                 ) : (
                   <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
@@ -1307,7 +1313,13 @@ from filtered;`;
                 ) : spreadError ? (
                   <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{spreadError}</div>
                 ) : spreadHtml ? (
-                  <iframe srcDoc={spreadHtml} title="Rolling 30-Day Decile Spread" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                  <iframe
+                    srcDoc={spreadHtml}
+                    title="Rolling 30-Day Decile Spread"
+                    className="w-full rounded-md"
+                    style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                    onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                  />
                 ) : (
                   <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
                 )}
@@ -1333,7 +1345,13 @@ from filtered;`;
               ) : hitError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{hitError}</div>
               ) : hitHtml ? (
-                <iframe srcDoc={hitHtml} title="Rolling Hit Rate" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                <iframe
+                  srcDoc={hitHtml}
+                  title="Rolling Hit Rate"
+                  className="w-full rounded-md"
+                  style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                  onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                />
               ) : (
                 <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
@@ -1363,7 +1381,13 @@ from filtered;`;
               ) : quintileError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{quintileError}</div>
               ) : quintileHtml ? (
-                <iframe srcDoc={quintileHtml} title="Quintile Returns" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                <iframe
+                  srcDoc={quintileHtml}
+                  title="Quintile Returns"
+                  className="w-full rounded-md"
+                  style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                  onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                />
               ) : (
                 <div className="text-slate-300 text-sm p-4 text-center">No data available for the selected range.</div>
               )}

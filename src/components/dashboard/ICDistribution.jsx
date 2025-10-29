@@ -184,7 +184,8 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
           srcDoc={html}
           title="IC Distribution"
           className="w-full rounded-md"
-          style={{ height: 380, border: "none", background: "transparent" }}
+          style={{ height: 380, border: "none", background: "transparent", opacity: 0, transition: 'opacity 180ms ease-out' }}
+          onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
         />
       ) : (
         <div className="text-slate-400 text-sm p-4 text-center">No data available.</div>

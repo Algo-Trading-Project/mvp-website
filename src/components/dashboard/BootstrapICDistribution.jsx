@@ -133,7 +133,8 @@ export default function BootstrapICDistribution({ dateRange, horizon='1d' }) {
           srcDoc={html}
           title="Bootstrapped IC Distribution"
           className="w-full rounded-md"
-          style={{ height: 380, border: "none", background: "transparent" }}
+          style={{ height: 380, border: "none", background: "transparent", opacity: 0, transition: 'opacity 180ms ease-out' }}
+          onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
         />
       ) : (
         <div className="text-white text-sm p-4 text-center">No data available.</div>

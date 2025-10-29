@@ -257,57 +257,38 @@ export default function Dashboard() {
     { id: "backtest", label: "Backtest" },
   ];
 
-  const renderContent = () => {
+  const renderOverview = () => {
     if (contentLoading || metricsLoading) {
-      if (activeTab === "overview") return <DashboardOverviewSkeleton />;
-      return (
-        <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <ChartCardSkeleton />
-            <ChartCardSkeleton />
+      return <DashboardOverviewSkeleton />;
+    }
+    return (
+      <>
+        {metricsError ? (
+          <div className="mb-6 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {metricsError}
           </div>
-          <ChartCardSkeleton height={280} lines={2} />
+        ) : null}
+        {/* Model toggle */}
+        <div className="flex items-center justify-end mb-4">
+          <label className="text-xs text-slate-400 mr-2">Model</label>
+          <select
+            value={horizon}
+            onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
+            className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
+          >
+            <option value="1d">1‑Day</option>
+            <option value="3d">3‑Day</option>
+          </select>
         </div>
-      );
-    }
 
-    switch (activeTab) {
-      case "overview":
-        return (
-          <>
-            {metricsError ? (
-              <div className="mb-6 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                {metricsError}
-              </div>
-            ) : null}
-            {/* Model toggle */}
-            <div className="flex items-center justify-end mb-4">
-              <label className="text-xs text-slate-400 mr-2">Model</label>
-              <select
-                value={horizon}
-                onChange={(e) => setHorizon(e.target.value === '3d' ? '3d' : '1d')}
-                className="bg-slate-900 border border-slate-700 px-2 py-1 rounded h-8 text-white"
-              >
-                <option value="1d">1‑Day</option>
-                <option value="3d">3‑Day</option>
-              </select>
-            </div>
-
-            <div className="grid lg:grid-cols-1 gap-6 mb-8">
-              {currentModelData && (
-                <SignalHealthDisplay title={`${horizon === '3d' ? '3-Day' : '1-Day'} Model Health (Most Recent Data)`} data={currentModelData} />
-              )}
-            </div>
-            <TopSignals subscription={subscription} horizon={horizon} loading={signalsLoading} onLoadingChange={setSignalsLoading} />
-          </>
-        );
-      case "regression":
-        return <DashboardOOSSection />;
-      case "backtest":
-        return <Backtest />;
-      default:
-        return null;
-    }
+        <div className="grid lg:grid-cols-1 gap-6 mb-8">
+          {currentModelData && (
+            <SignalHealthDisplay title={`${horizon === '3d' ? '3-Day' : '1-Day'} Model Health (Most Recent Data)`} data={currentModelData} />
+          )}
+        </div>
+        <TopSignals subscription={subscription} horizon={horizon} loading={signalsLoading} onLoadingChange={setSignalsLoading} />
+      </>
+    );
   };
 
   return (
@@ -364,8 +345,17 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div key={activeTab} className="transition-all duration-300 ease-in-out">
-          {renderContent()}
+        {/* Keep all tab contents mounted to avoid re-fetch + skeletons on tab switch */}
+        <div className="transition-all duration-300 ease-in-out">
+          <div style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
+            {renderOverview()}
+          </div>
+          <div style={{ display: activeTab === 'regression' ? 'block' : 'none' }}>
+            <DashboardOOSSection />
+          </div>
+          <div style={{ display: activeTab === 'backtest' ? 'block' : 'none' }}>
+            <Backtest />
+          </div>
         </div>
       </div>
     </div>

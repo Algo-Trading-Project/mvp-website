@@ -539,7 +539,13 @@ export default function Backtest() {
               {equityLoading ? <ChartCardSkeleton height={380} /> : equityError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{equityError}</div>
               ) : equityHtml ? (
-                <iframe srcDoc={equityHtml} title="Backtest Equity Curve" className="w-full rounded-md" style={{ height: 400, border: 'none', background: 'transparent' }} />
+                <iframe
+                  srcDoc={equityHtml}
+                  title="Backtest Equity Curve"
+                  className="w-full rounded-md"
+                  style={{ height: 400, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                  onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                />
               ) : (
                 <div className="text-slate-400 text-sm p-4 text-center">No data available for the selected range.</div>
               )}
@@ -638,7 +644,13 @@ export default function Backtest() {
               {abLoading ? <ChartCardSkeleton height={360} /> : abError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{abError}</div>
               ) : alphaHtml ? (
-                <iframe srcDoc={alphaHtml} title="Rolling Alpha" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                <iframe
+                  srcDoc={alphaHtml}
+                  title="Rolling Alpha"
+                  className="w-full rounded-md"
+                  style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                  onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                />
               ) : <div className="text-slate-400 text-sm p-4 text-center">No data</div>}
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
@@ -646,7 +658,13 @@ export default function Backtest() {
               {abLoading ? <ChartCardSkeleton height={360} /> : abError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{abError}</div>
               ) : betaHtml ? (
-                <iframe srcDoc={betaHtml} title="Rolling Beta" className="w-full rounded-md" style={{ height: 380, border: 'none', background: 'transparent' }} />
+                <iframe
+                  srcDoc={betaHtml}
+                  title="Rolling Beta"
+                  className="w-full rounded-md"
+                  style={{ height: 380, border: 'none', background: 'transparent', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                  onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+                />
               ) : <div className="text-slate-400 text-sm p-4 text-center">No data</div>}
             </div>
           </div>
@@ -666,7 +684,13 @@ export default function Backtest() {
             ) : bootstrapCharts ? (
               <RobustnessGrid charts={bootstrapCharts} InfoTooltip={InfoTooltip} />
             ) : bootstrapHtml ? (
-              <iframe srcDoc={bootstrapHtml} title="Bootstrap Robustness" className="w-full rounded-md" style={{ height: 1000, border: 'none', background: 'transparent', overflow: 'visible' }} />
+              <iframe
+                srcDoc={bootstrapHtml}
+                title="Bootstrap Robustness"
+                className="w-full rounded-md"
+                style={{ height: 1000, border: 'none', background: 'transparent', overflow: 'visible', opacity: 0, transition: 'opacity 180ms ease-out' }}
+                onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
+              />
             ) : <div className="text-slate-400 text-sm p-4 text-center">No data</div>}
           </div>
         </div>

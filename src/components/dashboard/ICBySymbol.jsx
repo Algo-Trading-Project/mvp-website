@@ -195,7 +195,8 @@ order by spearman_ic desc;`;
           srcDoc={html}
           title={title}
           className="w-full rounded-md"
-          style={{ height: 440, border: "none", background: "transparent" }}
+          style={{ height: 440, border: "none", background: "transparent", opacity: 0, transition: 'opacity 180ms ease-out' }}
+          onLoad={(e) => { try { e.currentTarget.style.opacity = '1'; } catch {} }}
         />
       );
     }
