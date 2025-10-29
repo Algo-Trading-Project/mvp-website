@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { getSupabaseClient } from "@/api/supabaseClient";
+import { predictionsCoverage, predictionsRange } from "@/api/functions";
 import { toast } from "sonner";
 
 import SignalHealthDisplay from "../components/dashboard/SignalHealthDisplay";
@@ -47,7 +48,6 @@ const persistDashboardCache = (snapshot) => {
 
 export default function Dashboard() {
   const MODEL_VERSION = "Model v1.3";
-  const MODEL_RELEASED_AT = "Retrained 2025-08-01";
   const cacheRef = useRef(loadDashboardCache());
   const cached = cacheRef.current;
   const [activeTab, setActiveTab] = useState("regression"); // default to regression to avoid blank page
@@ -63,6 +63,18 @@ export default function Dashboard() {
   const [metricsError, setMetricsError] = useState(null);
   const [latestSnapshot, setLatestSnapshot] = useState(() => cached?.latestSnapshot ?? null);
   const { search } = useLocation();
+  const [latestInfo, setLatestInfo] = useState({ date: null, assets: null });
+
+  // Ensure we land at the very top when navigating here
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+    }
+  }, []);
 
   // Check for URL parameter to set active tab
   useEffect(() => {
@@ -74,6 +86,33 @@ export default function Dashboard() {
       setActiveTab("regression");
     }
   }, [search]); // Depend on useLocation().search to re-evaluate when URL changes
+
+  // Fetch latest predictions date + latest asset count (unique bases)
+  useEffect(() => {
+    const run = async () => {
+      try {
+        // Use edge function to get latest_date (works under RLS)
+        const cov = await predictionsCoverage({ monthsBack: 240 }).catch(() => null);
+        const latestDate = cov?.latest_date ? String(cov.latest_date).slice(0, 10) : null;
+        let assets = null;
+        if (latestDate) {
+          // Pull that day's predictions via edge function and count unique bases
+          const res = await predictionsRange({ start: latestDate, end: latestDate, limit: 200000, horizon: '1d' }).catch(() => null);
+          const rows = Array.isArray(res?.data) ? res.data : [];
+          const bases = new Set();
+          rows.forEach((r) => {
+            const base = String(r?.symbol_id || '').split('_')[0];
+            if (base) bases.add(base);
+          });
+          assets = bases.size || null;
+        }
+        setLatestInfo({ date: latestDate, assets });
+      } catch (_e) {
+        setLatestInfo({ date: null, assets: null });
+      }
+    };
+    run();
+  }, []);
 
   // Check auth status (optional now - dashboard works without login)
   useEffect(() => {
@@ -279,12 +318,28 @@ export default function Dashboard() {
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Model status</p>
             <p className="text-sm text-slate-200">{MODEL_VERSION}</p>
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Live feed badge */}
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
               <span className="w-2 h-2 rounded-full bg-current" />
               Live OOS feed
             </span>
-            <span>{MODEL_RELEASED_AT}</span>
+            {/* As of latest date */}
+            {latestInfo.date ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
+                Latest Update {latestInfo.date}
+              </span>
+            ) : null}
+            {/* Updated daily */}
+            <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
+              Updated daily by 00:30 UTC
+            </span>
+            {/* Latest assets count */}
+            {typeof latestInfo.assets === 'number' ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
+                Universe Size: {latestInfo.assets} tokens
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="border-b border-slate-800 mb-6">

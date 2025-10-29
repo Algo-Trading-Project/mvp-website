@@ -3,6 +3,8 @@ import { internalError, json, methodNotAllowed } from '../_shared/http.ts';
 import { corsHeaders } from '../_shared/middleware.ts';
 import { getServiceSupabaseClient } from '../_shared/supabase.ts';
 
+// TODO: refactor to incorporate pro-developer subscription tier and to return
+// the correct universe based on the user's subscription tier
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });

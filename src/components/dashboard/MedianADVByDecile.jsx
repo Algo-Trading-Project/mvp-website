@@ -2,6 +2,7 @@ import React from "react";
 import { advByDecilePlot } from "@/api/functions";
 import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
+import useMinLoading from "@/hooks/useMinLoading";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
@@ -64,7 +65,7 @@ export default function MedianADVByDecile({ dateRange, horizon='1d' }) {
   const esc = (s) => String(s ?? '').replaceAll("'", "''");
   const sqlText = React.useMemo(() => {
     const predCol = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
-    return `-- Resolved SQL used by Median ADV by Decile
+    return `-- Historical predictions and OHLCV data can be obtained via REST API
 with preds as (
   select
     date,
@@ -101,13 +102,19 @@ order by decile;`;
   const highlightSql = (sql) => {
     if (!sql) return '';
     const escape = (t) => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    let out = escape(sql);
-    out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
-    out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
-    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
-    const kw = /\b(select|from|where|between|and|or|order|group|by)\b/gi;
-    out = out.replace(kw, (m)=>`<span class=\"kw\">${m.toUpperCase()}</span>`);
-    return out;
+    const kw = /\b(select|from|where|between|and|or|order|group|by|with|join|inner|left|right|on|limit|offset|partition|over|rows|preceding|current|as)\b/gi;
+    return sql.split('\n').map((line) => {
+      const escLine = escape(line);
+      // If the line is a comment, wrap it and skip keyword highlighting inside
+      if (/^\s*--/.test(escLine)) {
+        return `<span class=\"com\">${escLine}</span>`;
+      }
+      let out = escLine;
+      out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
+      out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
+      out = out.replace(kw, (m)=>`<span class=\"kw\">${m.toUpperCase()}</span>`);
+      return out;
+    }).join('\n');
   };
 
   React.useEffect(() => {
@@ -153,6 +160,8 @@ order by decile;`;
     return () => { cancelled = true; controller.abort(); };
   }, [dateRange?.start, dateRange?.end, horizon]);
 
+  const loadingMin = useMinLoading(loading, 500);
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center justify-between mb-2 gap-2">
@@ -162,7 +171,7 @@ order by decile;`;
         </span>
         <button className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={()=>setShowSql(true)}>Show SQL</button>
       </div>
-      {loading ? (
+      {loadingMin ? (
         <ChartCardSkeleton height={360} />
       ) : error ? (
         <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{error}</div>

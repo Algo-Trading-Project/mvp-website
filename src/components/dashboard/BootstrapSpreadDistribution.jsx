@@ -4,6 +4,7 @@ import { Info } from "lucide-react";
 import { bootstrapSpreadDistributionPlot } from "@/api/functions";
 import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
+import useMinLoading from "@/hooks/useMinLoading";
 
 const InfoTooltip = ({ title, description }) => {
   const [open, setOpen] = React.useState(false);
@@ -57,6 +58,8 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
     return () => { cancelled = true; controller.abort(); };
   }, [dateRange?.start, dateRange?.end, horizon, topPct]);
 
+  const loadingMin = useMinLoading(loading, 500);
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center mb-2 gap-2">
@@ -81,7 +84,7 @@ export default function BootstrapSpreadDistribution({ dateRange, horizon='1d', t
         </div>
       </div>
 
-      {loading ? (
+      {loadingMin ? (
         <ChartCardSkeleton height={360} />
       ) : error ? (
         <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{error}</div>

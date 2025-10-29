@@ -15,8 +15,9 @@ import PerformancePublicSkeleton from "@/components/skeletons/PerformancePublicS
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { rawDaily, rawMonthly } from "@/api/functions";
-import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot, monthlyIcSummary } from "@/api/functions";
+import { rawDaily, rangeSummary } from "@/api/functions";
+import { getSupabaseClient } from "@/api/supabaseClient";
+import { fetchMetrics, rollingIcPlot, rollingSpreadPlot, predictionsCoverage, quintileReturnsPlot, rollingHitRatePlot } from "@/api/functions";
 import ICBySymbol from "@/components/dashboard/ICBySymbol";
 import ICDistribution from "@/components/dashboard/ICDistribution";
 import SpreadDistribution from "@/components/dashboard/SpreadDistribution";
@@ -25,6 +26,7 @@ import { getCachedFunctionResult } from "@/api/supabaseClient";
 import MedianADVByDecile from "@/components/dashboard/MedianADVByDecile";
 import BootstrapICDistribution from "@/components/dashboard/BootstrapICDistribution";
 import BootstrapSpreadDistribution from "@/components/dashboard/BootstrapSpreadDistribution";
+import useMinLoading from "@/hooks/useMinLoading";
 // removed Section + Export button + routing imports for compact headers
 
 const MIN_OOS_DATE = "2020-01-01";
@@ -48,22 +50,7 @@ export default function DashboardOOSSection() {
     return null;
   }, []);
 
-  // Fetch monthly IC summary (1d/3d aggregates) for badges
-  React.useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const res = await monthlyIcSummary({});
-        if (!cancelled && res && (res.one_day || res.three_day)) {
-          setMonthlySummary({ one_day: res.one_day, three_day: res.three_day });
-        }
-      } catch (err) {
-        console.warn('monthlyIcSummary failed', err);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
-  }, []);
+  // Removed monthly IC summary fetch (no longer used)
 
   const cloneSummary = (summary) => ({
     last: summary?.last ?? null,
@@ -114,8 +101,7 @@ export default function DashboardOOSSection() {
   const [horizon, setHorizon] = useState('1d');
   const [availableRange, setAvailableRange] = useState(() => storedDefaultRange ? { ...storedDefaultRange } : { start: "", end: "" });
   const [topPct, setTopPct] = useState(0.1);
-  const [monthlyRows, setMonthlyRows] = useState([]);
-  const [monthlySummary, setMonthlySummary] = useState(null);
+  // Removed monthly rows/summary state (deprecated)
 
   const [icSvg, setIcSvg] = React.useState(initialIcCache?.html || null);
   const [icSvgLoading, setIcSvgLoading] = React.useState(initialIcCache ? false : true);
@@ -142,7 +128,10 @@ export default function DashboardOOSSection() {
   const [rawDailyPage, setRawDailyPage] = React.useState(1);
   const rawDailyLoadedPagesRef = React.useRef(new Set());
   const RAW_PAGE_SIZE = 200;
-  const [rawMonthlyRow, setRawMonthlyRow] = React.useState(null);
+  // Range-aware summary stats (computed from daily_dashboard_metrics for selected window)
+  const [rangeIcStats, setRangeIcStats] = React.useState(null); // { mean, std, positive, icirAnn }
+  const [rangeSpreadStats, setRangeSpreadStats] = React.useState(null); // { mean, std, sharpe, positive }
+  const [summaryLoading, setSummaryLoading] = React.useState(false);
   // Which table to show SQL for: 'daily' | 'monthly' | null
   const [sqlTable, setSqlTable] = React.useState(null);
   // Schema dialog state
@@ -151,6 +140,13 @@ export default function DashboardOOSSection() {
   const [chartSqlOpen, setChartSqlOpen] = React.useState(false);
   const [chartSqlTitle, setChartSqlTitle] = React.useState('');
   const [chartSqlText, setChartSqlText] = React.useState('');
+
+  // Enforce a minimum skeleton duration to prevent flicker on fast responses
+  const icSvgLoadingMin = useMinLoading(icSvgLoading, 500);
+  const spreadLoadingMin = useMinLoading(spreadLoading, 500);
+  const hitLoadingMin = useMinLoading(hitLoading, 500);
+  const quintileLoadingMin = useMinLoading(quintileLoading, 500);
+  const summaryLoadingMin = useMinLoading(summaryLoading, 500);
 
 
   React.useEffect(() => {
@@ -220,10 +216,7 @@ export default function DashboardOOSSection() {
         }
       }
 
-      setMonthlyRows(metrics?.monthly || []);
-      if (metrics?.monthly_summary && (metrics.monthly_summary.one_day || metrics.monthly_summary.three_day)) {
-        setMonthlySummary(metrics.monthly_summary);
-      }
+      // monthly metrics deprecated
 
       setLoading(false);
     };
@@ -340,16 +333,11 @@ export default function DashboardOOSSection() {
       const isNewPage = !rawDailyLoadedPagesRef.current.has(rawDailyPage);
       setRawDailyLoading(isNewPage);
       try {
-        const [dailyRes, monthlyRes] = await Promise.all([
-          rawDaily({ start: dateRange.start, end: dateRange.end, page: rawDailyPage, page_size: RAW_PAGE_SIZE }),
-          rawMonthly({}),
-        ]);
+        const dailyRes = await rawDaily({ start: dateRange.start, end: dateRange.end, page: rawDailyPage, page_size: RAW_PAGE_SIZE });
         setRawDailyRows(Array.isArray(dailyRes?.rows) ? dailyRes.rows : []);
-        setRawMonthlyRow(monthlyRes?.row || null);
         rawDailyLoadedPagesRef.current.add(rawDailyPage);
       } catch (_e) {
         setRawDailyRows([]);
-        setRawMonthlyRow(null);
       } finally {
         setRawDailyLoading(false);
       }
@@ -363,7 +351,45 @@ export default function DashboardOOSSection() {
     rawDailyLoadedPagesRef.current = new Set();
   }, [dateRange.start, dateRange.end]);
 
-  const dailySql = `create materialized view daily_dashboard_metrics as
+  // Compute range-aware IC and Spread summaries from daily_dashboard_metrics via RPC
+  React.useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!dateRange.start || !dateRange.end) return;
+      setSummaryLoading(true);
+      try {
+        const res = await rangeSummary({
+          start: dateRange.start,
+          end: dateRange.end,
+          horizon,
+          use_p05: topPct === 0.05,
+        });
+        if (!cancelled && res) {
+          setRangeIcStats({
+            mean: res.ic_mean ?? null,
+            std: res.ic_std ?? null,
+            positive: res.ic_positive ?? null,
+            icirAnn: res.ic_icir_ann ?? null,
+          });
+          setRangeSpreadStats({
+            mean: res.spread_mean ?? null,
+            std: res.spread_std ?? null,
+            sharpe: res.spread_sharpe_ann ?? null,
+            positive: res.spread_positive ?? null,
+          });
+        }
+      } catch (err) {
+        console.warn('range_summary RPC failed', err);
+        if (!cancelled) { setRangeIcStats(null); setRangeSpreadStats(null); }
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [dateRange.start, dateRange.end, horizon, topPct]);
+
+  const dailySql = `-- Historical predictions data can be obtained via REST API
 with
   dates as (
     select distinct
@@ -437,33 +463,7 @@ with
   )
 select * from cs_metrics_joined;`;
 
-  const monthlySql = `CREATE MATERIALIZED VIEW model_performance_metrics_agg as
-select
-  AVG(cs_spearman_ic_1d) as avg_cs_spearman_ic_1d,
-  STDDEV(cs_spearman_ic_1d) as std_cs_spearman_ic_1d,
-  AVG(cs_spearman_ic_1d) / STDDEV(cs_spearman_ic_1d) * SQRT(365) AS annualized_icir_1d,
-  AVG(case when cs_spearman_ic_1d > 0 then 1 else 0 end) as pct_days_cs_ic_1d_above_0,
-  AVG(cs_top_bottom_decile_spread_1d) as avg_cs_decile_spread_1d,
-  STDDEV(cs_top_bottom_decile_spread_1d) as std_cs_decile_spread_1d,
-  AVG(cs_top_bottom_decile_spread_1d) / STDDEV(cs_top_bottom_decile_spread_1d) * SQRT(365) AS annualized_cs_decile_spread_sharpe_1d,
-  AVG(case when cs_top_bottom_decile_spread_1d > 0 then 1 else 0 end) as pct_days_cs_decile_spread_above_0_1d,
-  AVG(cs_top_bottom_p05_spread_1d) as avg_cs_p05_spread_1d,
-  STDDEV(cs_top_bottom_p05_spread_1d) as std_cs_p05_spread_1d,
-  AVG(cs_top_bottom_p05_spread_1d) / STDDEV(cs_top_bottom_p05_spread_1d) * SQRT(365) AS annualized_cs_p05_spread_sharpe_1d,
-  AVG(case when cs_top_bottom_p05_spread_1d > 0 then 1 else 0 end) as pct_days_cs_p05_spread_above_0_1d,
-  AVG(cs_spearman_ic_3d) as avg_cs_spearman_ic_3d,
-  STDDEV(cs_spearman_ic_3d) as std_cs_spearman_ic_3d,
-  AVG(cs_spearman_ic_3d) / STDDEV(cs_spearman_ic_3d) * SQRT(365) AS annualized_icir_3d,
-  AVG(case when cs_spearman_ic_3d > 0 then 1 else 0 end) as pct_days_cs_ic_3d_above_0,
-  AVG(cs_top_bottom_decile_spread_3d) as avg_cs_decile_spread_3d,
-  STDDEV(cs_top_bottom_decile_spread_3d) as std_cs_decile_spread_3d,
-  AVG(cs_top_bottom_decile_spread_3d) / STDDEV(cs_top_bottom_decile_spread_3d) * SQRT(365) AS annualized_cs_decile_spread_sharpe_3d,
-  AVG(case when cs_top_bottom_decile_spread_3d > 0 then 1 else 0 end) as pct_days_cs_decile_spread_above_0_3d,
-  AVG(cs_top_bottom_p05_spread_3d) as avg_cs_p05_spread_3d,
-  STDDEV(cs_top_bottom_p05_spread_3d) as std_cs_p05_spread_3d,
-  AVG(cs_top_bottom_p05_spread_3d) / STDDEV(cs_top_bottom_p05_spread_3d) * SQRT(365) AS annualized_cs_p05_spread_sharpe_3d,
-  AVG(case when cs_top_bottom_p05_spread_3d > 0 then 1 else 0 end) as pct_days_cs_p05_spread_above_0_3d
-from daily_dashboard_metrics;`;
+  // Removed monthlySql (deprecated)
 
   // Column schema descriptions for the Raw Data tables
   const tableSchemas = React.useMemo(() => ({
@@ -661,8 +661,7 @@ from daily_dashboard_metrics;`;
   const esc = (s) => String(s ?? '').replaceAll("'", "''");
   const buildRollingIcSql = () => {
     const field = horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d';
-    return `-- Resolved SQL matching rpc_rolling_ic
-select d.date,
+    return `select d.date,
        avg(d.${field}) over (
          order by d.date
          rows between (30 - 1) preceding and current row
@@ -676,8 +675,7 @@ limit 1000 offset 0;`;
     const field = horizon === '3d'
       ? (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
       : (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
-    return `-- Resolved SQL matching rpc_rolling_spread
-select d.date,
+    return `select d.date,
        avg(d.${field}) over (
          order by d.date
          rows between (30 - 1) preceding and current row
@@ -691,9 +689,7 @@ limit 1000 offset 0;`;
     const hitCol = horizon === '3d' ? 'cs_hit_count_3d' : 'cs_hit_count_1d';
     const totCol = horizon === '3d' ? 'total_count_3d' : 'total_count_1d';
     const win = 30; // UI uses 30d window consistently
-    // Resolved SQL with new alias rolling_hit_rate
-    return `-- Resolved SQL matching rpc_rolling_hit_rate (column renamed to rolling_hit_rate)
-select d.date,
+    return `select d.date,
        (sum(d.${hitCol}) over (
           order by d.date rows between (${win} - 1) preceding and current row
         ))::double precision
@@ -708,7 +704,7 @@ limit 1000 offset 0;`;
   const buildQuintileReturnsSql = () => {
     const pred = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
     const fwd = horizon === '3d' ? 'forward_returns_3' : 'forward_returns_1';
-    return `-- Resolved SQL used by the decile returns plot
+    return `-- Historical predictions data can be obtained via REST API
 with base as (
   select
     date,
@@ -734,6 +730,30 @@ group by decile
 order by decile;`;
   };
 
+  // Resolved SQL for Summary (IC + Spread) over selected range (no CASEs)
+  const buildSummarySql = () => {
+    const icField = horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d';
+    const spreadField = horizon === '3d'
+      ? (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
+      : (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
+    return `with filtered as (
+  select ${icField} as ic,
+         ${spreadField} as sp
+  from daily_dashboard_metrics
+  where date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+)
+select
+  avg(ic)::double precision as ic_mean,
+  stddev_samp(ic)::double precision as ic_std,
+  avg(case when ic > 0 then 1 else 0 end)::double precision as ic_positive,
+  (avg(ic) / stddev_samp(ic)) * sqrt(365)::double precision as icir_ann,
+  avg(sp)::double precision as spread_mean,
+  stddev_samp(sp)::double precision as spread_std,
+  (avg(sp) / stddev_samp(sp)) * sqrt(365)::double precision as spread_sharpe_ann,
+  avg(case when sp > 0 then 1 else 0 end)::double precision as spread_positive
+from filtered;`;
+  };
+
   // Simple clipboard copy helper for SQL dialog
   const copyToClipboard = async (text) => {
     try {
@@ -747,55 +767,18 @@ order by decile;`;
     }
   };
 
-  // Monthly aggregates derived from the 1d regression metrics
+  // Range-aware IC aggregates for badges
   const globalStats = React.useMemo(() => {
-    // Prefer server-computed monthly summaries when available
-    if (monthlySummary) {
-      const sum = horizon === '3d' ? monthlySummary.three_day : monthlySummary.one_day;
-      if (sum && (sum.mean != null || sum.std != null || sum.positive_share != null || sum.icir_ann != null)) {
-        return {
-          meanIc: typeof sum.mean === 'number' ? sum.mean : null,
-          stdIc: typeof sum.std === 'number' ? sum.std : null,
-          positiveProp: typeof sum.positive_share === 'number' ? sum.positive_share : null,
-          icirAnn: typeof sum.icir_ann === 'number' ? sum.icir_ann : null,
-        };
-      }
+    if (rangeIcStats) {
+      return {
+        meanIc: rangeIcStats.mean ?? null,
+        stdIc: rangeIcStats.std ?? null,
+        positiveProp: rangeIcStats.positive ?? null,
+        icirAnn: rangeIcStats.icirAnn ?? null,
+      };
     }
-    const toNumber = (value) => {
-      if (typeof value === "number") return Number.isNaN(value) ? null : value;
-      if (typeof value === "string" && value.trim() !== "") {
-        const num = Number(value);
-        return Number.isNaN(num) ? null : num;
-      }
-      return null;
-    };
-
-    const icValues = monthlyRows
-      .map((r) => toNumber(r.information_coefficient_1d))
-      .filter((v) => v !== null);
-
-    const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-    const std = (arr) => {
-      if (arr.length < 2) return 0;
-      const m = mean(arr);
-      const variance = arr.reduce((sum, val) => sum + Math.pow(val - m, 2), 0) / (arr.length - 1);
-      return Math.sqrt(variance);
-    };
-
-    const positiveMonths = icValues.filter((v) => v > 0).length;
-    const positiveProp = icValues.length ? positiveMonths / icValues.length : 0;
-    const icMean = mean(icValues);
-    const icStd = std(icValues);
-    // Annualized ICIR = mean(IC)/std(IC) * sqrt(12)
-    const icirAnn = icStd ? (icMean / icStd) * Math.sqrt(12) : 0;
-
-    return {
-      meanIc: icMean,
-      stdIc: icStd,
-      positiveProp,
-      icirAnn,
-    };
-  }, [monthlyRows, monthlySummary, horizon]);
+    return { meanIc: null, stdIc: null, positiveProp: null, icirAnn: null };
+  }, [rangeIcStats]);
 
   const minDateForInputs = React.useMemo(() => {
     if (availableRange.start && availableRange.start > MIN_OOS_DATE) {
@@ -895,6 +878,50 @@ order by decile;`;
   // Individual monthly badges summarising the 1d regression model
   const monthlyBadges = (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+      {summaryLoadingMin ? (
+        <>
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+            <div className="flex items-center justify-center gap-4">
+              <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+              <div className="flex flex-col gap-1 w-32">
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+            <div className="flex items-center justify-center gap-4">
+              <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+              <div className="flex flex-col gap-1 w-32">
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+            <div className="flex items-center justify-center gap-4">
+              <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+              <div className="flex flex-col gap-1 w-32">
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+            <div className="flex items-center justify-center gap-4">
+              <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+              <div className="flex flex-col gap-1 w-32">
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+                <div className="h-3 bg-slate-800 rounded" />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : <>
       <div className="text-center bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
           <InfoTooltip
@@ -932,12 +959,14 @@ order by decile;`;
         </div>
         <div className="text-xl font-bold text-white mt-1">{globalStats.icirAnn != null ? globalStats.icirAnn.toFixed(2) : "—"}</div>
       </div>
+      </>}
     </div>
   );
 
 
   // Loading skeleton for delta badges while plots update
   const badgesLoading = icSvgLoading || spreadLoading || hitLoading;
+  const badgesLoadingDelayed = useMinLoading(badgesLoading, 500);
   const BadgeSkeleton = () => (
     <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
       <div className="flex items-center justify-center gap-4">
@@ -962,7 +991,7 @@ order by decile;`;
   // Tighter rolling badges with loading skeleton on date-range changes
   const rollingBadges = (
     <div className="grid gap-6 md:grid-cols-3 mb-4">
-      {badgesLoading ? (
+      {badgesLoadingDelayed ? (
         <>
           <BadgeSkeleton />
           <BadgeSkeleton />
@@ -1118,44 +1147,70 @@ order by decile;`;
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">
         <div className="text-center mt-8">
-          <h3 className="text-2xl font-semibold text-white mb-4">Summary</h3>
+          <div className="flex items-center justify-center mb-4 gap-3">
+            <h3 className="text-2xl font-semibold text-white">Summary</h3>
+            <button
+              className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+              onClick={() => { setChartSqlTitle('Summary (IC + Spread)'); setChartSqlText(buildSummarySql()); setChartSqlOpen(true); }}
+            >Show SQL</button>
+          </div>
           {monthlyBadges}
           {/* Spread summary badges (decile/p05) */}
           {(() => {
-            // Compute spread stats from model_performance_metrics_agg (rawMonthlyRow)
-            const row = rawMonthlyRow || {};
+            // Compute spread stats from daily_dashboard_metrics for selected range
             const is3 = horizon === '3d';
             const useP05 = topPct === 0.05;
-            const pick = (base) => row[base] ?? null;
-            const meanKey = useP05
-              ? (is3 ? 'avg_cs_p05_spread_3d' : 'avg_cs_p05_spread_1d')
-              : (is3 ? 'avg_cs_decile_spread_3d' : 'avg_cs_decile_spread_1d');
-            const stdKey = useP05
-              ? (is3 ? 'std_cs_p05_spread_3d' : 'std_cs_p05_spread_1d')
-              : (is3 ? 'std_cs_decile_spread_3d' : 'std_cs_decile_spread_1d');
-            const sharpeKey = useP05
-              ? (is3 ? 'annualized_cs_p05_spread_sharpe_3d' : 'annualized_cs_p05_spread_sharpe_1d')
-              : (is3 ? 'annualized_cs_decile_spread_sharpe_3d' : 'annualized_cs_decile_spread_sharpe_1d');
-            const posKey = useP05
-              ? (is3 ? 'pct_days_cs_p05_spread_above_0_3d' : 'pct_days_cs_p05_spread_above_0_1d')
-              : (is3 ? 'pct_days_cs_decile_spread_above_0_3d' : 'pct_days_cs_decile_spread_above_0_1d');
-
             const spreadStats = {
-              mean: typeof pick(meanKey) === 'number' ? Number(pick(meanKey)) : null,
-              std: typeof pick(stdKey) === 'number' ? Number(pick(stdKey)) : null,
-              sharpe: typeof pick(sharpeKey) === 'number' ? Number(pick(sharpeKey)) : null,
-              positive: typeof pick(posKey) === 'number' ? Number(pick(posKey)) : null,
+              mean: rangeSpreadStats?.mean ?? null,
+              std: rangeSpreadStats?.std ?? null,
+              sharpe: rangeSpreadStats?.sharpe ?? null,
+              positive: rangeSpreadStats?.positive ?? null,
             };
-
-            const spreadBadgesLoading = !rawMonthlyRow;
+            const spreadBadgesLoading = summaryLoadingMin;
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-4">
                 {spreadBadgesLoading ? (
                   <>
-                    <BadgeSkeleton />
-                    <BadgeSkeleton />
-                    <BadgeSkeleton />
-                    <BadgeSkeleton />
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+                      <div className="flex items-center justify-center gap-4">
+                        <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+                      <div className="flex items-center justify-center gap-4">
+                        <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+                      <div className="flex items-center justify-center gap-4">
+                        <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 animate-pulse">
+                      <div className="flex items-center justify-center gap-4">
+                        <div className="min-w-[88px] h-6 bg-slate-800 rounded" />
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                          <div className="h-3 bg-slate-800 rounded" />
+                        </div>
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -1220,7 +1275,7 @@ order by decile;`;
                 >Show SQL</button>
               </div>
               <div className="h-auto">
-                {icSvgLoading ? (
+                {icSvgLoadingMin ? (
                   <div className="animate-pulse"><ChartCardSkeleton height={360} /></div>
                 ) : icError ? (
                   <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{icError}</div>
@@ -1247,7 +1302,7 @@ order by decile;`;
                 >Show SQL</button>
               </div>
               <div className="h-auto">
-                {spreadLoading ? (
+                {spreadLoadingMin ? (
                   <div className="animate-pulse"><ChartCardSkeleton height={360} /></div>
                 ) : spreadError ? (
                   <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{spreadError}</div>
@@ -1273,7 +1328,7 @@ order by decile;`;
                   onClick={() => { setChartSqlTitle('Rolling 30‑Day Hit Rate'); setChartSqlText(buildRollingHitSql()); setChartSqlOpen(true); }}
                 >Show SQL</button>
               </div>
-              {hitLoading ? (
+              {hitLoadingMin ? (
                 <ChartCardSkeleton height={360} />
               ) : hitError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{hitError}</div>
@@ -1303,7 +1358,7 @@ order by decile;`;
                   onClick={() => { setChartSqlTitle('Average Returns by Cross‑Sectional Prediction Decile'); setChartSqlText(buildQuintileReturnsSql()); setChartSqlOpen(true); }}
                 >Show SQL</button>
               </div>
-              {quintileLoading ? (
+              {quintileLoadingMin ? (
                 <ChartCardSkeleton height={360} />
               ) : quintileError ? (
                 <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">{quintileError}</div>
@@ -1346,8 +1401,8 @@ order by decile;`;
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold text-white">Raw Data</h3>
           </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
+          <div className="grid grid-cols-1 gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-md p-3 col-span-full">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-sm text-slate-200">daily_dashboard_metrics</span>
                 <div className="flex items-center gap-2">
@@ -1431,95 +1486,27 @@ order by decile;`;
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-slate-200">model_performance_metrics_agg</span>
-                <div className="flex items-center gap-2">
-                  <button
-                  className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  onClick={() => {
-                    const row = rawMonthlyRow || {};
-                    const cols = Object.keys(row);
-                    const lines = [cols.join(',')];
-                    if (cols.length) lines.push(cols.map((c) => String(row[c] ?? '')).join(','));
-                    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'model_performance_metrics_agg.csv';
-                    document.body.appendChild(a);
-                    a.click();
-                  a.remove();
-                  URL.revokeObjectURL(url);
-                }}
-                >Download CSV</button>
-                  <button
-                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                    onClick={() => setSchemaTable('monthly')}
-                  >Show Schema</button>
-                  <button
-                    className="text-xs px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                    onClick={() => setSqlTable('monthly')}
-                  >Show SQL</button>
-                </div>
-              </div>
-              <div className="text-xs text-slate-300 mb-2 flex items-center gap-2">
-                <InfoTooltip
-                  title="Aggregated Daily Performance"
-                  description="Global aggregates computed over all days: IC mean/std/ICIR and spread metrics for both 1‑day and 3‑day models." />
-                <span>Aggregated daily metrics.</span>
-              </div>
-              <div className="relative overflow-y-auto overflow-x-scroll scrollbar-visible border border-slate-800 rounded-md h-[360px]" style={{ scrollbarGutter: 'stable' }}>
-                <table className="min-w-full text-xs">
-                  <thead className="bg-slate-800 sticky top-0">
-                    <tr>
-                      {(rawMonthlyRow ? Object.keys(rawMonthlyRow) : [
-                        'avg_cs_spearman_ic_1d','std_cs_spearman_ic_1d','annualized_icir_1d','pct_days_cs_ic_1d_above_0',
-                        'avg_cs_decile_spread_1d','std_cs_decile_spread_1d','annualized_cs_decile_spread_sharpe_1d','pct_days_cs_decile_spread_above_0_1d',
-                        'avg_cs_p05_spread_1d','std_cs_p05_spread_1d','annualized_cs_p05_spread_sharpe_1d','pct_days_cs_p05_spread_above_0_1d',
-                        'avg_cs_spearman_ic_3d','std_cs_spearman_ic_3d','annualized_icir_3d','pct_days_cs_ic_3d_above_0',
-                        'avg_cs_decile_spread_3d','std_cs_decile_spread_3d','annualized_cs_decile_spread_sharpe_3d','pct_days_cs_decile_spread_above_0_3d',
-                        'avg_cs_p05_spread_3d','std_cs_p05_spread_3d','annualized_cs_p05_spread_sharpe_3d','pct_days_cs_p05_spread_above_0_3d'
-                      ]).map((c) => (
-                        <th key={c} className="text-left px-2 py-2 text-slate-300 whitespace-nowrap">{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      {(rawMonthlyRow ? Object.keys(rawMonthlyRow) : []).map((c) => (
-                        <td key={c} className="px-2 py-1 text-slate-300 whitespace-nowrap">{String(rawMonthlyRow?.[c] ?? '')}</td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
 
           <Dialog open={!!sqlTable} onOpenChange={(open) => { if (!open) setSqlTable(null); }}>
             <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-7xl w-[96vw] max-h-[90vh]">
               <DialogHeader>
-                <DialogTitle className="text-white">{sqlTable === 'daily' ? 'daily_dashboard_metrics' : 'model_performance_metrics_agg'}</DialogTitle>
+                <DialogTitle className="text-white">daily_dashboard_metrics</DialogTitle>
               </DialogHeader>
               <div className="flex justify-end mb-2">
-                <CopyButton text={sqlTable === 'daily' ? dailySql : monthlySql} />
+                <CopyButton text={dailySql} />
               </div>
-              {sqlTable === 'daily' ? (
-                renderSql(dailySql)
-              ) : sqlTable === 'monthly' ? (
-                renderSql(monthlySql)
-              ) : null}
+              {renderSql(dailySql)}
             </DialogContent>
           </Dialog>
 
           {/* Schema dialog */}
           <Dialog open={!!schemaTable} onOpenChange={(open) => { if (!open) setSchemaTable(null); }}>
-            <DialogContent className={`bg-slate-950 border border-slate-800 text-white ${schemaTable === 'monthly' ? 'max-w-[96rem] w-[88vw] max-h-[88vh]' : 'max-w-[120rem] w-[98vw] max-h-[96vh]'}`}>
+            <DialogContent className="bg-slate-950 border border-slate-800 text-white max-w-[120rem] w-[98vw] max-h-[96vh]">
               <DialogHeader>
-                <DialogTitle className="text-white">{schemaTable === 'daily' ? 'daily_dashboard_metrics Schema' : 'model_performance_metrics_agg Schema'}</DialogTitle>
+                <DialogTitle className="text-white">daily_dashboard_metrics Schema</DialogTitle>
               </DialogHeader>
-              <SchemaView table={schemaTable || 'daily'} />
+              <SchemaView table={'daily'} />
             </DialogContent>
           </Dialog>
         </div>

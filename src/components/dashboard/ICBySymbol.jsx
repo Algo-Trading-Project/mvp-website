@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
+import useMinLoading from "@/hooks/useMinLoading";
 
 const InfoTooltip = ({ title, description }) => {
   const [open, setOpen] = React.useState(false);
@@ -79,7 +80,7 @@ export default function ICBySymbol({ dateRange, horizon = '1d' }) {
   const sqlCall = React.useMemo(() => {
     const pred = horizon === '3d' ? 'predicted_returns_3' : 'predicted_returns_1';
     const fwd  = horizon === '3d' ? 'forward_returns_3'   : 'forward_returns_1';
-    return `-- Resolved SQL used by IC by Token (Top/Bottom)
+    return `-- Historical predictions data can be obtained via REST API
 with base as (
   select split_part(symbol_id, '_', 1) as symbol,
          ${pred} as pred,
@@ -110,7 +111,7 @@ order by spearman_ic desc;`;
     out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
     out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
     out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
-    const kw = /\b(select|from|where|between|and|or|order|group|by)\b/gi;
+    const kw = /\b(select|from|where|between|and|or|order|group|by|with|limit|offset|having|join|inner|left|right|on|case|when|then|else|end)\b/gi;
     out = out.replace(kw, (m)=>`<span class=\"kw\">${m.toUpperCase()}</span>`);
     return out;
   };
@@ -184,8 +185,10 @@ order by spearman_ic desc;`;
     };
   }, [dateRange, horizon]);
 
+  const delayedLoading = useMinLoading(loading, 500);
+
   const Plot = ({ html, title }) => {
-    if (loading) return <ChartCardSkeleton height={420} />;
+    if (delayedLoading) return <ChartCardSkeleton height={420} />;
     if (html) {
       return (
         <iframe

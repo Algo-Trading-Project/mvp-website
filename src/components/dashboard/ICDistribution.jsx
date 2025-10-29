@@ -7,6 +7,7 @@ import { icDistributionPlot } from "@/api/functions";
 import { getCachedFunctionResult } from "@/api/supabaseClient";
 import ChartCardSkeleton from "@/components/skeletons/ChartCardSkeleton";
 import { toast } from "sonner";
+import useMinLoading from "@/hooks/useMinLoading";
 
 const InfoTooltip = ({ title, description }) => {
   const [open, setOpen] = React.useState(false);
@@ -44,8 +45,7 @@ export default function ICDistribution({ dateRange, horizon='1d' }) {
   const esc = (s) => String(s ?? '').replaceAll("'", "''");
   const sqlText = React.useMemo(() => {
     const field = horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d';
-    return `-- Values fetched for histogram
-select ${field}
+    return `select ${field}
 from daily_dashboard_metrics
 where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end || '')}';`;
   }, [dateRange?.start, dateRange?.end, horizon]);
@@ -57,7 +57,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
     out = out.replace(/(^|\n)\s*--.*(?=\n|$)/g, (m) => `<span class=\"com\">${m}</span>`);
     out = out.replace(/'(?:''|[^'])*'/g, (m) => `<span class=\"str\">${m}</span>`);
     out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=\"num\">$1</span>`);
-    const kw = /\b(select|from|where|between|and|or|order|group|by)\b/gi;
+    const kw = /\b(select|from|where|between|and|or|order|group|by|with|limit|offset)\b/gi;
     out = out.replace(kw, (m)=>`<span class=\"kw\">${m.toUpperCase()}</span>`);
     return out;
   };
@@ -129,6 +129,8 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
     };
   }, [dateRange, horizon]);
 
+  const loadingMin = useMinLoading(loading, 500);
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-md p-3">
       <div className="flex items-center justify-between mb-2 gap-2">
@@ -171,7 +173,7 @@ where date between '${esc(dateRange?.start || '')}' and '${esc(dateRange?.end ||
         </div>
       </div>
 
-      {loading ? (
+      {loadingMin ? (
         <ChartCardSkeleton height={360} />
       ) : error ? (
         <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-md p-4 text-center">
