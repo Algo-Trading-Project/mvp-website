@@ -254,7 +254,6 @@ export default function Dashboard() {
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "regression", label: "Regression Model Performance" },
-    { id: "backtest", label: "Backtest" },
   ];
 
   const renderOverview = () => {
@@ -353,9 +352,11 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'regression' ? 'block' : 'none' }}>
             <DashboardOOSSection />
           </div>
-          <div style={{ display: activeTab === 'backtest' ? 'block' : 'none' }}>
-            <Backtest />
-          </div>
+          {activeTab === 'backtest' ? (
+            <div>
+              <Backtest />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

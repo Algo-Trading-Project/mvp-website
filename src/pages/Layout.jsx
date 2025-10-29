@@ -243,7 +243,21 @@ export default function Layout({ children, currentPageName }) {
         <nav className="w-full flex items-center justify-between py-5 px-3 sm:px-4"> {/* was py-4 -> py-5 to give logo a bit more room */}
           {/* Left group: logo + nav links */}
           <div className="flex items-center space-x-4">
-            <Link to={createPageUrl("Home")} className="flex items-center space-x-2">
+            <Link
+              to={createPageUrl("Home")}
+              className="flex items-center space-x-2"
+              onClick={(e) => {
+                try {
+                  // Always scroll to top on logo click; if already on Home prevent duplicate navigation
+                  const target = createPageUrl('Home');
+                  const here = location?.pathname || '';
+                  if (here.toLowerCase() === target.toLowerCase()) {
+                    e.preventDefault();
+                  }
+                  window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                } catch {}
+              }}
+            >
               <img
                 src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68af602ca8efcb2960befb31/3713063a0_a75b3b70b_logo.png"
                 alt="Home"
@@ -279,7 +293,20 @@ export default function Layout({ children, currentPageName }) {
           <div className="fixed inset-0 bg-black/30" onClick={() => setMobileMenuOpen(false)}></div>
           <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-slate-900 px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-white/10">
             <div className="flex items-center justify-between">
-              <Link to={createPageUrl("Home")} className="flex items-center space-x-2">
+            <Link
+              to={createPageUrl("Home")}
+              className="flex items-center space-x-2"
+              onClick={(e) => {
+                try {
+                  const target = createPageUrl('Home');
+                  const here = location?.pathname || '';
+                  if (here.toLowerCase() === target.toLowerCase()) {
+                    e.preventDefault();
+                  }
+                  window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                } catch {}
+              }}
+            >
                 <img
                   src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68af602ca8efcb2960befb31/3713063a0_a75b3b70b_logo.png"
                   alt="Home"

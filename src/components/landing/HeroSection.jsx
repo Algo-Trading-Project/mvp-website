@@ -7,10 +7,10 @@ import { fetchMetrics, sampleSignals } from "@/api/functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function HeroSection() {
-  const [positiveShare, setPositiveShare] = React.useState(null);
+  const [positiveShare, setPositiveShare] = React.useState(null); // IC
   const [meanDailyIc, setMeanDailyIc] = React.useState(null);
   const [meanDailySpread, setMeanDailySpread] = React.useState(null);
-  const [icirAnn, setIcirAnn] = React.useState(null);
+  const [positiveSpreadShare, setPositiveSpreadShare] = React.useState(null);
   const [loadingMeans, setLoadingMeans] = React.useState(true);
   const [downloadingSample, setDownloadingSample] = React.useState(false);
 
@@ -36,12 +36,13 @@ export default function HeroSection() {
       const sIc = std(icVals);
       const mSp = mean(spVals);
       const pos = icVals.length ? icVals.filter((v) => v > 0).length / icVals.length : null;
-      const icir = (mIc != null && sIc && sIc > 0) ? (mIc / sIc) * Math.sqrt(365) : null;
+      const icir = (mIc != null && sIc && sIc > 0) ? (mIc / sIc) * Math.sqrt(365) : null; // kept for potential future use
+      const posSpread = spVals.length ? spVals.filter((v) => v > 0).length / spVals.length : null;
 
       setMeanDailyIc(mIc);
       setMeanDailySpread(mSp);
       setPositiveShare(pos);
-      setIcirAnn(icir);
+      setPositiveSpreadShare(posSpread);
       setLoadingMeans(false);
     };
     loadDaily();
@@ -211,8 +212,8 @@ export default function HeroSection() {
             </div>
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
-                <InfoTip title="Positive Days" description="Fraction of days where the daily Spearman IC is greater than zero (1‑day model)." ariaLabel="Positive Days info" />
-                <span className="whitespace-nowrap">Positive Days (1‑day)</span>
+                <InfoTip title="Positive Days (IC)" description="Fraction of days where the daily Spearman IC is greater than zero (1‑day model)." ariaLabel="Positive Days info" />
+                <span className="whitespace-nowrap">Positive Days (IC, 1d)</span>
               </div>
               <div className="text-xl font-bold text-blue-400 min-h-[20px] flex items-center justify-center">
                 {loadingMeans ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (positiveShare != null ? `${(positiveShare * 100).toFixed(1)}%` : "—")}
@@ -221,14 +222,14 @@ export default function HeroSection() {
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md text-center">
               <div className="text-xs text-white mb-1 flex items-center justify-center gap-1">
                 <InfoTip
-                  title="ICIR (Annualized)"
-                  description="Mean daily IC divided by its standard deviation, scaled by √365 to annualize. Computed from daily_dashboard_metrics (1‑day model)."
-                  ariaLabel="ICIR info"
+                  title="Positive Days (Spread)"
+                  description="Fraction of days where the 1‑day top‑minus‑bottom decile spread is greater than zero. Computed across all history."
+                  ariaLabel="Positive Days (Spread) info"
                 />
-                <span className="whitespace-nowrap">ICIR (Annualized, 1‑day)</span>
+                <span className="whitespace-nowrap">Positive Days (Spread, 1d)</span>
               </div>
               <div className="text-xl font-bold text-cyan-400 min-h-[20px] flex items-center justify-center">
-                {loadingMeans ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (icirAnn != null ? icirAnn.toFixed(2) : "—")}
+                {loadingMeans ? <div className="h-5 w-16 bg-slate-800 animate-pulse rounded" /> : (positiveSpreadShare != null ? `${(positiveSpreadShare * 100).toFixed(1)}%` : "—")}
               </div>
             </div>
           </div>
