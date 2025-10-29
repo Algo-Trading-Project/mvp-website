@@ -1,7 +1,6 @@
 import Layout from "./Layout.jsx";
 import Pricing from "./Pricing";
 import Dashboard from "./Dashboard";
-import Downloads from "./Downloads";
 import Home from "./Home";
 import Account from "./Account";
 import GetStarted from "./GetStarted";
@@ -18,7 +17,6 @@ const PAGES = {
     Home: Home,
     Pricing: Pricing,
     Dashboard: Dashboard,
-    Downloads: Downloads,
     Account: Account,
     GetStarted: GetStarted,
     Contact: Contact,
@@ -56,7 +54,6 @@ function PagesContent() {
                 
                 <Route path="/dashboard" element={<Dashboard />} />
                 
-                <Route path="/downloads" element={<Downloads />} />
                 
                 
                 

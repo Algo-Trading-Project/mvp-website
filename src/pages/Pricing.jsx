@@ -8,6 +8,7 @@ import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User } from "@/api/entities";
 import { StripeApi } from "@/api/stripe";
+import { planSeatAvailability } from "@/api/functions";
 // Removed tabs picker (signals only)
 import { toast } from "sonner";
 
@@ -43,6 +44,8 @@ export default function Pricing() {
   const authCacheRef = useRef(loadAuthCache());
   const [isAuthed, setIsAuthed] = useState(authCacheRef.current ?? false);
   const [authChecked, setAuthChecked] = useState(!!authCacheRef.current);
+  const [seats, setSeats] = useState({ pro_dev: null, api: null });
+  const [seatsLoading, setSeatsLoading] = useState(true);
 
   // Always land at top when visiting Pricing
   useEffect(() => {
@@ -70,6 +73,21 @@ export default function Pricing() {
       checkAuth();
     }
   }, [authChecked]);
+
+  useEffect(() => {
+    const loadSeats = async () => {
+      try {
+        setSeatsLoading(true);
+        const info = await planSeatAvailability({});
+        setSeats({ pro_dev: info?.pro_dev || null, api: info?.api || null });
+      } catch {
+        setSeats({ pro_dev: null, api: null });
+      } finally {
+        setSeatsLoading(false);
+      }
+    };
+    loadSeats();
+  }, []);
 
   // Plans grouped by tabs
   const signalsRaw = [
@@ -200,6 +218,25 @@ export default function Pricing() {
             className={`relative bg-slate-900 rounded-md p-6 transform hover:scale-105 transition-transform duration-300 flex flex-col text-center
               ${plan.popular ? "border-2 border-indigo-500 scale-105" : "border border-slate-800"}`}
           >
+            {/* Seats badge for Pro-Developer and API (uniform style + skeleton) */}
+            {(plan.slug === 'signals_pro_dev' || plan.slug === 'signals_api') && (
+              seatsLoading ? (
+                <div className="absolute top-2 right-2 px-2 py-1 rounded-md text-xs bg-slate-800 border border-slate-700">
+                  <span className="inline-block h-3 w-20 bg-slate-700 rounded animate-pulse" />
+                </div>
+              ) : (
+                (() => {
+                  const data = plan.slug === 'signals_pro_dev' ? seats.pro_dev : seats.api;
+                  if (!data) return null;
+                  const left = Math.max(0, Number(data.left ?? 0));
+                  return (
+                    <div className="absolute top-2 right-2 px-2 py-1 rounded-md text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">
+                      {left} seats left
+                    </div>
+                  );
+                })()
+              )
+            )}
             {plan.popular && (
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1 bg-indigo-500 text-white text-xs font-semibold rounded-md shadow-lg">
                 Most Popular
@@ -242,6 +279,11 @@ export default function Pricing() {
                     <span>{feature}</span>
                   </li>
                 ))}
+                {(plan.slug === 'signals_pro_dev' || plan.slug === 'signals_api') && (
+                  <li className="flex items-start text-slate-300 text-xs">
+                    <span>Programmatic access is capacity‑controlled to mitigate crowding and protect signal quality.</span>
+                  </li>
+                )}
               </ul>
             </div>
             <div className="mt-auto">

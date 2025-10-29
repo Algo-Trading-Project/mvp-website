@@ -8,6 +8,7 @@ type Payload = {
   tokens?: string[] | null;
   limit?: number | null;
   horizon?: '1d' | '3d' | 'both' | string | string[] | null;
+  include_forward?: boolean | null;
 };
 
 const isIsoDate = (v: string | undefined | null) =>
@@ -22,7 +23,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { start, end, tokens, limit, horizon }: Payload = await req.json().catch(() => ({} as Payload));
+    const { start, end, tokens, limit, horizon, include_forward }: Payload = await req.json().catch(() => ({} as Payload));
     if (!isIsoDate(start) || !isIsoDate(end)) {
       return json({ error: "start and end must be YYYY-MM-DD" }, { status: 400 });
     }
@@ -149,15 +150,26 @@ Deno.serve(async (req) => {
       return json({ error: (e as Error).message }, { status: 400 });
     }
 
+    const selectCols = (() => {
+      const inc = Boolean(include_forward);
+      if (pHorizon === 'both') {
+        return inc
+          ? 'date, symbol_id, predicted_returns_1, predicted_returns_3, forward_returns_1, forward_returns_3'
+          : 'date, symbol_id, predicted_returns_1, predicted_returns_3';
+      }
+      if (pHorizon === '3d') {
+        return inc
+          ? 'date, symbol_id, predicted_returns_3, forward_returns_3'
+          : 'date, symbol_id, predicted_returns_3';
+      }
+      return inc
+        ? 'date, symbol_id, predicted_returns_1, forward_returns_1'
+        : 'date, symbol_id, predicted_returns_1';
+    })();
+
     let base = supabase
       .from('predictions')
-      .select(
-        pHorizon === 'both'
-          ? 'date, symbol_id, predicted_returns_1, predicted_returns_3'
-          : (pHorizon === '3d'
-              ? 'date, symbol_id, predicted_returns_3'
-              : 'date, symbol_id, predicted_returns_1')
-      )
+      .select(selectCols)
       .gte('date', start!)
       .lte('date', end!)
       .order('date', { ascending: true })
@@ -218,18 +230,22 @@ Deno.serve(async (req) => {
         symbol_id: String(row.symbol_id ?? ""),
         predicted_returns_1: mapNumber((row as any).predicted_returns_1),
         predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+        forward_returns_1: mapNumber((row as any).forward_returns_1),
+        forward_returns_3: mapNumber((row as any).forward_returns_3),
       })).filter((r) => r.date && r.symbol_id);
     } else if (pHorizon === '3d') {
       rows = (merged ?? []).map((row: Record<string, unknown>) => ({
         date: String(row.date ?? "").slice(0, 10),
         symbol_id: String(row.symbol_id ?? ""),
         predicted_returns_3: mapNumber((row as any).predicted_returns_3),
+        forward_returns_3: mapNumber((row as any).forward_returns_3),
       })).filter((r) => r.date && r.symbol_id);
     } else {
       rows = (merged ?? []).map((row: Record<string, unknown>) => ({
         date: String(row.date ?? "").slice(0, 10),
         symbol_id: String(row.symbol_id ?? ""),
         predicted_returns_1: mapNumber((row as any).predicted_returns_1),
+        forward_returns_1: mapNumber((row as any).forward_returns_1),
       })).filter((r) => r.date && r.symbol_id);
     }
 

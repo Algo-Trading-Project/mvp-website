@@ -106,6 +106,11 @@ export const getLiteTokens = wrapCall(
   supabaseApi.functions.liteTokens
 );
 
+export const planSeatAvailability = wrapCall(
+  "Failed to load plan seat availability",
+  supabaseApi.functions.planSeatAvailability
+);
+
 export const sampleSignals = wrapCall(
   "Failed to download sample signals",
   supabaseApi.functions.sampleSignals

@@ -243,6 +243,7 @@ const authClient = {
   advByDecilePlot: "adv-by-decile-plot",
   predictionsCoverage: "predictions-coverage",
   latestUniverseSize: "latest-universe-size",
+  planSeatAvailability: "plan-seat-availability",
   sampleSignals: "sample-signals",
   rawDaily: "raw-daily",
   listPredictionDates: "list-prediction-dates",

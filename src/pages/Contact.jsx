@@ -41,7 +41,7 @@ export default function Contact() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <h1 className="text-3xl font-bold"><span className="gradient-text">Contact</span></h1>
         <p className="text-white text-sm leading-relaxed">
-          Reach the QuantPulse team directly. Fill out the form below and we’ll draft an email for you—feel free to add more details before sending.
+          Contact the QuantPulse team. Fill out the form to email us.
         </p>
 
         <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-5 text-sm text-slate-200">

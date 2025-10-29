@@ -8,23 +8,51 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 
-function toCSV(rows, horizon = '1d') {
+function toCSV(rows, horizon = '1d', includeForward = false) {
   const both = horizon === 'both';
-  const headers = both
-    ? ["date", "symbol", "predicted_returns_1", "predicted_returns_3"]
-    : ["date", "symbol", horizon === '3d' ? "predicted_returns_3" : "predicted_returns_1"];
+  const headers = (() => {
+    if (both) {
+      return includeForward
+        ? ["date", "symbol", "predicted_returns_1", "predicted_returns_3", "forward_returns_1", "forward_returns_3"]
+        : ["date", "symbol", "predicted_returns_1", "predicted_returns_3"];
+    }
+    if (horizon === '3d') {
+      return includeForward
+        ? ["date", "symbol", "predicted_returns_3", "forward_returns_3"]
+        : ["date", "symbol", "predicted_returns_3"];
+    }
+    return includeForward
+      ? ["date", "symbol", "predicted_returns_1", "forward_returns_1"]
+      : ["date", "symbol", "predicted_returns_1"];
+  })();
   const lines = [headers.join(",")];
   rows.forEach(r => {
-    const line = both
-      ? [r.date, r.symbol, (r.predicted_returns_1 ?? ""), (r.predicted_returns_3 ?? "")].join(",")
-      : [r.date, r.symbol, (horizon === '3d' ? (r.predicted_returns_3 ?? "") : (r.predicted_returns_1 ?? ""))].join(",");
+    const line = (() => {
+      if (both) {
+        return includeForward
+          ? [r.date, r.symbol, (r.predicted_returns_1 ?? ""), (r.predicted_returns_3 ?? ""), (r.forward_returns_1 ?? ""), (r.forward_returns_3 ?? "")].join(",")
+          : [r.date, r.symbol, (r.predicted_returns_1 ?? ""), (r.predicted_returns_3 ?? "")].join(",");
+      }
+      if (horizon === '3d') {
+        return includeForward
+          ? [r.date, r.symbol, (r.predicted_returns_3 ?? ""), (r.forward_returns_3 ?? "")].join(",")
+          : [r.date, r.symbol, (r.predicted_returns_3 ?? "")].join(",");
+      }
+      return includeForward
+        ? [r.date, r.symbol, (r.predicted_returns_1 ?? ""), (r.forward_returns_1 ?? "")].join(",")
+        : [r.date, r.symbol, (r.predicted_returns_1 ?? "")].join(",");
+    })();
     lines.push(line);
   });
   return lines.join("\n");
 }
 
-async function fetchPredictionsForDate(date, horizon = '1d') {
-  const res = await predictionsRange({ start: date, end: date, limit: 200000, horizon });
+async function fetchPredictionsForDate(date, horizon = '1d', tokens, includeForward = false) {
+  const payload = { start: date, end: date, limit: 200000, horizon, include_forward: includeForward };
+  if (Array.isArray(tokens) && tokens.length) {
+    payload.tokens = tokens;
+  }
+  const res = await predictionsRange(payload);
   const rows = Array.isArray(res?.data) ? res.data : [];
   if (horizon === 'both') {
     return rows.map((r) => ({
@@ -32,6 +60,8 @@ async function fetchPredictionsForDate(date, horizon = '1d') {
       symbol: String(r.symbol_id || "").split("_")[0],
       predicted_returns_1: r.predicted_returns_1,
       predicted_returns_3: r.predicted_returns_3,
+      forward_returns_1: r.forward_returns_1,
+      forward_returns_3: r.forward_returns_3,
     }));
   }
   return rows.map((r) => ({
@@ -39,6 +69,8 @@ async function fetchPredictionsForDate(date, horizon = '1d') {
     symbol: String(r.symbol_id || "").split("_")[0],
     predicted_returns_1: r.predicted_returns_1,
     predicted_returns_3: r.predicted_returns_3,
+    forward_returns_1: r.forward_returns_1,
+    forward_returns_3: r.forward_returns_3,
   }));
 }
 
@@ -64,6 +96,7 @@ export default function SignalsHub() {
   const [latestDate, setLatestDate] = React.useState("");
   const [todayLoading, setTodayLoading] = React.useState(false);
   const [horizon, setHorizon] = React.useState('1d'); // '1d' | '3d' | 'both'
+  const [includeForward, setIncludeForward] = React.useState(false);
 
   const [range, setRange] = React.useState({ start: "", end: "" });
   const [rangeLoading, setRangeLoading] = React.useState(false);
@@ -75,6 +108,9 @@ export default function SignalsHub() {
   const [liteAllowedTokens, setLiteAllowedTokens] = React.useState([]);
   const liteInitRef = React.useRef(false);
   const [tokensReady, setTokensReady] = React.useState(false);
+  const [selectTokensModalOpen, setSelectTokensModalOpen] = React.useState(false);
+  // Track if the user manually changed the token selection to avoid auto-resets
+  const [tokensManuallySet, setTokensManuallySet] = React.useState(false);
   
   // Updated selectedTokens logic for free tier
   const [selectedTokens, setSelectedTokens] = React.useState(() => {
@@ -261,25 +297,28 @@ export default function SignalsHub() {
       }
       const allowed = new Set(liteAllowedTokens.map((s) => s.toUpperCase()));
       const filtered = selectedTokens.filter((t) => allowed.has(String(t).toUpperCase()));
-      if (filtered.length !== selectedTokens.length || filtered.length === 0) {
-        // If nothing left after filtering, default to all allowed
-        setSelectedTokens(filtered.length ? filtered : liteAllowedTokens);
+      // Keep only allowed tokens, but respect explicit user clears
+      if (filtered.length !== selectedTokens.length) {
+        setSelectedTokens(filtered);
+      } else if (!tokensManuallySet && filtered.length === 0) {
+        // Only auto-restore to full allowed if the user hasn't manually changed the selection
+        setSelectedTokens(liteAllowedTokens);
       }
       setTokensReady(true);
     }
-  }, [isFreeUser, isLite, liteAllowedTokens.length, selectedTokens.length]);
+  }, [isFreeUser, isLite, liteAllowedTokens.length, selectedTokens.length, tokensManuallySet]);
 
   // For Pro/API tiers, default to selecting all tokens when first loaded
   React.useEffect(() => {
     if (!isFreeUser && !isLite && allTokens.length) {
       const isDefaultFree = selectedTokens.length === FREE_TIER_TOKENS.length &&
         FREE_TIER_TOKENS.every(t => selectedTokens.includes(t));
-      if (selectedTokens.length === 0 || isDefaultFree) {
+      if (!tokensManuallySet && (selectedTokens.length === 0 || isDefaultFree)) {
         setSelectedTokens(allTokens);
       }
       setTokensReady(true);
     }
-  }, [isFreeUser, isLite, allTokens.length]);
+  }, [isFreeUser, isLite, allTokens.length, tokensManuallySet, selectedTokens.length]);
 
   const handleDownloadToday = async () => {
     if (isFreeUser) {
@@ -287,10 +326,15 @@ export default function SignalsHub() {
       setShowUpgradeModal(true);
       return;
     }
+    if (!selectedTokens.length) {
+      setSelectTokensModalOpen(true);
+      return;
+    }
     if (!latestDate) return;
     setTodayLoading(true);
-    const rows = await fetchPredictionsForDate(latestDate, horizon);
-    const csv = toCSV(rows, horizon);
+    const tokens = selectedTokens;
+    const rows = await fetchPredictionsForDate(latestDate, horizon, tokens, includeForward);
+    const csv = toCSV(rows, horizon, includeForward);
     const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
     saveFile(csv, `predictions_${latestDate}${suffix}.csv`);
     setTodayLoading(false);
@@ -302,8 +346,13 @@ export default function SignalsHub() {
       setShowUpgradeModal(true);
       return;
     }
-    const rows = await fetchPredictionsForDate(date, horizon);
-    const csv = toCSV(rows, horizon);
+    if (!selectedTokens.length) {
+      setSelectTokensModalOpen(true);
+      return;
+    }
+    const tokens = selectedTokens;
+    const rows = await fetchPredictionsForDate(date, horizon, tokens, includeForward);
+    const csv = toCSV(rows, horizon, includeForward);
     const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
     saveFile(csv, `predictions_${date}${suffix}.csv`);
   };
@@ -321,6 +370,10 @@ export default function SignalsHub() {
     if (isFreeUser) {
       setUpgradeMessage("Downloads are not available on the Free tier. Upgrade to Lite or higher for access.");
       setShowUpgradeModal(true);
+      return;
+    }
+    if (!selectedTokens.length) {
+      setSelectTokensModalOpen(true);
       return;
     }
     if (!range.start || !range.end) return;
@@ -349,7 +402,7 @@ export default function SignalsHub() {
       // Use short symbols (BTC) — server expands to *_USD
       Object.assign(payload, { tokens: tokenFilter });
     }
-    const res = await predictionsRange(payload);
+    const res = await predictionsRange({ ...payload, include_forward: includeForward });
     let allRows = [];
     if (horizon === 'both') {
       allRows = (res?.data || []).map((r) => ({
@@ -377,11 +430,11 @@ export default function SignalsHub() {
     if (tokensToFilter && tokensToFilter.length > 0) {
       const setTokens = new Set(tokensToFilter.map((s) => s.toUpperCase()));
       const filtered = allRows.filter(r => setTokens.has(r.symbol.toUpperCase()));
-      const csv = toCSV(filtered, horizon);
+      const csv = toCSV(filtered, horizon, includeForward);
       const suffix = (isFreeUser ? "_free_tier" : "_filtered") + (horizon === 'both' ? '_both' : `_${horizon}`);
       saveFile(csv, `predictions_${range.start}_to_${range.end}${suffix}.csv`);
     } else {
-      const csv = toCSV(allRows, horizon);
+      const csv = toCSV(allRows, horizon, includeForward);
       const suffix = horizon === 'both' ? '_both' : `_${horizon}`;
       saveFile(csv, `predictions_${range.start}_to_${range.end}${suffix}.csv`);
     }
@@ -550,6 +603,14 @@ export default function SignalsHub() {
                     )}
                   </Button>
                 </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <Checkbox
+                    checked={includeForward}
+                    onCheckedChange={(v) => setIncludeForward(Boolean(v))}
+                    className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                  />
+                  <span className="text-sm text-slate-300">Include forward returns?</span>
+                </div>
               </div>
 
               <Button
@@ -680,6 +741,24 @@ export default function SignalsHub() {
         </DialogContent>
       </Dialog>
 
+      {/* Select Tokens Required Modal */}
+      <Dialog open={selectTokensModalOpen} onOpenChange={setSelectTokensModalOpen}>
+        <DialogContent className="bg-slate-900 border border-slate-700 text-white max-w-md">
+          <DialogHeader className="text-center items-center">
+            <DialogTitle className="text-xl">Select Tokens</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-slate-300 text-center">
+            <p>Please select at least one token before requesting a download.</p>
+            <p className="text-slate-400 text-sm">Use the Token Filter to choose specific symbols.</p>
+          </div>
+          <DialogFooter className="justify-center sm:justify-center">
+            <Button onClick={() => setSelectTokensModalOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Token Selection Modal (Pro only) */}
       <Dialog open={tokenModalOpen} onOpenChange={setTokenModalOpen}>
         <DialogContent className="bg-slate-900 border border-slate-700 text-white max-w-2xl max-h-[80vh] overflow-hidden">
@@ -707,6 +786,7 @@ export default function SignalsHub() {
                         <Checkbox
                           checked={checked}
                           onCheckedChange={(v) => {
+                            setTokensManuallySet(true);
                             if (v) setSelectedTokens(s => [...s, token]);
                             else setSelectedTokens(s => s.filter(x => x !== token));
                           }}
@@ -731,7 +811,7 @@ export default function SignalsHub() {
               <div className="flex gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedTokens(allTokens)}
+                  onClick={() => { setTokensManuallySet(true); setSelectedTokens(allTokens); }}
                   className="bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700"
                   disabled={allTokens.length === 0}
                 >
@@ -739,7 +819,7 @@ export default function SignalsHub() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedTokens([])}
+                  onClick={() => { setTokensManuallySet(true); setSelectedTokens([]); }}
                   className="bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700"
                 >
                   Clear All
@@ -770,6 +850,10 @@ export default function SignalsHub() {
               <li><span className="font-semibold">Free:</span> Downloads are not available.</li>
               <li><span className="font-semibold">Lite:</span> Top 60 tokens by 90‑day median daily dollar volume, excluding stablecoins.</li>
               <li><span className="font-semibold">Pro / Pro‑Developer / API:</span> Full token universe.</li>
+              <li className="mt-2 text-slate-400">
+                To protect alpha through limited crowding, seats are capped:
+                <span className="block mt-1 text-slate-300">Pro‑Developer: 70 seats • API: 30 seats</span>
+              </li>
             </ul>
           </div>
           <DialogFooter className="justify-center sm:justify-center">
