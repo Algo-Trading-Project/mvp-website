@@ -1,6 +1,5 @@
-# TODO: implement daily refresh of daily_dashboard_metrics materialized view
-# TODO: implement daily refresh of model_performance_metrics_monthly_agg materialized view
-
+-- Create materialized view for daily dashboard metrics
+create materialized view if not exists daily_dashboard_metrics as
 WITH dates AS (
     SELECT DISTINCT date
     FROM predictions

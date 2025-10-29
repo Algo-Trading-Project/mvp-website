@@ -69,16 +69,12 @@ language sql
 stable
 as $$
   select d.date,
-         case when sum(case when p_horizon='3d' then d.total_count_3d else d.total_count_1d end) over (
-                    order by d.date rows between ("window" - 1) preceding and current row
-                  ) > 0
-              then (sum(case when p_horizon='3d' then d.cs_hit_count_3d else d.cs_hit_count_1d end) over (
-                      order by d.date rows between ("window" - 1) preceding and current row
-                    ))::double precision
-                   / nullif(sum(case when p_horizon='3d' then d.total_count_3d else d.total_count_1d end) over (
-                              order by d.date rows between ("window" - 1) preceding and current row
-                            ), 0)
-              else null end as value
+              sum(case when p_horizon='3d' then d.cs_hit_count_3d else d.cs_hit_count_1d end) over (
+                  order by d.date rows between ("window" - 1) preceding and current row
+              )::double precision
+              / nullif(sum(case when p_horizon='3d' then d.total_count_3d else d.total_count_1d end) over (
+                order by d.date rows between ("window" - 1) preceding and current row
+                ), 0) as rolling_hit_rate
   from daily_dashboard_metrics d
   where d.date between start_date and end_date
   order by d.date

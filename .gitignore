@@ -30,3 +30,6 @@ dist-ssr
 *.env.supabase.example
 supabase/.env.*
 .env.example
+
+# Misc
+test.ipynb
