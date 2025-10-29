@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
 
   const priceId = getPriceIdForPlan(planSlug, billingCycleNormalized);
   if (!priceId) {
-    return badRequest("Unsupported plan/billing_cycle combination.");
+    return badRequest(`Unsupported plan/billing_cycle combination: plan_slug='${planSlug}', billing_cycle='${billingCycleNormalized}'. Ensure STRIPE_PRICE_* is configured for this plan.`);
   }
 
   try {
