@@ -88,15 +88,16 @@ Deno.serve(async (req) => {
       const startObj = new Date(`${startDate}T00:00:00Z`);
       const endObj = new Date(`${endDate}T00:00:00Z`);
       const diffDays = Math.ceil((endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      if (diffDays > 365) {
+      if (startObj.getTime() > endObj.getTime()) {
+        return json({ error: 'start_date must be <= end_date' }, { status: 400 });
+      }
+      // Per‑request caps: Pro‑Developer 365d, API no limit
+      if (tier === 'pro_dev' && diffDays > 365) {
         return json({
-          error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
+          error: 'Maximum of 365 days per request for Pro‑Developer. Please break your request into smaller ranges.',
           code: 'RANGE_TOO_LARGE',
           limit_days: 365,
         }, { status: 400 });
-      }
-      if (startObj.getTime() > endObj.getTime()) {
-        return json({ error: 'start_date must be <= end_date' }, { status: 400 });
       }
     }
     // Build base query
@@ -119,13 +120,40 @@ Deno.serve(async (req) => {
       .order('date', { ascending: true })
       .order('symbol_id', { ascending: true });
 
-    // API access is Pro or API tiers only
+    // API access for /predictions: Pro‑Developer (≤ 1 year per request) and API
     const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-    if (!(tier === 'pro' || tier === 'api')) {
-      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    if (!(tier === 'pro_dev' || tier === 'api')) {
+      return json({ error: 'The /predictions endpoint requires Pro‑Developer or API tier' }, { status: 403 });
     }
 
-    // Honor token filter for Pro/API if provided
+    // Pro‑Developer: enforce anchored lookback — both dates must be within last 365 days from latest predictions date
+    // Anchored lookback for Pro‑Developer only (API exempt). Enforce only lower bound.
+    if (tier === 'pro_dev') {
+      const { data: latestRows, error: latestErr } = await supabase
+        .from('predictions')
+        .select('date')
+        .not('date', 'is', null)
+        .order('date', { ascending: false })
+        .limit(1);
+      if (latestErr) throw latestErr;
+      const latestDateStr = String(latestRows?.[0]?.date ?? '').slice(0, 10);
+      if (!latestDateStr) return json({ error: 'No predictions available to determine lookback window' }, { status: 500 });
+      const endAnchor = new Date(`${latestDateStr}T00:00:00Z`);
+      const minAnchor = new Date(endAnchor);
+      const LOOKBACK_DAYS = 365;
+      minAnchor.setUTCDate(endAnchor.getUTCDate() - (LOOKBACK_DAYS - 1));
+      const minStr = minAnchor.toISOString().slice(0, 10);
+      if (startDate < minStr) {
+        return json({
+          error: `Pro‑Developer allows selecting start dates no older than ${minStr} (last ${LOOKBACK_DAYS} days from ${latestDateStr}).`,
+          code: 'PRO_DEV_ANCHORED_LOOKBACK',
+          window_start: minStr,
+          window_end: latestDateStr,
+        }, { status: 400 });
+      }
+    }
+
+    // Honor token filter if provided
     if (tokens && tokens.length) {
       const expanded = tokens.map((t) => `${t}_USDT_BINANCE`);
       base = base.in('symbol_id', expanded);

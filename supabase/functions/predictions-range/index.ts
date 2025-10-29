@@ -54,27 +54,37 @@ Deno.serve(async (req) => {
       subscriptionTier = 'free';
     }
 
+    // Allow any paid tier (Lite/Pro/Pro‑Developer/API); block Free only
     if (!subscriptionTier || subscriptionTier === 'free') {
       return json({ error: 'Downloads require a paid plan' }, { status: 403 });
     }
 
-    // Universal per-request cap: 365 days (inclusive)
+    // Per‑tier per‑request caps (API exempt):
+    // - lite:   90 days
+    // - pro:    365 days
+    // - pro_dev:365 days
+    // - api:    no limit
     const startDateObj = new Date(`${start}T00:00:00Z`);
     const endDateObj = new Date(`${end}T00:00:00Z`);
     const diffDays = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    if (diffDays > 365) {
-      return json(
-        {
-          error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
-          code: 'RANGE_TOO_LARGE',
-          limit_days: 365,
-        },
-        { status: 400 },
-      );
+    if (subscriptionTier !== 'api') {
+      const cap = subscriptionTier === 'lite' ? 90 : 365;
+      if (diffDays > cap) {
+        return json(
+          {
+            error: `Maximum of ${cap} days per request for your tier. Please break your request into smaller ranges.`,
+            code: 'RANGE_TOO_LARGE',
+            limit_days: cap,
+          },
+          { status: 400 },
+        );
+      }
     }
 
-    // Lite users: both dates must be within the last 180 days ending on latest available predictions date
-    if (subscriptionTier === 'lite') {
+    // Anchored lookback: enforce only lower bound (start >= latest - window + 1).
+    // end may exceed latest without error; result simply contains up‑to‑latest rows.
+    if (subscriptionTier !== 'api') {
+      const windowDays = subscriptionTier === 'lite' ? 90 : 365; // pro + pro_dev: 365
       const { data: latestRows, error: latestErr } = await supabase
         .from('predictions')
         .select('date')
@@ -88,20 +98,15 @@ Deno.serve(async (req) => {
       }
       const endAnchor = new Date(`${latestDateStr}T00:00:00Z`);
       const minAnchor = new Date(endAnchor);
-      const LITE_LOOKBACK_DAYS = 180;
-      // Inclusive 180-day window ending on latestDateStr
-      minAnchor.setUTCDate(endAnchor.getUTCDate() - (LITE_LOOKBACK_DAYS - 1));
-      const liteMinStr = minAnchor.toISOString().slice(0, 10);
-      if ((start! < liteMinStr) || (end! > latestDateStr)) {
-        return json(
-          {
-            error: `Lite tier allows selecting dates within the last ${LITE_LOOKBACK_DAYS} days ending on ${latestDateStr}.`,
-            code: 'LITE_LOOKBACK_WINDOW',
-            window_start: liteMinStr,
-            window_end: latestDateStr,
-          },
-          { status: 400 },
-        );
+      minAnchor.setUTCDate(endAnchor.getUTCDate() - (windowDays - 1));
+      const minStr = minAnchor.toISOString().slice(0, 10);
+      if (start! < minStr) {
+        return json({
+          error: `Your tier allows selecting start dates no older than ${minStr} (last ${windowDays} days from ${latestDateStr}).`,
+          code: 'TIER_ANCHORED_LOOKBACK',
+          window_start: minStr,
+          window_end: latestDateStr,
+        }, { status: 400 });
       }
     }
 
@@ -158,7 +163,7 @@ Deno.serve(async (req) => {
       .order('date', { ascending: true })
       .order('symbol_id', { ascending: true });
 
-    // Enforce Lite subset: if lite, restrict to top-60 list
+    // Enforce Lite subset: if lite, restrict to top‑60 list
     if (subscriptionTier === 'lite') {
       const { data: liteRows, error: liteErr } = await supabase
         .from('product_lite_universe_60')
@@ -180,7 +185,7 @@ Deno.serve(async (req) => {
       }
       base = base.in('symbol_id', requestedSymbols);
     } else {
-      // Pro/API: honor requested tokens if provided, else full universe
+      // Pro / Pro‑Developer / API: honor requested tokens if provided, else full universe
       if (tokenList && tokenList.length) {
         const expanded = tokenList.some((s) => s.includes('_'))
           ? tokenList

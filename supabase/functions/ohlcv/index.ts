@@ -58,28 +58,53 @@ Deno.serve(async (req) => {
       ? requestedTokens.map((t) => `${t}_USDT_BINANCE`)
       : null;
 
-    // API access is Pro or API tiers only
+    // API access is Pro‑Developer or API tiers only
     const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-    if (!(tier === 'pro' || tier === 'api')) {
-      return json({ error: 'API access requires Pro or API tier' }, { status: 403 });
+    if (!(tier === 'pro_dev' || tier === 'api')) {
+      return json({ error: 'API access requires Pro‑Developer or API tier' }, { status: 403 });
     }
 
-    // Universal per-request range cap: 365 days (inclusive)
+    // Range caps: Pro‑Developer ≤ 365 days, API ≤ 365 days (per-request); also enforce anchored lookback for Pro‑Developer
     const startObj = new Date(`${startDate}T00:00:00Z`);
     const endObj = new Date(`${endDate}T00:00:00Z`);
     const diffDays = Math.ceil((endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    if (diffDays > 365) {
+    const CAP = 365; // Pro‑Developer cap per request; API exempt
+    if (tier === 'pro_dev' && diffDays > CAP) {
       return json({
-        error: 'Maximum of 365 days per request. Please break your request into smaller ranges.',
+        error: `Maximum of ${CAP} days per request for your tier. Please break your request into smaller ranges.`,
         code: 'RANGE_TOO_LARGE',
-        limit_days: 365,
+        limit_days: CAP,
       }, { status: 400 });
     }
     if (startObj.getTime() > endObj.getTime()) {
       return json({ error: 'start_date must be <= end_date' }, { status: 400 });
     }
 
-    // No additional tier-specific restrictions for Pro/API beyond range cap
+    // Anchored lookback for Pro‑Developer only (API exempt). Enforce only lower bound.
+    if (tier === 'pro_dev') {
+      const { data: latestRows, error: latestErr } = await supabase
+        .from('ohlcv_1d')
+        .select('date')
+        .not('date', 'is', null)
+        .order('date', { ascending: false })
+        .limit(1);
+      if (latestErr) throw latestErr;
+      const latestDateStr = String(latestRows?.[0]?.date ?? '').slice(0, 10);
+      if (!latestDateStr) return json({ error: 'No OHLCV data available to determine lookback window' }, { status: 500 });
+      const endAnchor = new Date(`${latestDateStr}T00:00:00Z`);
+      const minAnchor = new Date(endAnchor);
+      const LOOKBACK_DAYS = 365;
+      minAnchor.setUTCDate(endAnchor.getUTCDate() - (LOOKBACK_DAYS - 1));
+      const minStr = minAnchor.toISOString().slice(0, 10);
+      if (startDate < minStr) {
+        return json({
+          error: `Pro‑Developer allows selecting start dates no older than ${minStr} (last ${LOOKBACK_DAYS} days from ${latestDateStr}).`,
+          code: 'PRO_DEV_ANCHORED_LOOKBACK',
+          window_start: minStr,
+          window_end: latestDateStr,
+        }, { status: 400 });
+      }
+    }
 
     // Build base query and page through results
     let base = supabase
