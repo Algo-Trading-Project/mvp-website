@@ -661,44 +661,64 @@ select * from cs_metrics_joined;`;
   const esc = (s) => String(s ?? '').replaceAll("'", "''");
   const buildRollingIcSql = () => {
     const field = horizon === '3d' ? 'cs_spearman_ic_3d' : 'cs_spearman_ic_1d';
-    return `select d.date,
-       avg(d.${field}) over (
-         order by d.date
-         rows between (30 - 1) preceding and current row
-       ) as value
-from daily_dashboard_metrics d
-where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
-order by d.date
+    const win = 30;
+    return `with padded as (
+  select date, ${field} as v
+  from daily_dashboard_metrics
+  where date between ('${esc(dateRange.start)}'::date - (${win} - 1)) and '${esc(dateRange.end)}'
+), rolling as (
+  select date,
+         avg(v) over (
+           order by date rows between (${win} - 1) preceding and current row
+         ) as value
+  from padded
+)
+select date, value
+from rolling
+where date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by date
 limit 1000 offset 0;`;
   };
   const buildRollingSpreadSql = () => {
     const field = horizon === '3d'
       ? (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_3d' : 'cs_top_bottom_decile_spread_3d')
       : (topPct <= 0.05 ? 'cs_top_bottom_p05_spread_1d' : 'cs_top_bottom_decile_spread_1d');
-    return `select d.date,
-       avg(d.${field}) over (
-         order by d.date
-         rows between (30 - 1) preceding and current row
-       ) as value
-from daily_dashboard_metrics d
-where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
-order by d.date
+    const win = 30;
+    return `with padded as (
+  select date, ${field} as v
+  from daily_dashboard_metrics
+  where date between ('${esc(dateRange.start)}'::date - (${win} - 1)) and '${esc(dateRange.end)}'
+), rolling as (
+  select date,
+         avg(v) over (
+           order by date rows between (${win} - 1) preceding and current row
+         ) as value
+  from padded
+)
+select date, value
+from rolling
+where date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by date
 limit 1000 offset 0;`;
   };
   const buildRollingHitSql = () => {
     const hitCol = horizon === '3d' ? 'cs_hit_count_3d' : 'cs_hit_count_1d';
     const totCol = horizon === '3d' ? 'total_count_3d' : 'total_count_1d';
     const win = 30; // UI uses 30d window consistently
-    return `select d.date,
-       (sum(d.${hitCol}) over (
-          order by d.date rows between (${win} - 1) preceding and current row
-        ))::double precision
-       / nullif(sum(d.${totCol}) over (
-            order by d.date rows between (${win} - 1) preceding and current row
-          ), 0) as rolling_hit_rate
-from daily_dashboard_metrics d
-where d.date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
-order by d.date
+    return `with padded as (
+  select date, ${hitCol} as h, ${totCol} as n
+  from daily_dashboard_metrics
+  where date between ('${esc(dateRange.start)}'::date - (${win} - 1)) and '${esc(dateRange.end)}'
+), rolling as (
+  select date,
+         (sum(h) over (order by date rows between (${win} - 1) preceding and current row))::double precision
+         / nullif(sum(n) over (order by date rows between (${win} - 1) preceding and current row), 0) as rolling_hit_rate
+  from padded
+)
+select date, rolling_hit_rate
+from rolling
+where date between '${esc(dateRange.start)}' and '${esc(dateRange.end)}'
+order by date
 limit 1000 offset 0;`;
   };
   const buildQuintileReturnsSql = () => {

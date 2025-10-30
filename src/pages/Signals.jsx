@@ -151,12 +151,13 @@ export default function SignalsHub() {
   const isFreeUser = !me || planTier === "free";
 
   // Lite lookback enforcement helpers
-  const LITE_LOOKBACK_DAYS = 180;
+  // Keep UI aligned with server-side policy (90 days for Lite)
+  const LITE_LOOKBACK_DAYS = 90;
   const liteMinDate = React.useMemo(() => {
     if (!latestDate) return "";
     const end = new Date(`${latestDate}T00:00:00Z`);
     const start = new Date(end);
-    // Inclusive 180-day window ending on latestDate
+    // Inclusive 90-day window ending on latestDate
     start.setUTCDate(end.getUTCDate() - (LITE_LOOKBACK_DAYS - 1));
     return start.toISOString().slice(0, 10);
   }, [latestDate]);
@@ -402,7 +403,15 @@ export default function SignalsHub() {
       // Use short symbols (BTC) — server expands to *_USD
       Object.assign(payload, { tokens: tokenFilter });
     }
-    const res = await predictionsRange({ ...payload, include_forward: includeForward });
+    let res;
+    try {
+      res = await predictionsRange({ ...payload, include_forward: includeForward });
+    } catch (e) {
+      const msg = e?.data?.error || e?.message || 'Request failed';
+      alert(`Download failed: ${msg}`);
+      setRangeLoading(false);
+      return;
+    }
     let allRows = [];
     if (horizon === 'both') {
       allRows = (res?.data || []).map((r) => ({

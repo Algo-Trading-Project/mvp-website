@@ -29,11 +29,13 @@ Deno.serve(async (req) => {
       return null;
     };
     const PAGE = 1000; let offset = 0; const merged: Array<Record<string, unknown>> = [];
+    const window = 30;
+    const padStart = (() => { const d = new Date(`${start}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - (window - 1)); return d.toISOString().slice(0,10); })();
     while (true) {
       const rpc = await supabase.rpc('rpc_rolling_spread', {
-        start_date: start,
+        start_date: padStart,
         end_date: end,
-        window: 30,
+        window,
         p_limit: PAGE,
         p_offset: offset,
         p_horizon: horizon === '3d' ? '3d' : '1d',
@@ -46,10 +48,11 @@ Deno.serve(async (req) => {
       offset += PAGE;
     }
 
-    const rows = (merged ?? []).map((r: Record<string, unknown>) => ({
+    const rowsAll = (merged ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? '').slice(0, 10),
       spread: coerceNumber(r['value']),
     })).filter((r) => r.date);
+    const rows = rowsAll.filter((r) => r.date >= String(start) && r.date <= String(end));
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.spread === 'number' ? r.spread : null));
