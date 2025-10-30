@@ -307,8 +307,11 @@ export default function Dashboard() {
               </span>
             ) : null}
             {/* Updated daily */}
-            <span className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200">
-              Updated daily by 00:30 UTC
+            <span
+              className="inline-flex items-center px-3 py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-200"
+              title={latestInfo?.date ? `Last successful update: ${latestInfo.date} ~00:30 UTC` : 'Nightly updates ~00:30 UTC'}
+            >
+              Updated by 00:30 UTC
             </span>
             {/* Latest assets count */}
             {latestInfoLoading ? (

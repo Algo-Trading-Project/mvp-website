@@ -148,6 +148,33 @@ export default function DashboardOOSSection() {
   const quintileLoadingMin = useMinLoading(quintileLoading, 500);
   const summaryLoadingMin = useMinLoading(summaryLoading, 500);
 
+  // Read initial state from URL query (?h=1d|3d&p=5|10&start=YYYY-MM-DD&end=YYYY-MM-DD)
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const h = (params.get('h') || '').toLowerCase();
+      if (h === '3d' || h === '1d') setHorizon(h);
+      const p = Number(params.get('p'));
+      if (p === 5 || p === 10) setTopPct(p === 5 ? 0.05 : 0.1);
+      const qsStart = params.get('start');
+      const qsEnd = params.get('end');
+      if (qsStart && qsEnd) setDateRange({ start: qsStart, end: qsEnd });
+    } catch {}
+  }, []);
+
+  // Keep URL in sync when controls change
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.set('h', horizon);
+      params.set('p', topPct === 0.05 ? '5' : '10');
+      if (dateRange.start) params.set('start', dateRange.start);
+      if (dateRange.end) params.set('end', dateRange.end);
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState({}, '', newUrl);
+    } catch {}
+  }, [horizon, topPct, dateRange.start, dateRange.end]);
+
 
   React.useEffect(() => {
     const load = async () => {
@@ -206,7 +233,13 @@ export default function DashboardOOSSection() {
         end: coverageEnd,
       });
 
-      setDateRange({ start: safeStart, end: defaultEnd });
+      // Respect query-string provided range if present
+      const params = new URLSearchParams(window.location.search);
+      const qsStart = params.get('start');
+      const qsEnd = params.get('end');
+      if (!(qsStart && qsEnd)) {
+        setDateRange({ start: safeStart, end: defaultEnd });
+      }
 
       if (typeof window !== "undefined") {
         try {
@@ -1163,6 +1196,15 @@ from filtered;`;
         {/* Raw Data section moved below charts */}
         {/* Control bar above everything */}
         {controlBar}
+        {(!icSvgLoadingMin && !spreadLoadingMin && !hitLoadingMin && allRows.length === 0) && (
+          <div className="mt-3 mb-2 text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md p-3 flex items-center justify-between">
+            <span>No data in the selected window.</span>
+            <button
+              className="text-xs px-2 py-1 rounded-md border border-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+              onClick={() => setDateRange({ start: availableRange.start, end: availableRange.end })}
+            >Reset range</button>
+          </div>
+        )}
 
         {/* Metrics: monthly first, then rolling */}
         <div className="space-y-8">

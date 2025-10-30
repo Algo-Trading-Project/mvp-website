@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
 const data = [{ x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 2 }, hovertemplate: 'Date: %{x}<br>Hit Rate: %{y:.2%}<extra></extra>' }];
 const layout = {
   paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  yaxis: { tickformat: '.0%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [${paddedMin}, ${paddedMax}] },
+  yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, range: [${paddedMin}, ${paddedMax}] },
   xaxis: { type: 'date', range: ['${axisStart}', '${axisEnd}'], tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
   dragmode: 'zoom', autosize: true, height: ${height}
 };
