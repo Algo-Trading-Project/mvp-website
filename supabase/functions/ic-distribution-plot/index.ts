@@ -71,14 +71,15 @@ const data = [{
 const layout = { 
   paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', 
   margin: { l: 48, r: 20, t: 10, b: 30 },
-  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' }, 
-  yaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
+  xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', fixedrange: true }, 
+  yaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', fixedrange: true },
   shapes: [
     { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, yref: 'paper', 
       line: { color: '#ef4444', width: 2, dash: 'dash' } },
     { type: 'line', x0: ${mean}, x1: ${mean}, y0: 0, y1: 1, yref: 'paper', 
       line: { color: '#3b82f6', width: 2, dash: 'dash' } }
-  ]
+  ],
+  dragmode: false
 };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');

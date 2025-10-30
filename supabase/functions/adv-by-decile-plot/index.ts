@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 <html><head><script src=\"https://cdn.plot.ly/plotly-2.27.0.min.js\"></script><style>html,body{margin:0;padding:0;height:100%;background:#0b1220}#chart{width:100%;height:100%}</style></head>
 <body><div id=\"chart\"></div><script>
 const data = [{ type:'bar', x:${JSON.stringify(x)}, y:${JSON.stringify(y)}, marker:{ color:'#8b5cf6' }, hovertemplate:'Decile %{x}<br>Median ADV30: %{y:.0f}<extra></extra>' }];
-const layout = { paper_bgcolor:'#0b1220', plot_bgcolor:'#0b1220', margin:{ l:48, r:20, t:10, b:30 }, xaxis:{ title:'Decile', tickmode:'linear', dtick:1, gridcolor:'#334155', tickfont:{ color:'#94a3b8' }, titlefont:{ color:'#cbd5e1' } }, yaxis:{ gridcolor:'#334155', tickfont:{ color:'#94a3b8' } }, height:${Number(height)||360} };
+const layout = { paper_bgcolor:'#0b1220', plot_bgcolor:'#0b1220', margin:{ l:48, r:20, t:10, b:30 }, xaxis:{ title:'Decile', tickmode:'linear', dtick:1, gridcolor:'#334155', tickfont:{ color:'#94a3b8' }, titlefont:{ color:'#cbd5e1' }, fixedrange:true }, yaxis:{ gridcolor:'#334155', tickfont:{ color:'#94a3b8' }, fixedrange:true }, height:${Number(height)||360}, dragmode:false };
 const config = { responsive:true, displayModeBar:false, scrollZoom:false };
 Plotly.newPlot('chart', data, layout, config);
 </script></body></html>`;

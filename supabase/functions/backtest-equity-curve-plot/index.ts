@@ -170,7 +170,7 @@ const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l:
   legend: { orientation: 'h', x: 0.02, y: 1.1, font: { color: '#cbd5e1' } },
   height: ${Number(height) || 380}
 };
-const config = { responsive: true, displayModeBar: false, scrollZoom: false };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false, staticPlot: true };
 Plotly.newPlot('chart', data, layout, config);
 window.addEventListener('resize', () => Plotly.Plots.resize(document.getElementById('chart')));
 </script></body></html>`;

@@ -98,7 +98,7 @@ const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t
   yaxis:{tickformat:'.2%',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},
   xaxis:{title:'Date',type:'date',range:['${axisStart}','${axisEnd}'],gridcolor:'#334155',tickfont:{color:'#94a3b8'}, titlefont:{color:'#cbd5e1'}},
   shapes:[{type:'line',x0:'${axisStart}',x1:'${axisEnd}',y0:0,y1:0,line:{dash:'dot',color:'#ef4444'}}],height:${Number(height)||360}};
-const config={responsive:true,displayModeBar:false,scrollZoom:false};
+const config={responsive:true,displayModeBar:false,scrollZoom:false,staticPlot:true};
 Plotly.newPlot('chart',data,layout,config);window.addEventListener('resize',()=>Plotly.Plots.resize(document.getElementById('chart')));
 </script></body></html>`;
 
@@ -111,7 +111,7 @@ const layout={paper_bgcolor:'#0b1220',plot_bgcolor:'#0b1220',margin:{l:48,r:20,t
   yaxis:{tickformat:'.2f',gridcolor:'#334155',tickfont:{color:'#94a3b8'}},
   xaxis:{title:'Date',type:'date',range:['${axisStart}','${axisEnd}'],gridcolor:'#334155',tickfont:{color:'#94a3b8'}, titlefont:{color:'#cbd5e1'}},
   shapes:[{type:'line',x0:'${axisStart}',x1:'${axisEnd}',y0:0,y1:0,line:{dash:'dot',color:'#ef4444'}}],height:${Number(height)||360}};
-const config={responsive:true,displayModeBar:false,scrollZoom:false};
+const config={responsive:true,displayModeBar:false,scrollZoom:false,staticPlot:true};
 Plotly.newPlot('chart',data,layout,config);window.addEventListener('resize',()=>Plotly.Plots.resize(document.getElementById('chart')));
 </script></body></html>`;
 

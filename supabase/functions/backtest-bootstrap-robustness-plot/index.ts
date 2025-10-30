@@ -168,7 +168,7 @@ defs.forEach((def,idx)=>{
     {x0:lines.p995, color:'#ef4444', dash:'dot', name:'99.5%'}
   ];
   layout.shapes = shapeLines.map(l=>({type:'line', x0:l.x0, x1:l.x0, y0:0, y1:1, xref:'x', yref:'paper', line:{color:l.color, width:2, dash:l.dash}}));
-  Plotly.newPlot('c'+idx,[trace],layout,{responsive:true, displayModeBar:false, scrollZoom:false});
+  Plotly.newPlot('c'+idx,[trace],layout,{responsive:true, displayModeBar:false, scrollZoom:false, staticPlot:true});
 });
 window.addEventListener('resize',()=>{ defs.forEach((_,idx)=>Plotly.Plots.resize(document.getElementById('c'+idx))); });
 </script></body></html>`;

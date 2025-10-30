@@ -60,9 +60,9 @@ Deno.serve(async (req) => {
 <script>
 const x = ${JSON.stringify(bootstrappedMeans)};
 const data = [{ type: 'histogram', x, nbinsx: ${bins}, marker: { color: '#1e3a8a', line: { color: '#000000', width: 1 } }, hovertemplate: 'Mean IC: %{x:.4f}<br>Count: %{y}<extra></extra>' }];
-const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 }, xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' }, yaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155' },
- shapes: [{ type: 'line', x0: ${meanOfMeans}, x1: ${meanOfMeans}, y0: 0, y1: 1, yref: 'paper', line: { color: '#3b82f6', width: 2, dash: 'dash' } }] };
-    const config = { responsive: true, displayModeBar: false, scrollZoom: false };
+const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 }, xaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', fixedrange:true }, yaxis: { tickfont: { color: '#94a3b8' }, gridcolor: '#334155', fixedrange:true },
+ shapes: [{ type: 'line', x0: ${meanOfMeans}, x1: ${meanOfMeans}, y0: 0, y1: 1, yref: 'paper', line: { color: '#3b82f6', width: 2, dash: 'dash' } }], dragmode:false };
+const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);
 </script></body></html>`;

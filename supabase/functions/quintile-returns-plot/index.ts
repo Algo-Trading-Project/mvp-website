@@ -40,8 +40,8 @@ Deno.serve(async (req) => {
 <script>
 const data = [{ type: 'bar', x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)}, marker: { color: '#6366f1' }, hovertemplate: 'Decile %{x}<br>Avg Return: %{y:.4%}<extra></extra>' }];
 const layout = { paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220', margin: { l: 48, r: 20, t: 10, b: 30 },
-  yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
-  xaxis: { title:'Decile', tickmode:'linear', dtick:1, tick0:1, gridcolor: '#334155', tickfont: { color: '#94a3b8' }, titlefont: { color:'#cbd5e1' } }, height: 360 };
+  yaxis: { tickformat: '.2%', gridcolor: '#334155', tickfont: { color: '#94a3b8' }, fixedrange:true },
+  xaxis: { title:'Decile', tickmode:'linear', dtick:1, tick0:1, gridcolor: '#334155', tickfont: { color: '#94a3b8' }, titlefont: { color:'#cbd5e1' }, fixedrange:true }, height: 360, dragmode:false };
 const config = { responsive: true, displayModeBar: false, scrollZoom: false };
 const el = document.getElementById('chart');
 Plotly.newPlot(el, data, layout, config);

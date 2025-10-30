@@ -16,13 +16,20 @@ Deno.serve(async (req) => {
     // Compute rolling IC fully in SQL via RPC with pagination
     const pHorizon = (horizon === '3d') ? '3d' : '1d';
     const PAGE = 1000;
+    const window = 30;
+    // Pad the start by window-1 days so the first requested day has a full lookback window
+    const padStart = (() => {
+      const d = new Date(`${start}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - (window - 1));
+      return d.toISOString().slice(0, 10);
+    })();
     let offset = 0;
     const merged: Array<Record<string, unknown>> = [];
     while (true) {
       const rpc = await supabase.rpc('rpc_rolling_ic', {
-        start_date: start,
+        start_date: padStart,
         end_date: end,
-        window: 30,
+        window,
         p_limit: PAGE,
         p_offset: offset,
         p_horizon: pHorizon,
@@ -43,10 +50,12 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    const rows = (merged ?? []).map((r: Record<string, unknown>) => ({
+    const rowsAll = (merged ?? []).map((r: Record<string, unknown>) => ({
       date: String(r.date ?? '').slice(0, 10),
       ic: coerceNumber(r['value']),
     })).filter((r) => r.date);
+    // Keep only the originally requested range for output/axes
+    const rows = rowsAll.filter((r) => r.date >= String(start) && r.date <= String(end));
 
     const x = rows.map((r) => r.date);
     const y = rows.map((r) => (typeof r.ic === 'number' ? r.ic : null));

@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 <script>
 const x = ${JSON.stringify(values)};
 const data = [{ type:'histogram', x, nbinsx:${bins}, marker:{ color:'#86efac', line:{ color:'#065f46', width:1 } }, hovertemplate:'Spread: %{x:.4f}<br>Count: %{y}<extra></extra>' }];
-const layout = { paper_bgcolor:'#0b1220', plot_bgcolor:'#0b1220', margin:{ l:48, r:20, t:10, b:30 }, xaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155' }, yaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155' }, shapes:[{ type:'line', x0:${mean}, x1:${mean}, y0:0, y1:1, yref:'paper', line:{ color:'#3b82f6', width:2, dash:'dash' } }] };
+const layout = { paper_bgcolor:'#0b1220', plot_bgcolor:'#0b1220', margin:{ l:48, r:20, t:10, b:30 }, xaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155', fixedrange:true }, yaxis:{ tickfont:{ color:'#94a3b8' }, gridcolor:'#334155', fixedrange:true }, shapes:[{ type:'line', x0:${mean}, x1:${mean}, y0:0, y1:1, yref:'paper', line:{ color:'#3b82f6', width:2, dash:'dash' } }], dragmode:false };
 const config = { responsive:true, displayModeBar:false, scrollZoom:false };
 Plotly.newPlot('chart', data, layout, config);
 </script></body></html>`;
