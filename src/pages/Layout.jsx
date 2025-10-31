@@ -180,7 +180,6 @@ export default function Layout({ children, currentPageName }) {
   // Simplified Product menu: Dashboard, Live Performance, Signals only
   const renderNavLinks = () => {
     const productItems = [
-      { label: "Live Performance", href: "Dashboard?tab=regression", icon: BarChart3 },
       { label: "Dashboard", href: "Dashboard?tab=overview", icon: LayoutGrid },
       { label: "Signals", href: "Signals", icon: TrendingUp }
     ];
@@ -340,11 +339,7 @@ export default function Layout({ children, currentPageName }) {
 
                   {/* Product group */}
                   <div className="text-xs uppercase tracking-wide text-slate-500 px-3 pt-4">Product</div>
-                  <Link to={createPageUrl("Dashboard?tab=regression")} className="-mx-3 flex items-center space-x-3 rounded-md px-3 py-2 text-base font-semibold leading-7 text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <BarChart3 className="w-5 h-5" />
-                    <span>Live Performance</span>
-                    {/* Badges removed */}
-                  </Link>
+                  {/* Live Performance link removed to avoid redundancy */}
                   <Link to={createPageUrl("Dashboard?tab=overview")} className="-mx-3 flex items-center space-x-3 rounded-md px-3 py-2 text-base font-semibold leading-7 text-slate-300 hover:bg-slate-800 hover:text-white">
                     <LayoutGrid className="w-5 h-5" />
                     <span>Dashboard</span>

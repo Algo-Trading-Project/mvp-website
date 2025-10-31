@@ -12,6 +12,7 @@ import {
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const DEFAULT_SITE_URL = Deno.env.get("SITE_URL") ?? "https://quantpulse.ai";
+const STRIPE_PORTAL_CONFIGURATION_ID = Deno.env.get("STRIPE_BILLING_PORTAL_CONFIGURATION_ID") ?? null;
 
 if (!STRIPE_SECRET_KEY) {
   console.warn("STRIPE_SECRET_KEY is not set; create-checkout-session will fail until configured.");
@@ -57,6 +58,22 @@ const coerceUrl = (value: unknown, fallback: string) => {
   }
 };
 
+const resolveOriginFromRequest = (req: Request) => {
+  const originHeader = req.headers.get("origin");
+  if (originHeader) return originHeader;
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  const host = req.headers.get("host");
+  if (host) {
+    const protocol = forwardedProto ?? (host.includes("localhost") ? "http" : "https");
+    return `${protocol}://${host}`;
+  }
+  return DEFAULT_SITE_URL;
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -99,6 +116,26 @@ Deno.serve(async (req) => {
       {};
 
     const customerId = await ensureStripeCustomerId(stripe, user, metadata, { persist: false });
+
+    // Guardrail: if the customer already has a non-canceled subscription, redirect to the Billing Portal
+    try {
+      const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+      const existing = subs.data.find((s) => (s.status ?? "").toLowerCase() !== "canceled");
+      if (existing) {
+        const originBase = resolveOriginFromRequest(req).replace(/\/+$/, "");
+        const portal = await stripe.billingPortal.sessions.create({
+          customer: customerId,
+          configuration: STRIPE_PORTAL_CONFIGURATION_ID ?? undefined,
+          return_url: `${originBase}/account?from=pricing_checkout_guard`,
+        });
+        if (portal?.url) {
+          return json({ url: portal.url });
+        }
+      }
+    } catch (portalError) {
+      // Non-fatal: fall through to normal checkout
+      console.warn("Checkout guard (portal redirect) failed; proceeding to checkout", portalError);
+    }
 
     const successUrl = coerceUrl(
       payload.success_url,

@@ -62,7 +62,7 @@ const PLAN_LABELS = {
   free: "Free",
   signals_lite: "Signals Lite",
   signals_pro: "Signals Pro",
-  signals_pro_dev: "Pro‑Developer",
+  signals_pro_dev: "Pro Developer",
   signals_api: "Signals API",
 };
 
@@ -70,7 +70,7 @@ const TIER_LABELS = {
   free: "Free",
   lite: "Signals Lite",
   pro: "Signals Pro",
-  pro_dev: "Pro‑Developer",
+  pro_dev: "Pro Developer",
   api: "Signals API",
 };
 

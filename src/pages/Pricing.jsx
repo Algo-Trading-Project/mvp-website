@@ -6,8 +6,8 @@ import { Check, X as XIcon, Crown, Zap, Building, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { User } from "@/api/entities";
 import { StripeApi } from "@/api/stripe";
+import { User } from "@/api/entities";
 import { planSeatAvailability } from "@/api/functions";
 // Removed tabs picker (signals only)
 import { toast } from "sonner";
@@ -43,6 +43,8 @@ export default function Pricing() {
   const [billingCycle, setBillingCycle] = useState("monthly");
   const authCacheRef = useRef(loadAuthCache());
   const [isAuthed, setIsAuthed] = useState(authCacheRef.current ?? false);
+  const [myTier, setMyTier] = useState(null);
+  const [myStatus, setMyStatus] = useState(null);
   const [authChecked, setAuthChecked] = useState(!!authCacheRef.current);
   const [seats, setSeats] = useState({ pro_dev: null, api: null });
   const [seatsLoading, setSeatsLoading] = useState(true);
@@ -58,14 +60,21 @@ export default function Pricing() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        await User.me();
+        const me = await User.me();
         setIsAuthed(true);
         authCacheRef.current = true;
         persistAuthCache(true);
+        const meta = (me && (me.user_metadata || me.raw_user_meta_data)) || {};
+        const tier = String(meta.subscription_tier ?? meta.subscription_level ?? meta.plan_tier ?? '').toLowerCase();
+        const status = String(meta.subscription_status ?? '').toLowerCase();
+        setMyTier(tier || null);
+        setMyStatus(status || null);
       } catch {
         setIsAuthed(false);
         authCacheRef.current = false;
         persistAuthCache(false);
+        setMyTier(null);
+        setMyStatus(null);
       }
       setAuthChecked(true);
     };
@@ -78,7 +87,8 @@ export default function Pricing() {
     const loadSeats = async () => {
       try {
         setSeatsLoading(true);
-        const info = await planSeatAvailability({});
+        // Disable client-side cache so seats reflect latest subscriptions
+        const info = await planSeatAvailability({ __cache: false });
         setSeats({ pro_dev: info?.pro_dev || null, api: info?.api || null });
       } catch {
         setSeats({ pro_dev: null, api: null });
@@ -182,6 +192,20 @@ export default function Pricing() {
       const successUrl = `${origin}${createPageUrl("Pricing")}?status=success`;
       const cancelUrl = `${origin}${createPageUrl("Pricing")}?status=cancel`;
 
+      // If the user already has an active subscription, route to billing portal
+      const activeStatuses = new Set(["active", "trialing", "past_due"]);
+      if (isAuthed && myStatus && activeStatuses.has(myStatus)) {
+        const payload = { return_url: `${origin}${createPageUrl("Account")}` };
+        const { url } = await StripeApi.createBillingPortalSession(payload);
+        setCheckoutLoading(null);
+        if (url && typeof window !== "undefined") {
+          window.location.assign(url);
+          return;
+        }
+        toast.error("Unable to open billing portal", { description: "Stripe did not return a portal link." });
+        return;
+      }
+
       const { url } = await StripeApi.createCheckoutSession({
         plan_slug: plan.slug,
         billing_cycle: cycle,
@@ -218,7 +242,7 @@ export default function Pricing() {
             className={`relative bg-slate-900 rounded-md p-6 transform hover:scale-105 transition-transform duration-300 flex flex-col text-center
               ${plan.popular ? "border-2 border-indigo-500 scale-105" : "border border-slate-800"}`}
           >
-            {/* Seats badge for Pro-Developer and API (uniform style + skeleton) */}
+            {/* Seats badge for Pro Developer and API (uniform style + skeleton) */}
             {(plan.slug === 'signals_pro_dev' || plan.slug === 'signals_api') && (
               seatsLoading ? (
                 <div className="absolute top-2 right-2 px-2 py-1 rounded-md text-xs bg-slate-800 border border-slate-700">

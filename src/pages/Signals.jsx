@@ -858,10 +858,10 @@ export default function SignalsHub() {
             <ul className="list-disc pl-5 space-y-1 inline-block text-left mx-auto">
               <li><span className="font-semibold">Free:</span> Downloads are not available.</li>
               <li><span className="font-semibold">Lite:</span> Top 60 tokens by 90‑day median daily dollar volume, excluding stablecoins.</li>
-              <li><span className="font-semibold">Pro / Pro‑Developer / API:</span> Full token universe.</li>
+              <li><span className="font-semibold">Pro / Pro Developer / API:</span> Full token universe.</li>
               <li className="mt-2 text-slate-400">
                 To protect alpha through limited crowding, seats are capped:
-                <span className="block mt-1 text-slate-300">Pro‑Developer: 70 seats • API: 30 seats</span>
+                <span className="block mt-1 text-slate-300">Pro Developer: 70 seats • API: 30 seats</span>
               </li>
             </ul>
           </div>
@@ -890,7 +890,7 @@ export default function SignalsHub() {
               <li><span className="font-semibold">Free:</span> Downloads not available.</li>
               <li><span className="font-semibold">Lite:</span> Start date must be within the last 90 days.</li>
               <li><span className="font-semibold">Pro:</span> Start date must be within the last 365 days.</li>
-              <li><span className="font-semibold">Pro‑Developer:</span> Start date must be within the last 365 days.</li>
+              <li><span className="font-semibold">Pro Developer:</span> Start date must be within the last 365 days.</li>
               <li><span className="font-semibold">API:</span> No limits.</li>
             </ul>
           </div>

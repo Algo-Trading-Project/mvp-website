@@ -10,7 +10,7 @@ export default function PricingTeaserSection() {
       price: "$59",
       blurb: "Top/bottom deciles for majors. 24h delay.",
       href: createPageUrl("Pricing#lite"),
-      cta: "Start with Lite",
+      cta: "Choose Lite",
     },
     {
       name: "Pro",
@@ -21,11 +21,11 @@ export default function PricingTeaserSection() {
       popular: true,
     },
     {
-      name: "Pro‑Developer",
+      name: "Pro Developer",
       price: "$229",
       blurb: "Add API for light automation.",
       href: createPageUrl("Pricing#pro_dev"),
-      cta: "Add Pro‑Dev",
+      cta: "Choose Pro Developer",
     },
     {
       name: "API",

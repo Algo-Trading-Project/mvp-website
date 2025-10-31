@@ -201,7 +201,7 @@ export default function HeroSection() {
                   }
                   ariaLabel="Mean Daily IC info"
                 />
-                <span className="whitespace-nowrap">Mean Daily IC (1‑day)</span>
+                <span className="whitespace-nowrap">Avg. Daily IC (1d)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">
                 {loadingMeans ? <div className="h-5 w-20 bg-slate-800 animate-pulse rounded" /> : (meanDailyIc != null ? meanDailyIc.toFixed(3) : "—")}
@@ -216,7 +216,7 @@ export default function HeroSection() {
                   }
                   ariaLabel="Avg Daily Spread info"
                 />
-                <span className="whitespace-nowrap">Avg Daily Spread (1‑day)</span>
+                <span className="whitespace-nowrap">Avg. Daily Spread (1d)</span>
               </div>
               <div className="text-xl font-bold text-emerald-400 min-h-[20px] flex items-center justify-center">
                 {loadingMeans ? <div className="h-5 w-24 bg-slate-800 animate-pulse rounded" /> : (meanDailySpread != null ? `${(meanDailySpread*100).toFixed(2)}%` : "—")}

@@ -33,7 +33,8 @@
 
 .swagger-ui .scheme-container option,
 .swagger-ui select option {
-  color: #0f172a !important;
+  color: #f8fafc !important;
+  background: #0f172a !important;
 }
 
 .swagger-ui .model,
@@ -64,7 +65,7 @@
 }
 
 .swagger-ui .opblock .opblock-summary-method {
-  color: #0f172a;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .opblock-tag {
@@ -80,7 +81,7 @@
 .swagger-ui .parameter__name,
 .swagger-ui .parameter__type,
 .swagger-ui .parameter__deprecated {
-  color: #0f172a !important;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .markdown code {
@@ -102,34 +103,82 @@
 }
 .swagger-ui .opblock .tab-header,
 .swagger-ui .opblock .tab-header .tab-item {
-  background: #cbd5f5 !important;
-  border-color: rgba(148, 163, 184, 0.4) !important;
-  color: #0f172a !important;
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .opblock .tab-header .tab-item h4,
 .swagger-ui .opblock .tab-header .tab-item h5,
 .swagger-ui .opblock .tab-header .tab-item span {
-  color: #0f172a !important;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .opblock .tab-header .tab-item.active,
 .swagger-ui .opblock .tab-header .tab-item:hover {
-  background: #dbeafe !important;
+  background: #1e293b !important;
 }
 
 .swagger-ui .opblock-section-header {
-  background: #cbd5f5 !important;
-  border-color: rgba(148, 163, 184, 0.4) !important;
-  color: #0f172a !important;
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .opblock-section-header h4,
 .swagger-ui .opblock-section-header h5,
 .swagger-ui .opblock-section-header span {
-  color: #0f172a !important;
+  color: #f8fafc !important;
 }
 
 .swagger-ui .responses-inner table thead tr th {
+  color: #f8fafc !important;
+}
+
+/* Authorization modal (white panel) should use dark text for readability */
+.swagger-ui .dialog-ux .modal-ux,
+.swagger-ui .dialog-ux .modal-ux * {
+  color: #0f172a !important;
+}
+.swagger-ui .dialog-ux .modal-ux .modal-ux-header h4,
+.swagger-ui .dialog-ux .modal-ux .modal-ux-header h5,
+.swagger-ui .dialog-ux .modal-ux .modal-ux-header span {
+  color: #0f172a !important;
+}
+.swagger-ui .dialog-ux .modal-ux input,
+.swagger-ui .dialog-ux .modal-ux textarea,
+.swagger-ui .dialog-ux .modal-ux select {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+.swagger-ui .dialog-ux .modal-ux ::placeholder {
+  color: #475569 !important;
+}
+
+/* Media type dropdown in Responses should use dark text on light background */
+.swagger-ui .opblock .content-type select,
+.swagger-ui .responses-inner .content-type select,
+.swagger-ui .content-type__dropdown {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+.swagger-ui .opblock .content-type select option,
+.swagger-ui .responses-inner .content-type select option,
+.swagger-ui .content-type__dropdown option {
+  color: #0f172a !important;
+}
+
+/* Stronger override: any select inside Responses should render dark text */
+.swagger-ui .responses-inner select,
+.swagger-ui .responses-inner .content-type__select,
+.swagger-ui .opblock .content-type__select {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+.swagger-ui .responses-inner select option,
+.swagger-ui .responses-inner .content-type__select option {
   color: #0f172a !important;
 }
